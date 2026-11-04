@@ -46,69 +46,15 @@ func needing(testCase runtimeConsumerCase, outcome string) runtimeConsumerCase {
 
 func TestPackageImportsAgreeWithNodeConsumers(t *testing.T) {
 	cases := map[string]runtimeConsumerCase{
-		"call/direct require":           needing(runtimeConsumerCase{source: `module.exports = require("dep");`}, verifiedImport),
-		"call/parenthesized require":    needing(runtimeConsumerCase{source: `module.exports = (require)("dep");`}, verifiedImport),
-		"call/optional require":         needing(runtimeConsumerCase{source: `module.exports = require?.("dep");`}, verifiedImport),
-		"call/member require":           needing(runtimeConsumerCase{source: `module.exports = module.require("dep");`}, verifiedImport),
-		"call/parenthesized member":     needing(runtimeConsumerCase{source: `module.exports = (module.require)("dep");`}, verifiedImport),
-		"call/quoted member":            needing(runtimeConsumerCase{source: `module.exports = module["require"]("dep");`}, verifiedImport),
-		"call/parenthesized quoted key": needing(runtimeConsumerCase{source: `module.exports = module[("require")]("dep");`}, verifiedImport),
-		"call/require resolve":          needing(runtimeConsumerCase{source: `module.exports = require.resolve("dep");`}, verifiedImport),
-		"call/literal dynamic import":   needing(runtimeConsumerCase{source: `module.exports = import("dep");`}, verifiedImport),
-
-		"unsupported/computed require": needing(runtimeConsumerCase{source: `const name = ["d", "e", "p"].join(""); module.exports = require(name);`}, unsupportedUse),
-		"unsupported/require resolve options": {source: `module.exports = require.resolve("./target.cjs", { paths: [require("node:path").join(__dirname, "..")] });`, files: map[string]string{
-			"target.cjs": `module.exports = require("dep");`, "dist/target.cjs": `module.exports = {};`,
-		}, outcome: unsupportedUse},
-		"unsupported/alias":                    needing(runtimeConsumerCase{source: `const load = require; module.exports = load("dep");`}, unsupportedUse),
-		"unsupported/call method":              needing(runtimeConsumerCase{source: `module.exports = require.call(null, "dep");`}, unsupportedUse),
-		"unsupported/constructed":              needing(runtimeConsumerCase{source: `module.exports = new require("dep");`}, unsupportedUse),
-		"unsupported/member alias":             needing(runtimeConsumerCase{source: `const load = module.require; module.exports = load.call(module, "dep");`}, unsupportedUse),
-		"unsupported/quoted member alias":      needing(runtimeConsumerCase{source: `const load = module[("require")]; module.exports = load.call(module, "dep");`}, unsupportedUse),
-		"unsupported/renamed destructuring":    needing(runtimeConsumerCase{source: `const { require: load } = module; module.exports = load.call(module, "dep");`}, unsupportedUse),
-		"unsupported/quoted destructuring":     needing(runtimeConsumerCase{source: `const { "require": load } = module; module.exports = load.call(module, "dep");`}, unsupportedUse),
-		"unsupported/computed destructuring":   needing(runtimeConsumerCase{source: "const { [`require`]: load } = module; module.exports = load.call(module, \"dep\");"}, unsupportedUse),
-		"unsupported/parenthesized key":        needing(runtimeConsumerCase{source: `const { [("require")]: load } = module; module.exports = load.call(module, "dep");`}, unsupportedUse),
-		"unsupported/assignment destructuring": needing(runtimeConsumerCase{source: `let load; ({ require: load } = module); module.exports = load.call(module, "dep");`}, unsupportedUse),
-		"unsupported/nested assignment":        needing(runtimeConsumerCase{source: `let load; [{ "require": load }] = [module]; module.exports = load.call(module, "dep");`}, unsupportedUse),
-		"unsupported/destructuring default":    needing(runtimeConsumerCase{source: `const { load = require } = {}; module.exports = load("dep");`}, unsupportedUse),
-		"unsupported/array default":            needing(runtimeConsumerCase{source: `const [load = require] = []; module.exports = load("dep");`}, unsupportedUse),
-		"unsupported/assignment default":       needing(runtimeConsumerCase{source: `let load; ({ load = require } = {}); module.exports = load("dep");`}, unsupportedUse),
-		"unsupported/array assignment default": needing(runtimeConsumerCase{source: `let load; [load = require] = []; module.exports = load("dep");`}, unsupportedUse),
-		"unsupported/parameter default":        needing(runtimeConsumerCase{source: `module.exports = ((load = require) => load("dep"))();`}, unsupportedUse),
-		"unsupported/shorthand value":          needing(runtimeConsumerCase{source: `const loaders = { require }; const pick = (o) => o.require; module.exports = pick(loaders)("dep");`}, unsupportedUse),
-		"unsupported/bundler require shim":     needing(runtimeConsumerCase{source: `var __require = ((x) => typeof require !== "undefined" ? require : x)(() => { throw new Error("no require"); }); module.exports = __require("dep");`}, unsupportedUse),
-		"unsupported/module builtin":           needing(runtimeConsumerCase{source: `module.exports = require("node:module").createRequire(__filename)("dep");`}, unsupportedUse),
-		"unsupported/module getter":            needing(runtimeConsumerCase{source: `module.exports = process.getBuiltinModule("module").createRequire(__filename)("dep");`}, unsupportedUse),
-		"unsupported/quoted module getter":     needing(runtimeConsumerCase{source: `module.exports = process["getBuiltinModule"]("module").createRequire(__filename)("dep");`}, unsupportedUse),
-		"unsupported/renamed getter":           needing(runtimeConsumerCase{source: `const { getBuiltinModule: get } = process; module.exports = get("module").createRequire(__filename)("dep");`}, unsupportedUse),
-		"unsupported/imported module getter": needing(esmPackage(map[string]string{
-			"dist/index.mjs": `import { getBuiltinModule } from "node:process"; export default getBuiltinModule("module").createRequire(import.meta.url)("dep");`,
-		}), unsupportedUse),
-		"unsupported/quoted import alias": needing(esmPackage(map[string]string{
-			"dist/index.mjs": `import { "getBuiltinModule" as get } from "node:process"; export default get("module").createRequire(import.meta.url)("dep");`,
-		}), unsupportedUse),
-		"unsupported/quoted re-export alias": needing(esmPackage(map[string]string{
-			"dist/loader.mjs": `export { "getBuiltinModule" as get } from "node:process";`,
-			"dist/index.mjs":  `import { get } from "./loader.mjs"; export default get("module").createRequire(import.meta.url)("dep");`,
-		}), unsupportedUse),
-
-		"ordinary/loader names as data":      {source: `module.exports = { words: ["require", "getBuiltinModule"], require: 1, "getBuiltinModule": 2, same: "require" === "require" };`},
-		"ordinary/wrapped and computed data": {source: `module.exports = { word: ("require"), list: [("getBuiltinModule")], ["require"]: 1 };`},
-		"ordinary/require metadata":          {source: `if ((require).main === module) { process.exitCode = 0; } module.exports = [typeof (require), Object.keys(require.cache).length];`},
-		"ordinary/local resolve":             {source: `module.exports = require.resolve("./local.cjs");`, files: map[string]string{"dist/local.cjs": `module.exports = {};`}},
-		"ordinary/builtin loads":             {source: `module.exports = [require("node:path").sep, process.getBuiltinModule("node:fs").constants];`},
-		"ordinary/same-name getter binding":  {source: `const { getBuiltinModule } = process; module.exports = getBuiltinModule("node:fs").constants;`},
-		"ordinary/defaults with loader data": {source: `const { word = "require" } = {}; const [name = ("getBuiltinModule")] = []; module.exports = [word, name];`},
-		"ordinary/labels and declarations":   {source: `function load(require) { return typeof require; } require: for (;;) { break require; } module.exports = load;`},
-		"ordinary/imported getter": esmPackage(map[string]string{
-			"dist/index.mjs": `import { getBuiltinModule } from "node:process"; export default getBuiltinModule("node:fs").constants;`,
-		}),
-
-		"conservative/method named require": {source: `class Store { require(key) { return key; } } module.exports = new Store().require("value");`, outcome: unsupportedUse},
-		"conservative/unused alias":         {source: `const keep = require; module.exports = typeof keep;`, outcome: unsupportedUse},
-		"conservative/comma callee":         {source: `module.exports = (0, require)("node:path").sep;`, outcome: unsupportedUse},
-		"conservative/quoted export name":   {manifest: `{"name":"pkg","exports":"./dist/index.mjs"}`, files: map[string]string{"dist/index.mjs": `const value = 1; export { value as "require" };`}, outcome: unsupportedUse},
+		"call/direct require":         needing(runtimeConsumerCase{source: `module.exports = require("dep");`}, verifiedImport),
+		"call/parenthesized require":  needing(runtimeConsumerCase{source: `module.exports = (require)("dep");`}, verifiedImport),
+		"call/optional require":       needing(runtimeConsumerCase{source: `module.exports = require?.("dep");`}, verifiedImport),
+		"call/member require":         needing(runtimeConsumerCase{source: `module.exports = module.require("dep");`}, verifiedImport),
+		"call/parenthesized member":   needing(runtimeConsumerCase{source: `module.exports = (module.require)("dep");`}, verifiedImport),
+		"call/require resolve":        needing(runtimeConsumerCase{source: `module.exports = require.resolve("dep");`}, verifiedImport),
+		"call/parenthesized receiver": needing(runtimeConsumerCase{source: `module.exports = (module).require("dep");`}, verifiedImport),
+		"call/parenthesized resolve":  needing(runtimeConsumerCase{source: `module.exports = (require).resolve("dep");`}, verifiedImport),
+		"call/literal dynamic import": needing(runtimeConsumerCase{source: `module.exports = import("dep");`}, verifiedImport),
 
 		"layout/self subpath import": needing(runtimeConsumerCase{source: `module.exports = require("pkg/dist/chunk.cjs");`, files: map[string]string{"dist/chunk.cjs": `module.exports = require("dep");`}}, verifiedImport),
 		"layout/self exported subpath": needing(runtimeConsumerCase{
@@ -307,18 +253,6 @@ func referenceMatrix() map[string]runtimeConsumerCase {
 	cases["origin/nested relative require"] = needing(runtimeConsumerCase{source: `module.exports = require("./sub/inner.cjs");`, files: map[string]string{
 		"dist/sub/inner.cjs": `module.exports = require("../target.cjs");`, "dist/target.cjs": `module.exports = require("dep");`, "target.cjs": `module.exports = {};`,
 	}}, verifiedImport)
-	nested := func(inner string) runtimeConsumerCase {
-		return needing(runtimeConsumerCase{source: `module.exports = require("./sub/inner.cjs");`, files: map[string]string{
-			"dist/sub/inner.cjs": inner, "dist/chunk.cjs": `module.exports = require("dep");`, "dist/sub/chunk.cjs": `module.exports = {};`,
-		}}, unsupportedUse)
-	}
-	cases["origin/shadowed module receiver"] = nested(`module.exports = ((module) => module.require("./chunk.cjs"))(module.parent);`)
-	cases["origin/reassigned module"] = nested(`const original = module; module = module.parent; original.exports = module.require("./chunk.cjs");`)
-	cases["origin/with scope"] = nested(`with (module.parent) { module.exports = require("./chunk.cjs"); }`)
-	cases["origin/locally bound require"] = runtimeConsumerCase{source: `{ const { require } = module; module.exports = require("node:path").sep; }`, outcome: unsupportedUse}
-	cases["origin/parent receiver"] = needing(runtimeConsumerCase{source: `module.exports = require("./sub/inner.cjs");`, files: map[string]string{
-		"dist/sub/inner.cjs": `module.exports = module.parent.require("./chunk.cjs");`, "dist/chunk.cjs": `module.exports = require("dep");`, "dist/sub/chunk.cjs": `module.exports = {};`,
-	}}, unsupportedUse)
 	return cases
 }
 

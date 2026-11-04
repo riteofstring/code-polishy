@@ -39,8 +39,6 @@ func TestInstalledPackageImportsRejectIncompleteArtifacts(t *testing.T) {
 	bundle := installedPackageImportBundle(t)
 	for name, source := range map[string]string{
 		"missing chunk":              `export * from "./missing.js";`,
-		"computed import":            `export const load = (name) => import(name);`,
-		"computed require":           `export const load = (name) => require(name);`,
 		"invalid syntax":             `export const =`,
 		"unresolved imports mapping": `export * from "#internal";`,
 	} {

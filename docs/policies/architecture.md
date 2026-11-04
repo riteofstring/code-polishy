@@ -332,8 +332,10 @@ declare those exact packages without marking production source as development:
 
 Each listed package must be declared only in that manifest's `devDependencies`.
 Exact package names are required; wildcards, undeclared packages, and conflicting
-runtime, peer, or optional declarations fail. This allowance applies only to the
-owning package and does not change any source classification or other rule.
+runtime, peer, or optional declarations fail. A valid declaration is the
+package owner's packaging fact: it authorizes that package's source imports of
+the listed names, applies only to the owning package, and does not change any
+source classification or other rule.
 
 Build and pack the package with its package manager to the declared `.tgz` path
 before running `architecture` or a gate, for example with
@@ -348,27 +350,31 @@ and the package name, and the type entries TypeScript's resolvers select for
 those entries and the package directory. It resolves JavaScript imports,
 including imports of the package's own name, with Node's CommonJS and ESM
 resolvers from the importing file, and public type imports with TypeScript's
-resolvers. It parses extensionless files as JavaScript, and refuses the
-allowance if that closure still imports a bundled package. This is a bounded
-static check of supported loader forms: imports, literal dynamic imports, and
-literal calls of `require`, `require.resolve`, `module.require`, and
-`getBuiltinModule` for Node built-ins. Any other use of `require` or
-`getBuiltinModule`, `require` calls on other receivers, URL, absolute-path, and
-`#` import specifiers, type references that do not name a package, runtime
-imports of the Node `module` API, computed loader calls, missing or malformed
-archives, archives for another package, links or escaping paths in archives,
-missing artifacts, unresolved local imports, artifacts other than JavaScript,
-TypeScript, JSON, or CSS, and unreadable output block verification. Export
-patterns, `browser`, `typesVersions`, and `directories.bin` are not supported.
-Unreachable private declarations are not checked. Imports in TypeScript
-artifacts count against the package and its `@types` counterpart, and Node
-built-in imports against `@types/node`. Runtime reflection, keys computed at run
-time, and evaluated strings are outside the check.
+resolvers, and parses extensionless files as JavaScript. A visible import of a
+listed package in that closure is an `architecture.packageDependency` finding on
+the archive. Visible imports are static imports and re-exports, literal dynamic
+imports, literal `require`, `module.require`, and `require.resolve` calls, and
+TypeScript imports, import types, and `reference` directives. Imports in
+TypeScript artifacts count against the package and its `@types` counterpart,
+and Node built-in imports against `@types/node`.
 
-Keep build-freshness and packed-consumer tests in the package's ordinary suites.
-The check reads the declared archive and does not prove build freshness or
-arbitrary runtime behavior. Upgrade the locked Code Polishy release before
-adding this configuration. See the [bundled dependency design](../design/bundled-javascript-dependencies.md).
+An empty result means no statically detected dependency, not proof that the
+package runs without it. Computed or aliased loaders, Node module APIs such as
+`createRequire`, reflection, and evaluated code are not inspected. Missing or
+malformed archives, archives for another package, links or escaping paths in
+archives, missing entries, unresolved local imports, URL, absolute-path, and `#`
+import specifiers, type references that do not name a package, artifacts other
+than JavaScript, TypeScript, JSON, or CSS, and unreadable output are
+`architecture.importCoverage` findings on the archive. Export patterns,
+`browser`, `typesVersions`, and `directories.bin` are not supported.
+Unreachable private declarations are not checked.
+
+Validate shipped behavior in the package's own suite: install the packed
+archive into an isolated consumer without development dependencies, exercise
+the public API, compile consumers in each supported TypeScript mode, and keep a
+negative fixture showing that a leaked dependency fails. The check does not
+prove build freshness. Upgrade the locked Code Polishy release before adding
+this configuration. See the [bundled dependency design](../design/bundled-javascript-dependencies.md).
 
 Coverage fails closed instead of reading as clean. Governed source the reader
 cannot parse without a compiler, a file it could not read, and a dynamic import

@@ -52,7 +52,6 @@
           "internal/policy/bundled_dependencies_test.go",
           "internal/javascript/package_consumers_test.go",
           "tools/javascript/package-imports.mjs",
-          "tools/javascript/package-loaders.mjs",
           "tools/javascript/package-types.mjs"
         ]
       },

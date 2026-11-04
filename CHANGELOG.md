@@ -7,13 +7,14 @@
 - Fix `merge-gate` aborting during artifact-security scanner self-scanning by
   matching the planned scanner image command names and order to execution.
 - Allow exact `scope.bundledDependencies` declarations for packages inlined from
-  `devDependencies`. Each declaration names the package's packed `.tgz`;
-  verify the packed JavaScript and reachable public declarations before
-  admitting their source imports; missing archives and artifacts, leaked
-  imports, and contradictory manifest declarations remain blocking. The check is a bounded
-  static model of supported loader forms; other uses of `require` or
-  `getBuiltinModule` and the Node `module` API block the allowance. Upgrade the
-  locked release before using the new configuration.
+  `devDependencies`. A declaration authorizes the owning package's source
+  imports of the listed names and names the package's packed `.tgz`, whose
+  shipped JavaScript and public declarations are statically inspected for
+  visible imports of those names. Leaked imports, missing or unreadable archives
+  and artifacts, and contradictory manifest declarations fail. An empty result
+  is not proof of runtime independence; validate shipped behavior with the
+  package's own packed-consumer tests. Upgrade the locked release before using
+  the new configuration.
 
 ## 0.32.0 - 2026-11-03
 

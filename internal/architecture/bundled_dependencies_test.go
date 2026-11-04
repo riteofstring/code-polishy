@@ -15,7 +15,7 @@ import (
 	"github.com/riteofstring/code-polishy/internal/repository"
 )
 
-func TestBundledDevelopmentDependencyRequiresVerifiedArtifacts(t *testing.T) {
+func TestBundledDeclarationAuthorizesSourceImportsAndReportsArtifactFailures(t *testing.T) {
 	repo := bundledPackageRepository(t)
 	declarations := repo.Config.Scope.BundledDependencies
 	repo.Config.Scope.BundledDependencies = nil
@@ -31,15 +31,15 @@ func TestBundledDevelopmentDependencyRequiresVerifiedArtifacts(t *testing.T) {
 		t.Fatal(err)
 	}
 	findings = checkPacked(t, repo, []string{"web/app.ts"})
-	if !bundledFinding(findings, "architecture.importCoverage", bundledArtifact) || !bundledFinding(findings, "architecture.packageDependency", "web/app.ts") {
-		t.Fatalf("missing build retained bundle authorization: %+v", findings)
+	if len(findings) != 1 || !bundledFinding(findings, "architecture.importCoverage", bundledArtifact) {
+		t.Fatalf("missing build = %+v", findings)
 	}
 	if err := os.Remove(filepath.Join(repo.Root, bundledArtifact)); err != nil {
 		t.Fatal(err)
 	}
 	findings = Check(t.Context(), repo, []string{"web/app.ts"})
-	if !bundledFinding(findings, "architecture.importCoverage", bundledArtifact) || !bundledFinding(findings, "architecture.packageDependency", "web/app.ts") {
-		t.Fatalf("missing packed artifact retained bundle authorization: %+v", findings)
+	if len(findings) != 1 || !bundledFinding(findings, "architecture.importCoverage", bundledArtifact) {
+		t.Fatalf("missing packed artifact = %+v", findings)
 	}
 }
 
@@ -58,8 +58,8 @@ func TestBundledDependenciesRejectRuntimeAndPublicTypeLeaks(t *testing.T) {
 			for _, finding := range findings {
 				leak = leak || finding.Check == "architecture.packageDependency" && finding.Path == bundledArtifact && strings.Contains(finding.Message, "dist/") && finding.Subject == "@editor/view"
 			}
-			if !leak || !bundledFinding(findings, "architecture.packageDependency", "web/app.ts") {
-				t.Fatalf("leaked dependency was admitted: %+v", findings)
+			if !leak || bundledFinding(findings, "architecture.packageDependency", "web/app.ts") {
+				t.Fatalf("leaked dependency = %+v", findings)
 			}
 		})
 	}

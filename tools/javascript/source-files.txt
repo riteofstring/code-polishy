@@ -12,7 +12,6 @@ deadcode.mjs
 glob-inputs.mjs
 imports.mjs
 package-imports.mjs
-package-loaders.mjs
 package-types.mjs
 gitlab.mjs
 licenses.mjs

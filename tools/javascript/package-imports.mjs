@@ -7,7 +7,6 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import typescript from "typescript";
 
 import { sourceSpecifiers, specifiedPackage } from "./imports.mjs";
-import { loaderSpecifiers } from "./package-loaders.mjs";
 import { typeClosure } from "./package-types.mjs";
 import { fail, insideRoot, readTargetFile, unsupported } from "./protocol.mjs";
 
@@ -19,7 +18,11 @@ const OPAQUE_EXTENSIONS = new Set([".json", ".css"]);
 const TYPE_EXTENSIONS = new Set([".ts", ".mts", ".cts", ".tsx"]);
 const RELATIVE_SPECIFIER = /^\.\.?(?:\/|$)/;
 const URL_SPECIFIER = /^[A-Za-z][A-Za-z0-9+.-]*:/;
-const NODE_LOADER_MODULES = new Set(["module", "node:module"]);
+const REQUIRE_CALLEES = new Set([
+  "require",
+  "module.require",
+  "require.resolve",
+]);
 const NOT_FOUND = new Set(["MODULE_NOT_FOUND", "ERR_MODULE_NOT_FOUND"]);
 
 function typeCondition(condition) {
@@ -255,10 +258,6 @@ function recordFacts(state, source, position, reference) {
 
 function runtimeTarget(state, path, specifier, mode) {
   const kind = specifierKind(specifier);
-  if (NODE_LOADER_MODULES.has(specifier))
-    throw new Error(
-      "published artifact imports the Node module loader API; its loaded packages cannot be verified",
-    );
   if (kind === "builtin") return {};
   return nodeTarget(state, path, specifier, mode, kind);
 }
@@ -283,28 +282,43 @@ function runtimeSource(path, text) {
   return source;
 }
 
-function requireCall(node) {
-  return (
-    typescript.isCallExpression(node.parent) &&
-    typescript.isIdentifier(node.parent.expression) &&
-    node.parent.expression.text === "require"
-  );
+function calleeName(callee) {
+  if (typescript.isIdentifier(callee)) return callee.text;
+  if (!typescript.isPropertyAccessExpression(callee)) return "";
+  const receiver = typescript.skipParentheses(callee.expression);
+  return typescript.isIdentifier(receiver)
+    ? `${receiver.text}.${callee.name.text}`
+    : "";
 }
 
-function runtimeReferences(path, text, source) {
-  const { specifiers, computed } = sourceSpecifiers(source);
-  if (computed.length > 0)
-    throw new Error("published artifact has a computed dynamic import");
+function requireSpecifier(node) {
+  if (!typescript.isCallExpression(node)) return null;
+  const [argument] = node.arguments;
+  return argument !== undefined &&
+    typescript.isStringLiteral(argument) &&
+    REQUIRE_CALLEES.has(calleeName(typescript.skipParentheses(node.expression)))
+    ? argument
+    : null;
+}
+
+function runtimeReferences(source) {
   const references = new Map();
-  for (const { node, kind } of specifiers)
-    references.set(node.getStart(source), {
-      text: node.text,
-      kind,
-      mode: requireCall(node) ? "require" : "import",
-    });
-  for (const loaded of loaderSpecifiers(path, text))
-    if (!references.has(loaded.position))
-      references.set(loaded.position, loaded);
+  const visit = (node) => {
+    const specifier = requireSpecifier(node);
+    if (specifier !== null)
+      references.set(specifier.getStart(source), {
+        text: specifier.text,
+        kind: "runtime",
+        mode: "require",
+      });
+    typescript.forEachChild(node, visit);
+  };
+  visit(source);
+  for (const { node, kind } of sourceSpecifiers(source).specifiers) {
+    const position = node.getStart(source);
+    if (!references.has(position))
+      references.set(position, { text: node.text, kind, mode: "import" });
+  }
   return references;
 }
 
@@ -320,7 +334,7 @@ function readRuntimeArtifact(state, path) {
     return;
   }
   const source = runtimeSource(path, text);
-  const references = runtimeReferences(path, text, source);
+  const references = runtimeReferences(source);
   state.analyzed.push(path);
   for (const [position, { text: specifier, kind, mode }] of references)
     recordFacts(state, source, position, {
@@ -401,11 +415,8 @@ function readTypeArtifact(state, path, { source, resolutions }) {
     return;
   if (source.parseDiagnostics.length > 0)
     throw new Error("published artifact has invalid TypeScript syntax");
-  const { specifiers, computed } = sourceSpecifiers(source);
-  if (computed.length > 0)
-    throw new Error("published artifact has a computed dynamic import");
   state.analyzed.push(path);
-  for (const { node, kind } of specifiers) {
+  for (const { node, kind } of sourceSpecifiers(source).specifiers) {
     const position = node.getStart(source);
     let targets;
     try {

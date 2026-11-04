@@ -7,12 +7,20 @@ would misdescribe the production code. npm's `bundleDependencies` describes
 shipping dependency directories, not inlining, and supplies no such evidence.
 
 `scope.bundledDependencies` names an exact package manifest, the package's
-packed `.tgz` artifact, and exact dependency names. Scope wildcards are intentionally unsupported: a newly added dependency
-must receive its own declaration. Each name must occur only in that manifest's
-`devDependencies`; runtime, optional, and peer declarations contradict the
-claim. The declaration does not change source classification, dependency
-direction, quality checks, supply-chain analysis, or other packages' dependency
-authority.
+packed `.tgz` artifact, and exact dependency names. Scope wildcards are
+intentionally unsupported: a newly added dependency must receive its own
+declaration. Each name must occur only in that manifest's `devDependencies`;
+runtime, optional, and peer declarations contradict the claim. The declaration
+does not change source classification, dependency direction, quality checks,
+supply-chain analysis, or other packages' dependency authority.
+
+The declaration is the package owner's packaging fact, like the
+`scope.development` classification of source. A valid declaration authorizes
+the owning package's source imports of the named packages; that authority does
+not depend on what verification finds. Verification looks for visible
+contradictions in the packed artifact and reports them on the artifact. Whether
+the shipped package works without those dependencies is established by the
+package's own packed-consumer tests, not by Code Polishy.
 
 The claim concerns the published package, and a development checkout contains
 files that never ship: installed dependencies, symbolic links, ignored files,
@@ -45,7 +53,7 @@ configuration resolves fails verification.
 
 Runtime resolution belongs to Node. Runtime and type resolution stay distinct
 because consumers select different files for them, and runtime references keep
-the resolution mode of their syntax. CommonJS loader calls resolve with
+the resolution mode of their syntax. The recognized `require` calls resolve with
 `createRequire(importer).resolve`; static imports, re-exports, and dynamic
 imports, including dynamic imports in CommonJS files, resolve with
 `import.meta.resolve(specifier, importer)`, which the pinned Node provides
@@ -66,7 +74,7 @@ target must be an existing regular file. Each reference then has one outcome:
   package, such as a nested scope whose export target is missing, is a broken
   local reference, not an external one.
 - Anything else, including any failed relative or own-name reference and any
-  other resolver error, is unsupported and blocks the allowance.
+  other resolver error, is unsupported and fails verification.
 
 Entry targets containing `%` are unsupported because the policy enumeration
 reads them as paths while Node decodes them as URLs. TypeScript sources cannot
@@ -90,104 +98,71 @@ package and its `@types` counterpart, an unresolved built-in names
 `@types/node`, and an unresolved relative import fails verification.
 Private declaration files outside that closure do not impose consumer needs.
 Extensionless files are parsed as JavaScript because Node executes them; only
-JSON and CSS remain opaque. A remaining import of a declared bundled name blocks
-both the artifact and the source allowance.
+JSON and CSS remain opaque. A remaining import of a declared bundled name is a
+leak reported on the artifact.
 
-## Guarantee
+## Scope of verification
 
-The check is a bounded static dependency check, not a proof that arbitrary
-JavaScript cannot load a package. Behavior outside the model below is a
-documented limitation, not a defect to patch case by case. It guarantees that
-every loader form in the supported model names a literal specifier and that each
-other use of a loader name fails verification. Unsupported forms block the
-allowance; they never pass silently as clean coverage.
+Verification is static inspection of the shipped entry closure with the
+existing parsers, Node's resolvers, and TypeScript's declaration traversal. An
+empty result means that no dependency was statically detected; it is not a
+proof that the published JavaScript cannot load a package at run time.
 
-Every reference keeps its category, resolution origin, and specifier kind
-through resolution and ends in exactly one outcome: a resolved local artifact,
-an identified external package, or an unsupported result. The categories are
-CommonJS loader calls, ESM static and dynamic imports, TypeScript module
-imports, type-reference directives, and reference-path directives.
-
-- Module references resolve from their own file with the resolver of their
-  category: Node's CommonJS resolver for loader calls, Node's ESM resolver for
-  runtime imports, and TypeScript for type artifacts. Relative and package
-  references both go through that resolver before any package reference counts
-  as external; Node built-ins name no package, except
-  `@types/node` and the matching package identities for TypeScript artifacts.
-  URL, absolute-path, `#` import, and other specifiers are unsupported.
-- Type-reference directives must name a type package, which counts with its
-  `@types` counterpart. They never resolve as module paths.
-- Reference-path directives must name a relative file.
-
-Runtime artifacts support static imports and re-exports and literal dynamic
-imports. Every occurrence of the loader names `require` and `getBuiltinModule`,
-as an identifier or a string literal, is classified into one category,
-regardless of binding. The sealed typescript-eslint parser and its scope
-manager decide whether an identifier is a value read, a binding write, or only a
-name, so declarations, defaults, and shorthand properties follow the language
-rather than a local table. Parentheses do not survive parsing, optional chains
-are unwrapped, and a computed property name with a literal is a key like any
-other.
-
-- Loader calls: a call of `require`, `require.resolve`, `module.require`, or a
-  `getBuiltinModule` binding or member, named by an identifier or literal key,
-  with exactly one string literal specifier argument; `require.resolve` with
-  lookup options changes the resolution origin and fails, while extra
-  arguments Node ignores for `require` and `module.require` are ordinary.
-  Resolution origin comes from bindings, not
-  spelling: `require` calls and `require.resolve` must use the free `require`
-  binding, and `module.require` the free `module` binding. Locally bound or
-  shadowed loaders, other receivers such as `module.parent`, assignments to the
-  free `require` or `module`, and `with` scopes have unknown origins and fail. `getBuiltinModule` must name
-  a Node built-in. Runtime imports of `module` or `node:module` fail, which
-  covers `createRequire` and the Module class. A non-literal specifier fails.
-- Ordinary uses: declarations, labels, bindings that reuse the loader name, such
-  as `import { getBuiltinModule }`, object
-  literal keys, `typeof`, `require.main` and `require.cache` reads, type
-  positions, and string values that are not keys.
-- Unsupported uses: every other occurrence, including aliases, `call`, `apply`,
-  or construction, member reads that are not called, renamed destructuring and
-  assignment-pattern keys, shorthand property values, and import or export
-  specifier names that rename a loader. These fail verification.
-
-Keys produced by any other expression, such as concatenation or comma and
-conditional expressions, are computed at run time and, with reflection APIs,
-reflection through `constructor` or prototypes, and code evaluated from strings,
-are outside the guarantee. Some harmless code is rejected conservatively, such
-as an unused alias or a value exported under a loader name.
-
-Declaration and TypeScript artifacts support imports, re-exports, import types,
-and `reference` directives. TypeScript may satisfy a bare specifier with the
-package itself or its `@types` counterpart, and a Node built-in with
+Runtime artifacts contribute static imports and re-exports, literal dynamic
+imports, and calls with one string literal specifier of `require`,
+`module.require`, or `require.resolve`, recognized by identifier and
+dotted-property spelling once parentheses around the callee and its receiver
+are removed. Those calls resolve in CommonJS mode and the others in ESM mode.
+Declaration and TypeScript artifacts contribute imports, re-exports, import
+types, and `reference` directives. TypeScript may satisfy a bare specifier with
+the package itself or its `@types` counterpart, and a Node built-in with
 `@types/node`, so each import in a TypeScript artifact counts against all
-identities the consumer could need. Ambient module declarations supplied by
-other packages and consumer path mappings are outside the guarantee.
+identities a consumer could need. Type-reference directives must name a type
+package, and reference-path directives must name a relative file. URL,
+absolute-path, and `#` import specifiers fail verification.
 
-Missing or malformed archives and files, other artifact types, and unresolved
-local imports fail verification. Export patterns, `browser`,
-`typesVersions`, and `directories.bin` remain unsupported rather than silently
-losing a possible consumer entry. File, import, byte, and process limits bound
-analysis. The reader does not execute repository code, build artifacts, or
-install packages. Tests cover a matrix of reference forms, resolution origins,
-and specifier kinds, including URL encodings whose meaning differs between
-resolution modes, each loader category, wrapper combinations, package
-layouts, publication boundaries such as checkout-only `node_modules`, omitted
-symbolic links, `files` and ignore-file exclusions, and manifest rewrites, and
-representative tsc, esbuild, rollup, and webpack output. Each case is packed by
-the pinned package manager, verified from that archive, and installed from the
-same archive for Node execution or for TypeScript compilation under each of the
-four consumer configurations, and state the expected verifier outcome for each
-case, including conservative rejections. A configuration counts as needing a
-dependency when it fails without the dependency and compiles with it; a case
-names any configuration that cannot consume the package either way.
+Loads that are not written as one of those forms are not detected: computed
+specifiers, aliased or rebound loaders, `createRequire` and other Node module
+APIs, reflection, runtime mutation, and evaluated code. Code Polishy does not
+police them. A counterexample of that kind is a case for the package's own
+consumer tests, not a new verification requirement. Ambient module declarations
+supplied by other packages and consumer path mappings are likewise outside the
+inspection.
 
-The feature is complete when every documented category agrees with consumers in
-those tests. A finding must name the documented promise it violates; support
-for JavaScript outside the model is a separate feature decision.
+Verification fails, with an `architecture.importCoverage` finding on the
+artifact, when it cannot inspect the shipped closure: missing or malformed
+archives, archives for another package, links or escaping paths in archives,
+missing entries, unresolved local imports, artifacts other than JavaScript,
+TypeScript, JSON, or CSS, invalid syntax, and the unsupported entry mappings
+export patterns, `browser`, `typesVersions`, and `directories.bin`. File,
+import, byte, and process limits bound analysis. The reader does not execute
+repository code, build artifacts, or install packages.
 
-Repositories build and pack before architecture verification and keep their
-ordinary build and packed-consumer contracts. Reading a packed archive is not
-evidence of build freshness or arbitrary JavaScript behavior. The check
-establishes the declared dependency boundary of the shipped entry closure; it
-does not replace those contracts. Verification is shared by native and provider imports and
-cached only within one architecture analysis, without a new receipt or digest.
+## Packed-consumer contract
+
+Behavioral validation belongs to the package's existing test suite. Build and
+pack the package, install that exact archive into an isolated consumer without
+development dependencies, exercise the supported public APIs, and compile
+consumers in the TypeScript modes the package supports. Include a negative
+fixture showing that an ordinary leaked dependency fails. These tests
+demonstrate the scenarios they execute; they do not establish every possible
+runtime behavior. Reading a packed archive is not evidence of build freshness.
+
+Code Polishy's own tests cover packaging, resolution, and leak detection. Each
+case is packed by the pinned package manager, verified from that archive, and
+installed from the same archive for Node execution or for TypeScript
+compilation under the four consumer configurations. Cases span the recognized
+reference forms, specifier kinds including URL encodings whose meaning differs
+between resolution modes, package layouts and nested scopes, publication
+boundaries such as checkout-only `node_modules`, omitted symbolic links,
+`files` and ignore-file exclusions, and manifest rewrites, and representative
+tsc, esbuild, rollup, and webpack output. For a recognized form, the verifier
+must report the dependency whenever the consumer needs it. A configuration
+counts as needing a dependency when it fails without the dependency and
+compiles with it; a case names any configuration that cannot consume the
+package either way.
+
+The feature is complete when declarations remain package-scoped, visible leaks
+fail, these packed-consumer cases agree, and unrelated policy checks remain
+intact. Verification is shared by native and provider imports and cached only
+within one architecture analysis, without a new receipt or digest.
