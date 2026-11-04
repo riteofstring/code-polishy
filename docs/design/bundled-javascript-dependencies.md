@@ -26,12 +26,16 @@ follows reachable public declarations separately.
 Private declaration files outside that closure do not impose consumer needs.
 Extensionless files are parsed as JavaScript because Node executes them; only
 JSON and CSS remain opaque. Re-exports, literal dynamic imports, literal
-`require`, import types, and declaration references participate. A remaining
-import of a declared bundled name blocks both the artifact and the source
-allowance.
+`require` and member `.require` calls, import types, and declaration references
+participate. TypeScript consumers resolve a bare package's types through either
+the package or its `@types` counterpart, so imports in TypeScript artifacts carry
+both identities. A remaining import of a declared bundled name blocks both the
+artifact and the source allowance.
 
-Missing or malformed files, escaping or linked paths, computed loaders, other
-artifact types, and unresolved local imports fail verification. Export patterns,
+Missing or malformed files, escaping or linked paths, computed loaders, indirect
+`require` references, runtime imports of the Node `module` API (which covers
+`createRequire` under any alias), other artifact types, and unresolved local
+imports fail verification. Export patterns,
 `browser`, `typesVersions`, `directories.bin`, and directory imports governed by
 a nested `package.json` remain unsupported rather than silently losing or
 misresolving a possible consumer entry. File, import, byte, and process limits

@@ -30,7 +30,7 @@ func TestInstalledPackageImportsFollowRuntimeAndPublicTypes(t *testing.T) {
 		}
 	}
 	slices.Sort(packages)
-	if !slices.Equal(packages, []string{"@editor/state", "@editor/view"}) || slices.Contains(result.Analyzed, "dist/private.d.ts") {
+	if !slices.Equal(packages, []string{"@editor/state", "@editor/view", "@types/editor__state"}) || slices.Contains(result.Analyzed, "dist/private.d.ts") {
 		t.Fatalf("published imports = %+v", result)
 	}
 }
@@ -43,6 +43,10 @@ func TestInstalledPackageImportsRejectIncompleteArtifacts(t *testing.T) {
 		"computed require":           `export const load = (name) => require(name);`,
 		"invalid syntax":             `export const =`,
 		"unresolved imports mapping": `export * from "#internal";`,
+		"aliased require":            `const load = require; export const value = load("dep");`,
+		"require shim":               `export const load = typeof require === "function" ? require : null;`,
+		"destructured require":       `const { require: load } = module; export const value = load("dep");`,
+		"module loader":              `import { createRequire as make } from "node:module"; export const value = make(import.meta.url)("dep");`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			root := t.TempDir()
@@ -63,9 +67,31 @@ func TestInstalledPackageImportsCheckImplicitTypesAndReferences(t *testing.T) {
 	writeScript(t, filepath.Join(root, "dist/index.d.cts"), "/// <reference path=\"./extra.d.ts\" />\nexport {};\n")
 	writeScript(t, filepath.Join(root, "dist/extra.d.ts"), "/// <reference types=\"editor\" />\nexport {};\n")
 	result, err := installedPackageImportBundle(t).PackageImports(t.Context(), root, "package.json")
-	if err != nil || len(result.Unsupported) != 0 || len(result.Imports) != 2 || result.Imports[0].Package != "editor" {
+	if err != nil || len(result.Unsupported) != 0 || !slices.Equal(importedPackages(result), []string{"@types/editor", "editor"}) {
 		t.Fatalf("PackageImports = %+v, %v", result, err)
 	}
+}
+
+func TestInstalledPackageImportsFollowMemberRequiresAndTypePackages(t *testing.T) {
+	root := t.TempDir()
+	writeScript(t, filepath.Join(root, "package.json"), `{"main":"dist/index.cjs","types":"dist/index.d.ts"}`)
+	writeScript(t, filepath.Join(root, "dist/index.cjs"), `module.exports = module.require("runtime-dep");`)
+	writeScript(t, filepath.Join(root, "dist/index.d.ts"), `export type { Value } from "@scope/types-dep";`)
+	result, err := installedPackageImportBundle(t).PackageImports(t.Context(), root, "package.json")
+	if err != nil || len(result.Unsupported) != 0 || !slices.Equal(importedPackages(result), []string{"@scope/types-dep", "@types/scope__types-dep", "runtime-dep"}) {
+		t.Fatalf("PackageImports = %+v, %v", result, err)
+	}
+}
+
+func importedPackages(result ImportResult) []string {
+	packages := []string{}
+	for _, fact := range result.Imports {
+		if fact.Package != "" {
+			packages = append(packages, fact.Package)
+		}
+	}
+	slices.Sort(packages)
+	return packages
 }
 
 func TestInstalledPackageImportsFollowExecutableAndImplicitEntries(t *testing.T) {
@@ -78,12 +104,7 @@ func TestInstalledPackageImportsFollowExecutableAndImplicitEntries(t *testing.T)
 	if err != nil || len(result.Unsupported) != 0 {
 		t.Fatalf("PackageImports = %+v, %v", result, err)
 	}
-	packages := []string{}
-	for _, fact := range result.Imports {
-		packages = append(packages, fact.Package)
-	}
-	slices.Sort(packages)
-	if !slices.Equal(packages, []string{"cli-dep", "runtime-dep", "type-dep"}) {
+	if !slices.Equal(importedPackages(result), []string{"@types/type-dep", "cli-dep", "runtime-dep", "type-dep"}) {
 		t.Fatalf("published imports = %+v", result)
 	}
 }

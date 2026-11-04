@@ -20,6 +20,19 @@ const CODE_EXTENSIONS = new Set([
   ".tsx",
 ]);
 const OPAQUE_EXTENSIONS = new Set([".json", ".css"]);
+const TYPE_EXTENSIONS = new Set([".ts", ".mts", ".cts", ".tsx"]);
+const DECLARATION_FILE = /\.d\.[cm]?ts$/;
+const NODE_LOADER_MODULES = new Set(["module", "node:module"]);
+const REQUIRE_DECLARATIONS = new Set([
+  typescript.SyntaxKind.Parameter,
+  typescript.SyntaxKind.VariableDeclaration,
+  typescript.SyntaxKind.FunctionDeclaration,
+  typescript.SyntaxKind.PropertyAssignment,
+  typescript.SyntaxKind.PropertyDeclaration,
+  typescript.SyntaxKind.MethodDeclaration,
+  typescript.SyntaxKind.PropertySignature,
+  typescript.SyntaxKind.MethodSignature,
+]);
 
 function exportTargets(value, targets) {
   if (value === null) return;
@@ -142,7 +155,7 @@ function localArtifact(state, from, specifier) {
   const candidate = normalize(
     join(dirname(from), specifier).split("\\").join("/"),
   );
-  const declaration = /\.d\.[cm]?ts$/.test(from);
+  const declaration = DECLARATION_FILE.test(from);
   const candidates = declaration
     ? [
         candidate.replace(/\.[cm]?js$/, (suffix) =>
@@ -176,9 +189,27 @@ function optionalArtifactInfo(root, path) {
   }
 }
 
+function rejectLoaderModule(path, specifier, kind) {
+  if (
+    NODE_LOADER_MODULES.has(specifier) &&
+    kind !== "type-only" &&
+    !DECLARATION_FILE.test(path)
+  )
+    throw new Error(
+      "published artifact imports the Node module loader API; its loaded packages cannot be verified",
+    );
+}
+
+function typesPackage(path, name) {
+  if (name === "" || name.startsWith("@types/")) return "";
+  if (!TYPE_EXTENSIONS.has(extname(path))) return "";
+  return `@types/${name.startsWith("@") ? name.slice(1).replace("/", "__") : name}`;
+}
+
 function artifactReference(state, source, specifier, position, kind) {
   const path = source.fileName;
   const location = source.getLineAndCharacterOfPosition(position);
+  rejectLoaderModule(path, specifier, kind);
   let resolved = "";
   if (specifier.startsWith(".")) {
     resolved = localArtifact(state, path, specifier);
@@ -187,7 +218,7 @@ function artifactReference(state, source, specifier, position, kind) {
       `published import ${JSON.stringify(specifier)} needs explicit artifact resolution`,
     );
   }
-  state.imports.push({
+  const fact = {
     path,
     line: location.line + 1,
     column: location.character + 1,
@@ -195,7 +226,10 @@ function artifactReference(state, source, specifier, position, kind) {
     resolved,
     package: specifiedPackage(specifier),
     kind,
-  });
+  };
+  state.imports.push(fact);
+  const types = typesPackage(path, fact.package);
+  if (types !== "") state.imports.push({ ...fact, package: types });
   if (state.imports.length > MAXIMUM_IMPORTS)
     throw new Error(`published imports exceed ${MAXIMUM_IMPORTS} facts`);
 }
@@ -235,7 +269,7 @@ function readArtifact(state, path) {
   const { specifiers, computed } = sourceSpecifiers(source);
   if (computed.length > 0)
     throw new Error("published artifact has a computed dynamic import");
-  rejectComputedRequires(source);
+  specifiers.push(...memberRequires(source));
   state.analyzed.push(path);
   for (const { node, kind } of specifiers)
     artifactReference(state, source, node.text, node.getStart(source), kind);
@@ -287,19 +321,52 @@ function enqueuePackageEntries(state, manifest) {
   implicitEntries(state, manifest);
 }
 
-function rejectComputedRequires(source) {
+function requireCallee(node) {
+  return (
+    (typescript.isIdentifier(node) && node.text === "require") ||
+    (typescript.isPropertyAccessExpression(node) &&
+      node.name.text === "require")
+  );
+}
+
+function indirectRequire(node) {
+  if (typescript.isStringLiteralLike(node))
+    return (
+      node.text === "require" &&
+      typescript.isElementAccessExpression(node.parent) &&
+      node.parent.argumentExpression === node
+    );
+  if (!typescript.isIdentifier(node) || node.text !== "require") return false;
+  return !(
+    REQUIRE_DECLARATIONS.has(node.parent.kind) && node.parent.name === node
+  );
+}
+
+function memberRequire(node, specifiers) {
+  if (!typescript.isStringLiteral(node.arguments[0] ?? node))
+    throw new Error("published artifact has a computed require");
+  if (typescript.isPropertyAccessExpression(node.expression))
+    specifiers.push({ node: node.arguments[0], kind: "runtime" });
+}
+
+function memberRequires(source) {
+  const specifiers = [];
   const visit = (node) => {
-    if (
-      typescript.isCallExpression(node) &&
-      typescript.isIdentifier(node.expression) &&
-      node.expression.text === "require" &&
-      !typescript.isStringLiteral(node.arguments[0] ?? source)
-    ) {
-      throw new Error("published artifact has a computed require");
+    if (typescript.isCallExpression(node) && requireCallee(node.expression)) {
+      memberRequire(node, specifiers);
+      if (typescript.isPropertyAccessExpression(node.expression))
+        visit(node.expression.expression);
+      node.arguments.forEach(visit);
+      return;
     }
+    if (indirectRequire(node))
+      throw new Error(
+        "published artifact uses require indirectly; call it directly with a literal specifier",
+      );
     typescript.forEachChild(node, visit);
   };
   visit(source);
+  return specifiers;
 }
 
 export function packageImports(request) {
