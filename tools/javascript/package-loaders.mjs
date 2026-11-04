@@ -178,6 +178,7 @@ function loaderCall(call, references) {
     text: argument.value,
     position: argument.range[0],
     kind: "runtime",
+    mode: "require",
   };
 }
 

@@ -112,6 +112,15 @@ func TestInstalledPackageImportsRejectUnreadableRuntimeTargets(t *testing.T) {
 			"dist/index.cjs": `module.exports = require("./data.txt");`,
 			"dist/data.txt":  `require("dep");`,
 		},
+		"encoded separator import": {
+			"dist/index.cjs":     `module.exports = import("./sub%2fchunk.cjs");`,
+			"dist/sub/chunk.cjs": `module.exports = require("dep");`,
+		},
+		"directory import": {
+			"dist/index.cjs":     `module.exports = import("./sub");`,
+			"dist/sub/index.js":  `module.exports = require("dep");`,
+			"dist/sub/chunk.cjs": `module.exports = {};`,
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			root := t.TempDir()

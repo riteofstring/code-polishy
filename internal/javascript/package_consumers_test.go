@@ -119,7 +119,8 @@ func TestPackageImportsAgreeWithNodeConsumers(t *testing.T) {
 		"layout/exact file before extension": {source: `module.exports = require("./tool");`, files: map[string]string{
 			"dist/tool": `module.exports = {};`, "dist/tool.js": `module.exports = require("dep");`,
 		}},
-		"layout/unreferenced artifact": {source: `module.exports = {};`, files: map[string]string{"dist/unused.cjs": `module.exports = require("dep");`}},
+		"layout/percent encoded export": needing(runtimeConsumerCase{manifest: `{"name":"pkg","exports":"./dist/%69ndex.cjs"}`, source: `module.exports = require("dep");`, files: map[string]string{"dist/%69ndex.cjs": `module.exports = {};`}}, unsupportedUse),
+		"layout/unreferenced artifact":  {source: `module.exports = {};`, files: map[string]string{"dist/unused.cjs": `module.exports = require("dep");`}},
 		"layout/bin entry": needing(runtimeConsumerCase{
 			manifest: `{"name":"pkg","main":"dist/index.cjs","bin":{"tool":"bin/tool"}}`, source: `module.exports = {};`, entry: "bin/tool",
 			files: map[string]string{"bin/tool": "#!/usr/bin/env node\nrequire(\"dep\");\n"},
@@ -182,6 +183,8 @@ type specifierCase struct {
 	specifier string
 	local     bool
 	external  bool
+	urlOnly   bool
+	decoy     bool
 	outcome   string
 }
 
@@ -201,22 +204,30 @@ func referenceMatrix() map[string]runtimeConsumerCase {
 		"external":             {specifier: "dep", external: true, outcome: verifiedImport},
 		"builtin":              {specifier: "node:path", outcome: cleanArtifact},
 		"absolute path":        {specifier: "{{PKG}}/dist/target.cjs", local: true, outcome: unsupportedUse},
-		"file url":             {specifier: "file://{{PKG}}/dist/target.cjs", local: true, outcome: unsupportedUse},
+		"file url":             {specifier: "file://{{PKG}}/dist/target.cjs", local: true, urlOnly: true, outcome: unsupportedUse},
+		"percent encoded":      {specifier: "./%74arget.cjs", local: true, decoy: true, outcome: verifiedImport},
+		"query":                {specifier: "./target.cjs?v=1", local: true, urlOnly: true, outcome: verifiedImport},
+		"fragment":             {specifier: "./target.cjs#v", local: true, urlOnly: true, outcome: verifiedImport},
+		"backslash":            {specifier: `./sub\..\target.cjs`, local: true, urlOnly: true, outcome: verifiedImport},
 	}
 	cases := map[string]runtimeConsumerCase{}
 	for formName, form := range forms {
 		for specifierName, specifier := range specifiers {
-			if specifierName == "file url" && !form.urls {
+			if specifier.urlOnly && !form.urls {
 				continue
 			}
 			testCase := runtimeConsumerCase{
 				manifest: `{"name":"pkg","main":"dist/index.cjs"}`,
 				files: map[string]string{
-					"dist/target.cjs": `module.exports = require("dep");`,
-					"dist/clean.cjs":  `module.exports = {};`,
+					"dist/target.cjs":   `module.exports = require("dep");`,
+					"dist/clean.cjs":    `module.exports = {};`,
+					"dist/%74arget.cjs": `module.exports = {};`,
 				},
 				outcome: specifier.outcome,
 				needs:   specifier.external || specifier.local && form.executes,
+			}
+			if specifier.decoy && !form.urls {
+				testCase.outcome, testCase.needs = cleanArtifact, false
 			}
 			if form.esm {
 				testCase.manifest = `{"name":"pkg","main":"dist/index.mjs"}`

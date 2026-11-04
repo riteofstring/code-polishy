@@ -1,7 +1,8 @@
-import { lstatSync, realpathSync } from "node:fs";
+import { lstatSync, realpathSync, statSync } from "node:fs";
 import { createRequire, isBuiltin } from "node:module";
 import { basename, dirname, extname, join } from "node:path";
 import { normalize } from "node:path/posix";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import typescript from "typescript";
 
@@ -18,11 +19,12 @@ const TYPE_EXTENSIONS = new Set([".ts", ".mts", ".cts", ".tsx"]);
 const RELATIVE_SPECIFIER = /^\.\.?(?:\/|$)/;
 const URL_SPECIFIER = /^[A-Za-z][A-Za-z0-9+.-]*:/;
 const NODE_LOADER_MODULES = new Set(["module", "node:module"]);
+const ENCODED_SEPARATOR = /%2f|%5c/i;
 
 function exportTargets(value, targets) {
   if (value === null) return;
   if (typeof value === "string") {
-    if (!value.startsWith("./") || /[*\\?#]/.test(value)) {
+    if (!value.startsWith("./") || /[*\\?#%]/.test(value)) {
       throw new Error(
         "package exports must name exact local files for bundled dependency verification",
       );
@@ -167,6 +169,26 @@ function runtimeArtifact(state, from, specifier) {
   return enqueue(state, packageArtifact(state, target));
 }
 
+function existingFile(path) {
+  try {
+    return statSync(path).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function importArtifact(state, from, specifier) {
+  const url = new URL(specifier, pathToFileURL(join(state.request.root, from)));
+  const target = ENCODED_SEPARATOR.test(url.pathname)
+    ? null
+    : fileURLToPath(url);
+  if (target === null || !existingFile(target))
+    throw missingArtifact(from, specifier);
+  return enqueue(state, packageArtifact(state, target));
+}
+
+const RESOLVERS = { import: importArtifact, require: runtimeArtifact };
+
 function selfSubpath(state, specifier) {
   const name = state.manifest?.name;
   if (typeof name !== "string" || specifiedPackage(specifier) !== name)
@@ -185,7 +207,7 @@ function exportedSubpaths(exports) {
   return Object.keys(exports);
 }
 
-function selfArtifact(state, from, subpath) {
+function selfArtifact(state, from, subpath, resolve) {
   if (state.manifest.exports !== undefined) {
     if (!exportedSubpaths(state.manifest.exports).includes(subpath))
       throw new Error(
@@ -194,7 +216,7 @@ function selfArtifact(state, from, subpath) {
     return "";
   }
   if (subpath === ".") return "";
-  return runtimeArtifact(
+  return resolve(
     state,
     packagePath(state, basename(from)),
     `.${subpath.slice(1)}`,
@@ -238,17 +260,18 @@ function recordFacts(state, source, position, reference) {
     throw new Error(`published imports exceed ${MAXIMUM_IMPORTS} facts`);
 }
 
-function runtimeTarget(state, path, specifier) {
+function runtimeTarget(state, path, specifier, mode) {
   const kind = specifierKind(specifier);
+  const resolve = RESOLVERS[mode];
   if (NODE_LOADER_MODULES.has(specifier))
     throw new Error(
       "published artifact imports the Node module loader API; its loaded packages cannot be verified",
     );
-  if (kind === "relative")
-    return { resolved: runtimeArtifact(state, path, specifier) };
+  if (kind === "relative") return { resolved: resolve(state, path, specifier) };
   if (kind === "builtin") return {};
   const self = selfSubpath(state, specifier);
-  if (self !== null) return { resolved: selfArtifact(state, path, self) };
+  if (self !== null)
+    return { resolved: selfArtifact(state, path, self, resolve) };
   return { packages: [specifiedPackage(specifier)] };
 }
 
@@ -272,13 +295,25 @@ function runtimeSource(path, text) {
   return source;
 }
 
+function requireCall(node) {
+  return (
+    typescript.isCallExpression(node.parent) &&
+    typescript.isIdentifier(node.parent.expression) &&
+    node.parent.expression.text === "require"
+  );
+}
+
 function runtimeReferences(path, text, source) {
   const { specifiers, computed } = sourceSpecifiers(source);
   if (computed.length > 0)
     throw new Error("published artifact has a computed dynamic import");
   const references = new Map();
   for (const { node, kind } of specifiers)
-    references.set(node.getStart(source), { text: node.text, kind });
+    references.set(node.getStart(source), {
+      text: node.text,
+      kind,
+      mode: requireCall(node) ? "require" : "import",
+    });
   for (const loaded of loaderSpecifiers(path, text))
     if (!references.has(loaded.position))
       references.set(loaded.position, loaded);
@@ -299,12 +334,12 @@ function readRuntimeArtifact(state, path) {
   const source = runtimeSource(path, text);
   const references = runtimeReferences(path, text, source);
   state.analyzed.push(path);
-  for (const [position, { text: specifier, kind }] of references)
+  for (const [position, { text: specifier, kind, mode }] of references)
     recordFacts(state, source, position, {
       path,
       specifier,
       kind,
-      ...runtimeTarget(state, path, specifier),
+      ...runtimeTarget(state, path, specifier, mode),
     });
 }
 

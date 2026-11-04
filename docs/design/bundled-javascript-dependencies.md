@@ -22,13 +22,20 @@ resolvers select for each library entry and for the package directory, so
 preferred TypeScript sources, declaration companions, extensionless entries, and
 the root `index.d.ts` fallback match consumers.
 Runtime and type resolution stay distinct because consumers select different
-files for them. Local runtime imports resolve with Node's own CommonJS resolver,
-which reads package metadata without executing code, so extension order,
-directory manifests, and index files match Node. ESM consumers accept only exact
-paths, a subset of those results. Runtime imports of the package's own name
-resolve into the same closure: with `exports`, the subpath must be an exact
-export key whose targets are already entries; without `exports`, the subpath
-resolves as a local file from the package root. TypeScript sources cannot run
+files for them, and runtime references keep the resolution mode of their syntax.
+CommonJS loader calls resolve with Node's own CommonJS resolver, which reads
+package metadata without executing code, so extension order, directory
+manifests, and index files match Node. Static imports, re-exports, and dynamic
+imports, including dynamic imports in CommonJS files, resolve as Node's ESM
+resolver does: the specifier is a URL relative to the importing file, so
+percent-encoding, queries, fragments, and backslashes follow URL rules, and the
+result must be an existing file, without extension search or directory
+resolution. Encoded path separators fail, as they do in Node. Entry targets
+containing `%` are unsupported because Node decodes them as URLs. Runtime
+imports of the package's own name resolve into the same closure: with
+`exports`, the subpath must be an exact export key whose targets are already
+entries; without `exports`, the subpath resolves from the package root in the
+reference's mode. TypeScript sources cannot run
 from an installed package, so reaching one at runtime fails verification.
 
 The public declaration closure is what TypeScript itself builds. One sealed
@@ -62,7 +69,8 @@ CommonJS loader calls, ESM static and dynamic imports, TypeScript module
 imports, type-reference directives, and reference-path directives.
 
 - Module references resolve from their own file. Relative specifiers use the
-  runtime or TypeScript resolver for that file; package names resolve as
+  resolver of their category: CommonJS for loader calls, ESM URL resolution
+  for runtime imports, and TypeScript for type artifacts; package names resolve as
   self-imports or external packages; Node built-ins name no package, except
   `@types/node` and the matching package identities for TypeScript artifacts.
   URL, absolute-path, `#` import, and other specifiers are unsupported.
@@ -117,7 +125,8 @@ unresolved local imports fail verification. Export patterns, `browser`,
 losing a possible consumer entry. File, import, byte, and process limits bound
 analysis. The reader does not execute repository code, build artifacts, or
 install packages. Tests cover a matrix of reference forms, resolution origins,
-and specifier kinds, each loader category, wrapper combinations, package
+and specifier kinds, including URL encodings whose meaning differs between
+resolution modes, each loader category, wrapper combinations, package
 layouts, and representative tsc, esbuild, rollup, and webpack output with Node
 execution or TypeScript compilation of an installed consumer, and state the
 expected verifier outcome for each case, including conservative rejections.
