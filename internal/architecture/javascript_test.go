@@ -282,7 +282,7 @@ func installImportBundle(t *testing.T, result string) string {
 	root := t.TempDir()
 	installed := filepath.Join(root, ".tools", "javascript")
 	writeBundleFile(t, filepath.Join(installed, runtime.GOOS+"-"+architecture, "node", "bin", "node"),
-		"#!/bin/sh\nexec /bin/sh \"$1\"\n")
+		"#!/bin/sh\n[ \"$1\" = --experimental-import-meta-resolve ] || exit 64\nexec /bin/sh \"$2\"\n")
 	writeBundleFile(t, filepath.Join(installed, "bundle", "runner.mjs"),
 		"#!/bin/sh\n/bin/cat >/dev/null\n"+
 			`printf '{"protocolVersion":3,"operation":"imports","result":%s}\n' '`+result+"'\n")

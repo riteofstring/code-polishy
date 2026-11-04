@@ -148,6 +148,34 @@ func TestPackageImportsAgreeWithNodeConsumers(t *testing.T) {
 		"layout/nested scope without exports": {source: `module.exports = require("./sub/inner.cjs");`, files: map[string]string{
 			"dist/sub/package.json": `{"name":"pkg","main":"other.cjs"}`, "dist/sub/inner.cjs": `module.exports = require("pkg");`, "dist/sub/other.cjs": `module.exports = require("dep");`,
 		}},
+		"layout/nested scope clean neighbour": {source: `module.exports = require("./sub/inner.cjs");`, files: map[string]string{
+			"dist/sub/package.json": `{"name":"pkg","exports":"./other.cjs"}`, "dist/sub/inner.cjs": `module.exports = require("pkg");`, "dist/sub/other.cjs": `module.exports = {};`,
+			"dist/sub/unused.cjs": `module.exports = require("dep");`,
+		}},
+		"layout/nested scope esm without exports": esmPackage(map[string]string{
+			"dist/index.mjs": `import "./sub/inner.mjs";`, "dist/sub/inner.mjs": `import "pkg";`,
+			"dist/sub/package.json": `{"name":"pkg","main":"other.cjs"}`, "dist/sub/other.cjs": `module.exports = require("dep");`,
+		}),
+		"layout/esm self subpath without exports": needing(runtimeConsumerCase{manifest: `{"name":"pkg","main":"dist/index.mjs"}`, files: map[string]string{
+			"dist/index.mjs": `import "pkg/dist/chunk.cjs";`, "dist/chunk.cjs": `module.exports = require("dep");`,
+		}}, verifiedImport),
+		"layout/self import through require condition": needing(runtimeConsumerCase{
+			manifest: `{"name":"pkg","exports":{".":{"import":"./dist/index.mjs","require":"./dist/index.cjs"},"./tool":{"import":"./dist/tool.mjs","require":"./dist/tool.cjs"}}}`,
+			source:   `module.exports = require("pkg/tool");`,
+			files:    map[string]string{"dist/index.mjs": `export {};`, "dist/tool.mjs": `export {};`, "dist/tool.cjs": `module.exports = require("dep");`},
+		}, verifiedImport),
+		"layout/main extension search": needing(runtimeConsumerCase{manifest: `{"name":"pkg","main":"dist/entry"}`, files: map[string]string{
+			"dist/entry.js": `module.exports = require("dep");`,
+		}}, verifiedImport),
+		"layout/clean main extension search": {manifest: `{"name":"pkg","main":"dist/entry"}`, files: map[string]string{"dist/entry.js": `module.exports = {};`}},
+		"layout/directory main": needing(runtimeConsumerCase{manifest: `{"name":"pkg","main":"lib"}`, files: map[string]string{
+			"lib/index.js": `module.exports = require("./chunk.js");`, "lib/chunk.js": `module.exports = require("dep");`,
+		}}, verifiedImport),
+		"layout/clean directory main": {manifest: `{"name":"pkg","main":"lib"}`, files: map[string]string{
+			"lib/index.js": `module.exports = {};`, "lib/package.json": `{"main":"entry.js"}`, "lib/entry.js": `module.exports = require("dep");`,
+		}},
+		"layout/missing self subpath":  unpublished(runtimeConsumerCase{source: `module.exports = require("pkg/dist/missing.cjs");`}),
+		"layout/missing esm target":    unpublished(esmPackage(map[string]string{"dist/index.mjs": `import "./missing.mjs";`})),
 		"layout/unreferenced artifact": {source: `module.exports = {};`, files: map[string]string{"dist/unused.cjs": `module.exports = require("dep");`}},
 		"layout/bin entry": needing(runtimeConsumerCase{
 			manifest: `{"name":"pkg","main":"dist/index.cjs","bin":{"tool":"bin/tool"}}`, source: `module.exports = {};`, entry: "bin/tool",

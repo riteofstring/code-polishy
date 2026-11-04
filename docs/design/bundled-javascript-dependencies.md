@@ -22,48 +22,56 @@ packing rules. The normal build and pack workflow produces the declared archive
 before verification; Code Polishy never builds, packs, installs, or runs
 lifecycle scripts. The archive must be a bounded gzip tarball whose entries are
 regular files or directories under `package/` with contained, unique paths, and
-its packed manifest must name the declared package. It is extracted into a
-temporary directory, and both the runtime and declaration resolvers operate
-only there, so a file present only in the checkout cannot satisfy an artifact
+its packed manifest must name the declared package. It is extracted as an
+installed package, at `node_modules/<name>` in a temporary directory, and both
+the runtime and declaration resolvers operate only there, so a file present only in the checkout cannot satisfy an artifact
 import. The source manifest still decides whether each name is a development
 dependency; the packed manifest, including any packing rewrite, decides the
 entries.
 
-The sealed TypeScript parser reads the packed entry files. It covers every exact
-`exports` target and explicit `main`, `module`, `types`,
-`typings`, and `bin` entry. Without `exports`, the file Node selects for the
-package directory also joins. Public type entries are the files TypeScript's
+The sealed TypeScript parser reads the packed entry files. Every exact `exports`
+target under every condition and every explicit `module`, `types`, `typings`,
+and `bin` entry joins as a policy enumeration, because a consumer may select any
+of them. `main` and the package's own name join through Node's entry selection:
+the files Node's CommonJS and ESM resolvers select for the package from a
+consumer, and the file Node selects for `main`, so extension search and
+directory `main` match Node. Public type entries are the files TypeScript's
 resolvers select for each library entry and for the package directory, so
 preferred TypeScript sources, declaration companions, extensionless entries, and
 the root `index.d.ts` fallback match consumers.
-Runtime and type resolution stay distinct because consumers select different
-files for them, and runtime references keep the resolution mode of their syntax.
-CommonJS loader calls resolve with Node's own CommonJS resolver, which reads
-package metadata without executing code, so extension order, directory
-manifests, and index files match Node. Static imports, re-exports, and dynamic
-imports, including dynamic imports in CommonJS files, resolve as Node's ESM
-resolver does: the specifier is a URL relative to the importing file, so
-percent-encoding, queries, fragments, and backslashes follow URL rules, and the
-result must be an existing file, without extension search or directory
-resolution. Encoded path separators fail, as they do in Node. Entry targets
-containing `%` are unsupported because Node decodes them as URLs. Bare
-runtime imports resolve self-references as Node does: the importing file's
-package scope is its nearest `package.json`, stopping at `node_modules`. When
-that scope's name matches the specifier and it has `exports`, the subpath must
-be an exact export key of that scope, and every runtime condition target of
-that key joins the closure, so nested manifests cannot redirect a self-import
-to an unvisited file. Otherwise an import of the package's own name resolves to
-the package root as consumer `node_modules` lookup does: through its exact
-export keys, or without `exports` from the package root in the reference's
-mode. Other bare names are external packages. TypeScript sources cannot run
-from an installed package, so reaching one at runtime fails verification.
+
+Runtime resolution belongs to Node. Runtime and type resolution stay distinct
+because consumers select different files for them, and runtime references keep
+the resolution mode of their syntax. CommonJS loader calls resolve with
+`createRequire(importer).resolve`; static imports, re-exports, and dynamic
+imports, including dynamic imports in CommonJS files, resolve with
+`import.meta.resolve(specifier, importer)`, which the pinned Node provides
+under `--experimental-import-meta-resolve`. The sealed launcher passes exactly
+that option and the runner refuses any other launch, because without it Node
+ignores the importer and would resolve from the runner. Both resolvers read
+package metadata without executing code and run from the importing file inside
+the staged package, so extension search, directory manifests, URL decoding,
+package scopes, nested manifests, self-references, and conditional exports
+follow Node. ESM resolution does not establish existence, so every resolved
+target must be an existing regular file. Each reference then has one outcome:
+
+- A target inside the packed package is a local artifact and is traversed.
+- A Node built-in names no package.
+- A bare name other than the package's own that Node cannot find, or that
+  resolves outside the staged package, is an external package dependency.
+- Anything else, including any failed relative or own-name reference and any
+  other resolver error, is unsupported and blocks the allowance.
+
+Entry targets containing `%` are unsupported because the policy enumeration
+reads them as paths while Node decodes them as URLs. TypeScript sources cannot
+run from an installed package, so reaching one at runtime fails verification.
 
 The public declaration closure is what TypeScript itself builds. One sealed
 TypeScript Program per consumer resolution mode (Node10, NodeNext ESM and
 CommonJS, and Bundler) starts from the type entries and a virtual consumer file
 importing every library entry and the package directory. A controlled compiler
-host serves only packed files, excluding nested `node_modules`, and
-presents the package under `node_modules/<name>`, so entry selection,
+host serves only packed files, excluding nested `node_modules`, from the staged
+installed package, so entry selection,
 extension substitution, directory manifests, reference paths, and self-imports
 resolve as they do for an installed consumer. Every file any Program loads joins
 the closure; an unresolved relative import fails verification, and an
@@ -88,10 +96,11 @@ an identified external package, or an unsupported result. The categories are
 CommonJS loader calls, ESM static and dynamic imports, TypeScript module
 imports, type-reference directives, and reference-path directives.
 
-- Module references resolve from their own file. Relative specifiers use the
-  resolver of their category: CommonJS for loader calls, ESM URL resolution
-  for runtime imports, and TypeScript for type artifacts; package names resolve as
-  self-imports or external packages; Node built-ins name no package, except
+- Module references resolve from their own file with the resolver of their
+  category: Node's CommonJS resolver for loader calls, Node's ESM resolver for
+  runtime imports, and TypeScript for type artifacts. Relative and package
+  references both go through that resolver before any package reference counts
+  as external; Node built-ins name no package, except
   `@types/node` and the matching package identities for TypeScript artifacts.
   URL, absolute-path, `#` import, and other specifiers are unsupported.
 - Type-reference directives must name a type package, which counts with its

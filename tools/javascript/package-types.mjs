@@ -1,6 +1,6 @@
 import typescript from "typescript";
 
-import { sourceSpecifiers, specifiedPackage } from "./imports.mjs";
+import { sourceSpecifiers } from "./imports.mjs";
 import { containedRead, insideRoot } from "./protocol.mjs";
 
 const BASE_OPTIONS = {
@@ -41,32 +41,18 @@ const CONSUMER_MODES = [
   ],
 ];
 
-function selfAlias(packageRoot, name) {
-  if (typeof name !== "string" || specifiedPackage(name) !== name) return null;
-  return `${packageRoot}/node_modules/${name}`;
-}
-
-function publishedPath(packageRoot, alias, path) {
-  const mapped =
-    alias !== null && (path === alias || path.startsWith(`${alias}/`))
-      ? `${packageRoot}${path.slice(alias.length)}`
-      : path;
-  if (mapped === packageRoot) return mapped;
-  const relative = insideRoot(packageRoot, mapped);
+function publishedPath(packageRoot, path) {
+  if (path === packageRoot) return path;
+  const relative = insideRoot(packageRoot, path);
   if (relative === null || relative.split("/").includes("node_modules"))
     return null;
-  return containedRead(mapped) ? mapped : null;
+  return containedRead(path) ? path : null;
 }
 
-function aliasDirectory(alias, path) {
-  if (alias === null) return false;
-  return alias === path || alias.startsWith(`${path}/`);
-}
-
-function packageHost(options, packageRoot, alias, entries) {
+function packageHost(options, packageRoot, entries) {
   const base = typescript.createCompilerHost(options, true);
   const published = (path) =>
-    entries.has(path) ? path : publishedPath(packageRoot, alias, path);
+    entries.has(path) ? path : publishedPath(packageRoot, path);
   const readFile = (path) => {
     if (entries.has(path)) return entries.get(path);
     const target = published(path);
@@ -78,7 +64,7 @@ function packageHost(options, packageRoot, alias, entries) {
     fileExists: (path) => readFile(path) !== undefined,
     readFile,
     directoryExists: (path) =>
-      aliasDirectory(alias, path) ||
+      packageRoot.startsWith(`${path}/`) ||
       (published(path) !== null && base.directoryExists(published(path))),
     getDirectories: (path) =>
       published(path) === null ? [] : base.getDirectories(published(path)),
@@ -98,20 +84,14 @@ function packageHost(options, packageRoot, alias, entries) {
   };
 }
 
-function typePrograms(packageRoot, name, roots, entries) {
-  const alias = selfAlias(packageRoot, name);
+function typePrograms(packageRoot, roots, entries) {
   const imports = [...entries, "./"]
     .map((entry) => `import type {} from ${JSON.stringify(entry)};\n`)
     .join("");
   return CONSUMER_MODES.map(([mode, extension]) => {
     const options = { ...BASE_OPTIONS, ...mode };
     const entry = `${packageRoot}/__published_entries__${extension}`;
-    const host = packageHost(
-      options,
-      packageRoot,
-      alias,
-      new Map([[entry, imports]]),
-    );
+    const host = packageHost(options, packageRoot, new Map([[entry, imports]]));
     return {
       entry,
       program: typescript.createProgram([entry, ...roots], options, host),
@@ -119,14 +99,9 @@ function typePrograms(packageRoot, name, roots, entries) {
   });
 }
 
-export function typeClosure(packageRoot, name, roots, entries) {
+export function typeClosure(packageRoot, roots, entries) {
   const files = new Map();
-  for (const { entry, program } of typePrograms(
-    packageRoot,
-    name,
-    roots,
-    entries,
-  )) {
+  for (const { entry, program } of typePrograms(packageRoot, roots, entries)) {
     for (const file of program.getSourceFiles()) {
       if (file.fileName === entry) continue;
       const record = files.get(file.fileName) ?? {

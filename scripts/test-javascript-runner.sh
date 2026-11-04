@@ -149,7 +149,7 @@ for path, content in originals.items():
 
 def request(operation):
     payload = {'protocolVersion': 3, 'operation': operation, 'root': str(root), 'paths': list(originals)}
-    completed = subprocess.run([node, runner], input=json.dumps(payload), capture_output=True, text=True, check=True)
+    completed = subprocess.run([node, "--experimental-import-meta-resolve", runner], input=json.dumps(payload), capture_output=True, text=True, check=True)
     result = json.loads(completed.stdout)['result']
     assert result['unsupported'] == [], result
     return result
@@ -353,7 +353,7 @@ for index, (name, document, included, path, script) in enumerate(cases):
     (root / ".gitlab-ci.yml").write_text(json.dumps(document), encoding="utf-8")
     (root / "ci/common.yml").write_text(json.dumps(included), encoding="utf-8")
     request = {"protocolVersion": 3, "operation": "gitlab", "root": str(root), "paths": [".gitlab-ci.yml"], "governedPaths": [".gitlab-ci.yml", "ci/common.yml"]}
-    response = subprocess.run([node, runner], input=json.dumps(request), capture_output=True, text=True, check=True)
+    response = subprocess.run([node, "--experimental-import-meta-resolve", runner], input=json.dumps(request), capture_output=True, text=True, check=True)
     result = json.loads(response.stdout)["result"]
     expected = [] if script is None else [{"path": path, "job": "gate", "script": script, "reason": ""}]
     accepted = [item for item in result["scripts"] if not item["reason"]]
@@ -390,7 +390,7 @@ for index, (name, documents, expected) in enumerate(root_cases):
         destination.write_text(json.dumps(document), encoding="utf-8")
     for paths in (roots, roots[::-1]):
         request = {"protocolVersion": 3, "operation": "gitlab", "root": str(root), "paths": paths, "governedPaths": list(documents)}
-        response = subprocess.run([node, runner], input=json.dumps(request), capture_output=True, text=True, check=True)
+        response = subprocess.run([node, "--experimental-import-meta-resolve", runner], input=json.dumps(request), capture_output=True, text=True, check=True)
         result = json.loads(response.stdout)["result"]
         actual = sorted((item["path"], item["script"]) for item in result["scripts"] if not item["reason"])
         assert actual == sorted(expected), (name, paths, result)
@@ -1194,9 +1194,14 @@ expect_runner_rejected "an injected Node option" \
 expect_runner_rejected "an injected module path" \
   '{"protocolVersion":3,"operation":"provenance"}' env NODE_PATH="${fixture_root}/decoy/node_modules"
 if printf '{"protocolVersion":3,"operation":"provenance"}' |
-  javascript_sealed_run "${javascript_node}" --no-warnings "${javascript_runner}" \
+  javascript_sealed_run "${javascript_node}" "${javascript_runner_option}" --no-warnings "${javascript_runner}" \
     >"${fixture_root}/out" 2>&1; then
   fail "a runner launched with extra Node options was accepted"
+fi
+if printf '{"protocolVersion":3,"operation":"provenance"}' |
+  javascript_sealed_run "${javascript_node}" "${javascript_runner}" \
+    >"${fixture_root}/out" 2>&1; then
+  fail "a runner launched without its import resolution option was accepted"
 fi
 unpinned="${fixture_root}/unpinned"
 mkdir -p "${unpinned}"
@@ -1204,7 +1209,7 @@ cp "${runner_sources[@]}" "${unpinned}/"
 ln -s "${javascript_bundle_dir}/node_modules" "${unpinned}/node_modules"
 printf '{"engines":{"node":"0.0.0"}}\n' >"${unpinned}/package.json"
 if printf '{"protocolVersion":3,"operation":"provenance"}' |
-  javascript_sealed_run "${javascript_node}" "${unpinned}/runner.mjs" \
+  javascript_sealed_run "${javascript_node}" "${javascript_runner_option}" "${unpinned}/runner.mjs" \
     >"${fixture_root}/out" 2>&1; then
   fail "a runner requiring another Node version was accepted"
 fi

@@ -581,7 +581,7 @@ process.exit(1);
 CJS
 audit_response="${fixture_root}/audit.json"
 printf '{"protocolVersion":3,"operation":"audit","root":"%s","directory":"%s"}' \
-  "${fixture_root}/audit" project | javascript_sealed_run "${javascript_node}" "${audit_bundle}/runner.mjs" \
+  "${fixture_root}/audit" project | javascript_sealed_run "${javascript_node}" "${javascript_runner_option}" "${audit_bundle}/runner.mjs" \
   >"${audit_response}" || fail "the runner rejected a well-formed audit request"
 
 for reported in '"id":"GHSA-abcd-1234-5678"' '"aliases":["npm:1100"]' \
@@ -643,7 +643,7 @@ rm -f "${audit_arguments}"
 mkdir -p "${fixture_root}/audit/unlocked"
 if ! printf '{"protocolVersion":3,"operation":"audit","root":"%s","directory":"%s"}' \
   "${fixture_root}/audit" unlocked | javascript_sealed_run "${javascript_node}" \
-  "${audit_bundle}/runner.mjs" >"${fixture_root}/out"; then
+  "${javascript_runner_option}" "${audit_bundle}/runner.mjs" >"${fixture_root}/out"; then
   fail "an audit of a project without a lock failed instead of reporting coverage"
 fi
 if ! grep -qF '{"path":"unlocked/pnpm-lock.yaml","reason":"the file is unreadable' "${fixture_root}/out"; then
@@ -655,7 +655,7 @@ fi
 
 if printf '{"protocolVersion":3,"operation":"audit","root":"%s","directory":"%s"}' \
   "${fixture_root}/audit" refused | javascript_sealed_run "${javascript_node}" \
-  "${audit_bundle}/runner.mjs" >"${fixture_root}/out" 2>&1; then
+  "${javascript_runner_option}" "${audit_bundle}/runner.mjs" >"${fixture_root}/out" 2>&1; then
   fail "an audit the tool refused was accepted"
 fi
 if ! grep -qF 'ERR_PNPM_AUDIT_NO_LOCKFILE' "${fixture_root}/out"; then

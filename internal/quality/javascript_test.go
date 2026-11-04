@@ -829,7 +829,7 @@ func installBundleScript(t *testing.T, script string) string {
 	root := t.TempDir()
 	installed := filepath.Join(root, ".tools", "javascript")
 	writeBundleScript(t, filepath.Join(installed, runtime.GOOS+"-"+architecture, "node", "bin", "node"),
-		"#!/bin/sh\nexec /bin/sh \"$1\"\n")
+		"#!/bin/sh\n[ \"$1\" = --experimental-import-meta-resolve ] || exit 64\nexec /bin/sh \"$2\"\n")
 	writeBundleScript(t, filepath.Join(installed, "bundle", "runner.mjs"), script)
 	return root
 }

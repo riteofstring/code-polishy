@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -21,15 +22,21 @@ const (
 	packedManifest       = "package.json"
 )
 
+var packageName = regexp.MustCompile(`^(?:@[a-z0-9~-][a-z0-9._~-]*/)?[a-z0-9~-][a-z0-9._~-]*$`)
+
 func (bundle Bundle) PackedImports(ctx context.Context, archive, name string) (ImportResult, error) {
-	root, err := os.MkdirTemp("", "code-polishy-packed-")
+	if len(name) > 214 || !packageName.MatchString(name) {
+		return ImportResult{}, fmt.Errorf("package name %q cannot be installed for verification", name)
+	}
+	staging, err := os.MkdirTemp("", "code-polishy-packed-")
 	if err != nil {
 		return ImportResult{}, err
 	}
-	defer os.RemoveAll(root)
-	if root, err = filepath.EvalSymlinks(root); err != nil {
+	defer os.RemoveAll(staging)
+	if staging, err = filepath.EvalSymlinks(staging); err != nil {
 		return ImportResult{}, err
 	}
+	root := filepath.Join(staging, "node_modules", filepath.FromSlash(name))
 	if err := unpackPackage(archive, root); err != nil {
 		return ImportResult{}, fmt.Errorf("packed artifact %s: %w", filepath.Base(archive), err)
 	}

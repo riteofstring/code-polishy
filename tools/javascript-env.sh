@@ -35,6 +35,7 @@ while IFS= read -r javascript_bundle_source_file; do
   javascript_bundle_source_files+=("${javascript_bundle_source_file}")
 done <"${javascript_bundle_source}/source-files.txt"
 export javascript_runner="${javascript_bundle_dir}/runner.mjs"
+export javascript_runner_option="--experimental-import-meta-resolve"
 export javascript_bundle_manifest_name="bundle-manifest.json"
 
 javascript_sealed_run() {

@@ -338,16 +338,17 @@ owning package and does not change any source classification or other rule.
 Build and pack the package with its package manager to the declared `.tgz` path
 before running `architecture` or a gate, for example with
 `pnpm pack --out packages/editor/editor.tgz`. Code Polishy never builds or packs.
-It extracts that archive and reads only the packed files, so checkout-only
-files such as installed dependencies, symbolic links, and files excluded by
-`files` or ignore rules cannot satisfy an import. The source manifest decides
-the `devDependencies` claim; the packed manifest decides the entries. Code
-Polishy parses its exact `exports` and explicit `main`, `module`, `types`, `typings`, and `bin`
-entry files, the file Node selects for the package directory when `exports` is
-absent, and the type entries TypeScript's resolvers select for those entries and
-the package directory. It follows local JavaScript imports with Node's CommonJS
-resolver, public type imports with TypeScript's resolvers, and imports of the
-package's own name, parses extensionless files as JavaScript, and refuses the
+It extracts that archive as an installed package and reads only the packed
+files, so checkout-only files such as installed dependencies, symbolic links,
+and files excluded by `files` or ignore rules cannot satisfy an import. The
+source manifest decides the `devDependencies` claim; the packed manifest decides
+the entries. Code Polishy parses every exact `exports` target and explicit
+`module`, `types`, `typings`, and `bin` entry, the files Node selects for `main`
+and the package name, and the type entries TypeScript's resolvers select for
+those entries and the package directory. It resolves JavaScript imports,
+including imports of the package's own name, with Node's CommonJS and ESM
+resolvers from the importing file, and public type imports with TypeScript's
+resolvers. It parses extensionless files as JavaScript, and refuses the
 allowance if that closure still imports a bundled package. This is a bounded
 static check of supported loader forms: imports, literal dynamic imports, and
 literal calls of `require`, `require.resolve`, `module.require`, and

@@ -204,7 +204,7 @@ try {
   if ($LASTEXITCODE -ne 0) { throw 'JavaScript bundle release materialization failed.' }
   & $Node (Join-Path $PolicyRoot 'tools/javascript/bundle-manifest.mjs') write $StagedBundle $PolicyRoot
   if ($LASTEXITCODE -ne 0) { throw 'JavaScript bundle release manifest creation failed.' }
-  $ProvenanceOutput = @('{"protocolVersion":3,"operation":"provenance"}' | & $Node (Join-Path $StagedBundle 'runner.mjs'))
+  $ProvenanceOutput = @('{"protocolVersion":3,"operation":"provenance"}' | & $Node '--experimental-import-meta-resolve' (Join-Path $StagedBundle 'runner.mjs'))
   if ($LASTEXITCODE -ne 0 -or $ProvenanceOutput.Count -ne 1) { throw 'Portable JavaScript bundle provenance failed.' }
   $Provenance = $ProvenanceOutput[0] | ConvertFrom-Json
   if ($Provenance.protocolVersion -ne 3 -or $Provenance.operation -ne 'provenance' -or -not $Provenance.result.bundleDigest) {

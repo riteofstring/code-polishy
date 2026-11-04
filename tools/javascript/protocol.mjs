@@ -59,10 +59,15 @@ function readBundleJson(...segments) {
   }
 }
 
+const SEALED_NODE_OPTION = "--experimental-import-meta-resolve";
+
 export function requireSealedLaunch() {
-  if (process.execArgv.length > 0) {
+  if (
+    process.execArgv.length !== 1 ||
+    process.execArgv[0] !== SEALED_NODE_OPTION
+  ) {
     fail(
-      `the runner was launched with extra Node options: ${process.execArgv.join(" ")}`,
+      `the runner must be launched with exactly ${SEALED_NODE_OPTION}, not: ${process.execArgv.join(" ")}`,
     );
   }
   for (const variable of PROHIBITED_ENVIRONMENT) {

@@ -107,6 +107,7 @@ func writeArchive(t *testing.T, entries []archiveEntry) string {
 
 func packedDirectoryImports(t *testing.T, bundle Bundle, root string) (ImportResult, error) {
 	t.Helper()
+	name := namedManifest(t, root)
 	entries := []archiveEntry{}
 	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil || !entry.Type().IsRegular() {
@@ -120,18 +121,27 @@ func packedDirectoryImports(t *testing.T, bundle Bundle, root string) (ImportRes
 	if err != nil {
 		t.Fatal(err)
 	}
-	return bundle.PackedImports(t.Context(), writeArchive(t, entries), manifestName(t, root))
+	return bundle.PackedImports(t.Context(), writeArchive(t, entries), name)
 }
 
-func manifestName(t *testing.T, root string) string {
+func namedManifest(t *testing.T, root string) string {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join(root, "package.json"))
+	path := filepath.Join(root, "package.json")
+	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var manifest struct {
-		Name string `json:"name"`
+	manifest := map[string]any{}
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		t.Fatal(err)
 	}
-	_ = json.Unmarshal(data, &manifest)
-	return manifest.Name
+	if name, found := manifest["name"].(string); found {
+		return name
+	}
+	manifest["name"] = "pkg"
+	if data, err = json.Marshal(manifest); err != nil {
+		t.Fatal(err)
+	}
+	writeScript(t, path, string(data))
+	return "pkg"
 }

@@ -31,7 +31,7 @@ if [[ ! -x "${javascript_node}" || ! -f "${javascript_runner}" ]]; then
 fi
 
 run_runner() {
-  javascript_sealed_run "$@" "${javascript_node}" "${javascript_runner}"
+  javascript_sealed_run "$@" "${javascript_node}" "${javascript_runner_option}" "${javascript_runner}"
 }
 expect_runner_rejected() {
   local description="$1"

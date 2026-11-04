@@ -19,6 +19,8 @@ import (
 
 const ProtocolVersion = 3
 
+const sealedNodeOption = "--experimental-import-meta-resolve"
+
 type Operation string
 
 const (
@@ -869,7 +871,7 @@ func (bundle Bundle) exchange(parent context.Context, payload request, timeout t
 	stdout := &boundedWriter{limit: maximumResponseBytes}
 	stderr := &boundedWriter{limit: maximumStderrBytes}
 	_, runErr := runner.Run(ctx, runner.HostCommand{
-		Path: node, Argv: []string{node, runnerPath}, Directory: scratch.work,
+		Path: node, Argv: []string{node, sealedNodeOption, runnerPath}, Directory: scratch.work,
 		Environment: scratch.environment(), Stdin: bytes.NewReader(encoded),
 		Stdout: stdout, Stderr: stderr,
 	})

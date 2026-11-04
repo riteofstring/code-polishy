@@ -32,7 +32,7 @@ func fakeBundle(t *testing.T, runnerScript string) Bundle {
 		t.Fatalf("resolve the host tuple: %v", err)
 	}
 	installed := filepath.Join(root, ".tools", "javascript")
-	writeScript(t, filepath.Join(installed, host, "node", "bin", "node"), "#!/bin/sh\nexec /bin/sh \"$1\"\n")
+	writeScript(t, filepath.Join(installed, host, "node", "bin", "node"), "#!/bin/sh\n[ \"$1\" = --experimental-import-meta-resolve ] || exit 64\nexec /bin/sh \"$2\"\n")
 	writeScript(t, filepath.Join(installed, "bundle", "runner.mjs"), runnerScript)
 	return Bundle{PolicyRoot: root}
 }

@@ -20,7 +20,7 @@ const TYPE_EXTENSIONS = new Set([".ts", ".mts", ".cts", ".tsx"]);
 const RELATIVE_SPECIFIER = /^\.\.?(?:\/|$)/;
 const URL_SPECIFIER = /^[A-Za-z][A-Za-z0-9+.-]*:/;
 const NODE_LOADER_MODULES = new Set(["module", "node:module"]);
-const ENCODED_SEPARATOR = /%2f|%5c/i;
+const NOT_FOUND = new Set(["MODULE_NOT_FOUND", "ERR_MODULE_NOT_FOUND"]);
 
 function exportTargets(value, targets) {
   if (value === null) return;
@@ -73,19 +73,21 @@ function rejectUnmodeledMappings(manifest) {
 }
 
 function packageEntries(manifest) {
-  const entries = [];
-  if (manifest.exports !== undefined) exportTargets(manifest.exports, entries);
-  for (const name of ["main", "module", "types", "typings"]) {
+  const literal = [];
+  if (manifest.exports !== undefined) exportTargets(manifest.exports, literal);
+  for (const name of ["module", "types", "typings"]) {
     if (manifest[name] !== undefined)
-      fieldTarget(name, manifest[name], entries);
+      fieldTarget(name, manifest[name], literal);
   }
+  const main = [];
+  if (manifest.main !== undefined) fieldTarget("main", manifest.main, main);
   const executables = executableEntries(manifest);
   rejectUnmodeledMappings(manifest);
-  if (entries.length === 0 && executables.length === 0)
+  if (literal.length + main.length + executables.length === 0)
     throw new Error(
       "package has no explicit published entry files; declare exports, main/types, or bin before claiming bundled dependencies",
     );
-  return { entries, executables };
+  return { literal, entries: [...literal, ...main], executables };
 }
 
 function containedArtifact(state, path) {
@@ -145,16 +147,6 @@ function packageArtifact(state, absolute) {
   return packagePath(relative);
 }
 
-function runtimeArtifact(state, from, specifier) {
-  let target;
-  try {
-    target = createRequire(join(state.request.root, from)).resolve(specifier);
-  } catch {
-    throw missingArtifact(from, specifier);
-  }
-  return enqueue(state, packageArtifact(state, target));
-}
-
 function existingFile(path) {
   try {
     return statSync(path).isFile();
@@ -163,90 +155,50 @@ function existingFile(path) {
   }
 }
 
-function importArtifact(state, from, specifier) {
-  const url = new URL(specifier, pathToFileURL(join(state.request.root, from)));
-  const target = ENCODED_SEPARATOR.test(url.pathname)
-    ? null
-    : fileURLToPath(url);
-  if (target === null || !existingFile(target))
-    throw missingArtifact(from, specifier);
+function nodeResolution(mode, importer, specifier) {
+  if (mode === "require") return createRequire(importer).resolve(specifier);
+  const url = new URL(
+    import.meta.resolve(specifier, pathToFileURL(importer).href),
+  );
+  if (url.protocol !== "file:")
+    throw new Error(`resolves to a ${url.protocol} URL`);
+  return fileURLToPath(url);
+}
+
+function resolvedArtifact(state, target) {
+  const relative = insideRoot(state.packageRoot, target.split("\\").join("/"));
+  if (relative === null) return null;
+  if (!existingFile(target)) throw new Error("names no packed file");
   return enqueue(state, packageArtifact(state, target));
 }
 
-const RESOLVERS = { import: importArtifact, require: runtimeArtifact };
-
-function scopeManifest(state, path) {
-  if (path === MANIFEST) return state.manifest;
-  if (!state.scopes.has(path)) {
-    const text = readTargetFile(
-      join(state.request.root, path),
-      path,
-      state.unsupported,
-    );
-    if (text === null) throw new Error(`package scope ${path} is unreadable`);
-    try {
-      state.scopes.set(path, JSON.parse(text));
-    } catch {
-      throw new Error(`package scope ${path} is not valid JSON`);
-    }
-    state.analyzed.push(path);
-  }
-  return state.scopes.get(path);
-}
-
-function packageScope(state, from) {
-  let directory = dirname(from);
-  while (basename(directory) !== "node_modules") {
-    const path = normalize(`${directory}/${MANIFEST}`);
-    if (existingFile(join(state.request.root, path)))
-      return { directory, manifest: scopeManifest(state, path) };
-    if (directory === ".") return null;
-    directory = dirname(directory);
-  }
-  return null;
-}
-
-function exportedValue(exports, subpath) {
-  const keyed =
-    typeof exports === "object" &&
-    !Array.isArray(exports) &&
-    Object.keys(exports).some((key) => key.startsWith("."));
-  if (!keyed) return subpath === "." ? exports : undefined;
-  return Object.hasOwn(exports, subpath) ? exports[subpath] : undefined;
-}
-
-function scopedExport(state, from, scope, subpath) {
-  const value = exportedValue(scope.manifest.exports, subpath);
-  if (value === undefined)
-    throw new Error(
-      `published self-import ${JSON.stringify(subpath)} from ${from} is not an exact package export`,
-    );
-  const targets = [];
-  exportTargets(value, targets);
-  const runtime = targets
-    .filter((target) => !TYPE_EXTENSIONS.has(extname(target)))
-    .map((target) =>
-      enqueue(state, packagePath(`${scope.directory}/${target.slice(2)}`)),
-    );
-  return runtime[0] ?? "";
-}
-
-function selfTarget(state, from, specifier, resolve) {
+function externalPackage(state, kind, specifier, error) {
   const name = specifiedPackage(specifier);
-  const subpath = `.${specifier.slice(name.length)}`;
-  const scope = packageScope(state, from);
-  if (scope?.manifest.name === name && scope.manifest.exports != null)
-    return scopedExport(state, from, scope, subpath);
-  if (name !== state.manifest.name) return null;
-  if (state.manifest.exports != null)
-    return scopedExport(
-      state,
-      from,
-      { directory: ".", manifest: state.manifest },
-      subpath,
+  return kind === "package" &&
+    name !== state.manifest.name &&
+    (error === undefined || NOT_FOUND.has(error.code))
+    ? { packages: [name] }
+    : null;
+}
+
+function nodeTarget(state, path, specifier, mode, kind) {
+  let target;
+  try {
+    target = nodeResolution(mode, join(state.request.root, path), specifier);
+  } catch (error) {
+    const external = externalPackage(state, kind, specifier, error);
+    if (external !== null) return external;
+    throw new Error(
+      `published import ${JSON.stringify(specifier)} from ${path} does not resolve: ${error.code ?? error.message}`,
     );
-  if (subpath === ".") return "";
-  return resolve(state, MANIFEST, `.${subpath.slice(1)}`);
+  }
+  const resolved = resolvedArtifact(state, target);
+  if (resolved !== null) return { resolved };
+  const external = externalPackage(state, kind, specifier);
+  if (external !== null) return external;
+  throw new Error(
+    `published import ${JSON.stringify(specifier)} from ${path} resolves outside the packed package`,
+  );
 }
 
 function typesCounterpart(name) {
@@ -288,16 +240,12 @@ function recordFacts(state, source, position, reference) {
 
 function runtimeTarget(state, path, specifier, mode) {
   const kind = specifierKind(specifier);
-  const resolve = RESOLVERS[mode];
   if (NODE_LOADER_MODULES.has(specifier))
     throw new Error(
       "published artifact imports the Node module loader API; its loaded packages cannot be verified",
     );
-  if (kind === "relative") return { resolved: resolve(state, path, specifier) };
   if (kind === "builtin") return {};
-  const self = selfTarget(state, path, specifier, resolve);
-  if (self !== null) return { resolved: self };
-  return { packages: [specifiedPackage(specifier)] };
+  return nodeTarget(state, path, specifier, mode, kind);
 }
 
 function runtimeSource(path, text) {
@@ -460,7 +408,6 @@ function readTypeArtifact(state, path, { source, resolutions }) {
 function readTypeArtifacts(state, roots, entries) {
   const files = typeClosure(
     state.packageRoot,
-    state.manifest.name,
     roots.map((path) => realpathSync(join(state.request.root, path))),
     entries,
   );
@@ -481,26 +428,43 @@ function enqueueEntry(state, entry) {
   return enqueue(state, packagePath(entry));
 }
 
-function enqueueRuntimeDirectory(state, manifest) {
-  if (manifest.exports !== undefined) return;
+function stagedConsumer(state) {
+  const depth = String(state.manifest.name).split("/").length;
+  const modules = join(state.packageRoot, ...Array(depth).fill(".."));
+  if (basename(modules) !== "node_modules")
+    throw new Error("the packed package is not staged as an installed package");
+  return join(dirname(modules), "consumer.js");
+}
+
+function enqueueNodeEntries(state, manifest) {
+  const consumer = stagedConsumer(state);
+  for (const mode of ["require", "import"]) {
+    try {
+      resolvedArtifact(state, nodeResolution(mode, consumer, manifest.name));
+    } catch (error) {
+      if (error.code === undefined) throw error;
+    }
+  }
+  if (manifest.main === undefined) return;
   let target;
   try {
     target = createRequire(join(state.request.root, MANIFEST)).resolve("./");
-  } catch {
-    return;
+  } catch (error) {
+    throw new Error(`package main does not resolve: ${error.code}`);
   }
-  enqueue(state, packageArtifact(state, target));
+  if (resolvedArtifact(state, target) === null)
+    throw new Error("package main resolves outside the packed package");
 }
 
 function packageRoots(state, manifest) {
-  const { entries, executables } = packageEntries(manifest);
+  const { literal, entries, executables } = packageEntries(manifest);
   const typed = (entry) => TYPE_EXTENSIONS.has(extname(entry));
   for (const entry of [
-    ...entries.filter((entry) => !typed(entry)),
+    ...literal.filter((entry) => !typed(entry)),
     ...executables,
   ])
     enqueueEntry(state, entry);
-  enqueueRuntimeDirectory(state, manifest);
+  enqueueNodeEntries(state, manifest);
   const roots = entries
     .filter(typed)
     .map((entry) => containedArtifact(state, packagePath(entry)));
@@ -517,7 +481,6 @@ export function packageImports(request) {
     imports: [],
     unsupported: [],
     pending: new Set(),
-    scopes: new Map(),
   };
   try {
     containedArtifact(state, MANIFEST);

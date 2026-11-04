@@ -802,8 +802,9 @@ configuration file.
   from its own installed location, so a target's
   `node_modules`, the working directory, a user cache, or a global installation
   cannot supply a tool. It refuses to run under a Node other than the pinned
-  one, under extra Node options, or with `NODE_OPTIONS`, `NODE_PATH`, or a
-  debugger module injected. Its `provenance` operation reports the installed
+  one, with Node options other than exactly
+  `--experimental-import-meta-resolve`, or with `NODE_OPTIONS`, `NODE_PATH`, or
+  a debugger module injected. Its `provenance` operation reports the installed
   bundle digest, both runtime versions, and every tool version read from the
   package installed beside it, failing when that differs from what the bundle
   declares. Its `format` and `format-write` operations apply one sealed central

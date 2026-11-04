@@ -344,7 +344,7 @@ fi
 "${bundle_manifest}" write "${portable_bundle}" ||
   fail "portable release manifest creation failed"
 printf '%s\n' '{"protocolVersion":3,"operation":"provenance"}' |
-  javascript_sealed_run "${javascript_node}" "${portable_bundle}/runner.mjs" \
+  javascript_sealed_run "${javascript_node}" "${javascript_runner_option}" "${portable_bundle}/runner.mjs" \
     >"${fixture_root}/portable-provenance" ||
   fail "portable release bundle did not answer provenance"
 if ! grep -q '"operation":"provenance"' "${fixture_root}/portable-provenance"; then

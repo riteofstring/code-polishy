@@ -273,7 +273,7 @@ func installBundle(t *testing.T, results map[string]string) string {
 	root := t.TempDir()
 	installed := filepath.Join(root, ".tools", "javascript")
 	writeBundleFile(t, filepath.Join(installed, runtime.GOOS+"-"+architecture, "node", "bin", "node"),
-		"#!/bin/sh\nexec /bin/sh \"$1\"\n")
+		"#!/bin/sh\n[ \"$1\" = --experimental-import-meta-resolve ] || exit 64\nexec /bin/sh \"$2\"\n")
 	runner := "#!/bin/sh\nrequest=$(/bin/cat)\ncase \"${request}\" in\n"
 	for _, operation := range slices.Sorted(maps.Keys(results)) {
 		runner += fmt.Sprintf("  *'\"operation\":\"%s\"'*) printf '{\"protocolVersion\":3,\"operation\":\"%s\",\"result\":%%s}\\n' '%s' ;;\n",
