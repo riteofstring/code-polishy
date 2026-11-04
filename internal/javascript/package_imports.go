@@ -4,12 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"path/filepath"
 	"slices"
 )
 
-func (bundle Bundle) PackageImports(ctx context.Context, root, manifest string) (ImportResult, error) {
-	payload, err := fileRequest("package-imports", root, []string{manifest})
+func (bundle Bundle) packageImports(ctx context.Context, root string) (ImportResult, error) {
+	payload, err := fileRequest("package-imports", root, []string{packedManifest})
 	if err != nil {
 		return ImportResult{}, err
 	}
@@ -17,10 +16,10 @@ func (bundle Bundle) PackageImports(ctx context.Context, root, manifest string) 
 	if err != nil {
 		return ImportResult{}, err
 	}
-	return decodePackageImports(result, manifest)
+	return decodePackageImports(result)
 }
 
-func decodePackageImports(data json.RawMessage, manifest string) (ImportResult, error) {
+func decodePackageImports(data json.RawMessage) (ImportResult, error) {
 	var wire importResultWire
 	if err := decodeExactly(data, &wire); err != nil {
 		return ImportResult{}, err
@@ -34,7 +33,7 @@ func decodePackageImports(data json.RawMessage, manifest string) (ImportResult, 
 	}
 	slices.Sort(paths)
 	paths = slices.Compact(paths)
-	if err := validatePackageImportCoverage(manifest, paths, len(*wire.Unsupported)); err != nil {
+	if err := validatePackageImportCoverage(paths, len(*wire.Unsupported)); err != nil {
 		return ImportResult{}, err
 	}
 	result, err := decodeImportResult(data, paths)
@@ -49,14 +48,13 @@ func decodePackageImports(data json.RawMessage, manifest string) (ImportResult, 
 	return result, nil
 }
 
-func validatePackageImportCoverage(manifest string, paths []string, unsupported int) error {
-	if !slices.Contains(paths, manifest) || len(paths) > maximumOperationPaths || unsupported == 0 && len(paths) < 2 {
+func validatePackageImportCoverage(paths []string, unsupported int) error {
+	if !slices.Contains(paths, packedManifest) || len(paths) > maximumOperationPaths || unsupported == 0 && len(paths) < 2 {
 		return fmt.Errorf("published artifact imports omitted the manifest or its artifacts, or exceeded the file limit")
 	}
-	directory := filepath.ToSlash(filepath.Dir(manifest))
 	for _, path := range paths {
-		if !containedPath(path) || !containsPath(directory, path) {
-			return fmt.Errorf("published artifact imports escaped package %q", directory)
+		if !containedPath(path) {
+			return fmt.Errorf("published artifact imports escaped the packed package")
 		}
 	}
 	return nil

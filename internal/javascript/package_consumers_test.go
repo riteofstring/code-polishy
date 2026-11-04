@@ -12,12 +12,14 @@ import (
 )
 
 type runtimeConsumerCase struct {
-	manifest string
-	source   string
-	files    map[string]string
-	entry    string
-	needs    bool
-	outcome  string
+	manifest    string
+	source      string
+	files       map[string]string
+	links       map[string]string
+	entry       string
+	needs       bool
+	unpublished bool
+	outcome     string
 }
 
 const (
@@ -28,6 +30,12 @@ const (
 
 func esmPackage(files map[string]string) runtimeConsumerCase {
 	return runtimeConsumerCase{manifest: `{"name":"pkg","exports":"./dist/index.mjs"}`, files: files}
+}
+
+func unpublished(testCase runtimeConsumerCase) runtimeConsumerCase {
+	testCase.unpublished = true
+	testCase.outcome = unsupportedUse
+	return testCase
 }
 
 func needing(testCase runtimeConsumerCase, outcome string) runtimeConsumerCase {
@@ -119,8 +127,15 @@ func TestPackageImportsAgreeWithNodeConsumers(t *testing.T) {
 		"layout/exact file before extension": {source: `module.exports = require("./tool");`, files: map[string]string{
 			"dist/tool": `module.exports = {};`, "dist/tool.js": `module.exports = require("dep");`,
 		}},
-		"layout/percent encoded export": needing(runtimeConsumerCase{manifest: `{"name":"pkg","exports":"./dist/%69ndex.cjs"}`, source: `module.exports = require("dep");`, files: map[string]string{"dist/%69ndex.cjs": `module.exports = {};`}}, unsupportedUse),
-		"layout/unreferenced artifact":  {source: `module.exports = {};`, files: map[string]string{"dist/unused.cjs": `module.exports = require("dep");`}},
+		"layout/percent encoded export":      needing(runtimeConsumerCase{manifest: `{"name":"pkg","exports":"./dist/%69ndex.cjs"}`, source: `module.exports = require("dep");`, files: map[string]string{"dist/%69ndex.cjs": `module.exports = {};`}}, unsupportedUse),
+		"packed/inlined dependency":          {manifest: `{"name":"pkg","main":"dist/index.cjs","devDependencies":{"dep":"1.0.0"}}`, source: `module.exports = { value: "inlined" };`},
+		"packed/surviving dependency import": needing(runtimeConsumerCase{manifest: `{"name":"pkg","main":"dist/index.cjs","devDependencies":{"dep":"1.0.0"}}`, source: `module.exports = require("dep");`}, verifiedImport),
+		"packed/published manifest":          needing(runtimeConsumerCase{manifest: `{"name":"pkg","main":"dist/index.cjs","publishConfig":{"main":"dist/published.cjs"}}`, source: `module.exports = {};`, files: map[string]string{"dist/published.cjs": `module.exports = require("dep");`}}, verifiedImport),
+		"packed/checkout node_modules":       unpublished(runtimeConsumerCase{source: `module.exports = require("../node_modules/dep/index.js");`, files: map[string]string{"node_modules/dep/index.js": `module.exports = {};`}}),
+		"packed/omitted symlink":             unpublished(runtimeConsumerCase{source: `module.exports = require("./link.cjs");`, files: map[string]string{"dist/real.cjs": `module.exports = {};`}, links: map[string]string{"dist/link.cjs": "real.cjs"}}),
+		"packed/files exclusion":             unpublished(runtimeConsumerCase{manifest: `{"name":"pkg","main":"dist/index.cjs","files":["dist/index.cjs"]}`, source: `module.exports = require("./chunk.cjs");`, files: map[string]string{"dist/chunk.cjs": `module.exports = {};`}}),
+		"packed/ignore file exclusion":       unpublished(runtimeConsumerCase{source: `module.exports = require("./chunk.cjs");`, files: map[string]string{"dist/chunk.cjs": `module.exports = {};`, ".npmignore": "dist/chunk.cjs\n"}}),
+		"layout/unreferenced artifact":       {source: `module.exports = {};`, files: map[string]string{"dist/unused.cjs": `module.exports = require("dep");`}},
 		"layout/bin entry": needing(runtimeConsumerCase{
 			manifest: `{"name":"pkg","main":"dist/index.cjs","bin":{"tool":"bin/tool"}}`, source: `module.exports = {};`, entry: "bin/tool",
 			files: map[string]string{"bin/tool": "#!/usr/bin/env node\nrequire(\"dep\");\n"},
@@ -155,8 +170,8 @@ func TestPackageImportsAgreeWithNodeConsumers(t *testing.T) {
 	for name, testCase := range cases {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			pkg, missing := installNodeConsumer(t, node, testCase)
-			result, err := bundle.PackageImports(t.Context(), pkg, "package.json")
+			archive, missing := installNodeConsumer(t, node, testCase)
+			result, err := bundle.PackedImports(t.Context(), archive, "pkg")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -270,17 +285,18 @@ func installNodeConsumer(t *testing.T, node string, testCase runtimeConsumerCase
 	t.Helper()
 	consumer := t.TempDir()
 	pkg := filepath.Join(consumer, "node_modules", "pkg")
-	manifest := testCase.manifest
-	if manifest == "" {
-		manifest = `{"name":"pkg","main":"dist/index.cjs"}`
+	files := map[string]string{"package.json": testCase.manifest}
+	if testCase.manifest == "" {
+		files["package.json"] = `{"name":"pkg","main":"dist/index.cjs"}`
 	}
-	writeScript(t, filepath.Join(pkg, "package.json"), manifest)
 	for path, source := range testCase.files {
-		writeScript(t, filepath.Join(pkg, path), strings.ReplaceAll(source, "{{PKG}}", pkg))
+		files[path] = strings.ReplaceAll(source, "{{PKG}}", pkg)
 	}
 	if testCase.source != "" {
-		writeScript(t, filepath.Join(pkg, "dist/index.cjs"), strings.ReplaceAll(testCase.source, "{{PKG}}", pkg))
+		files["dist/index.cjs"] = strings.ReplaceAll(testCase.source, "{{PKG}}", pkg)
 	}
+	archive := packWithPackageManager(t, node, packedFixture{files: files, links: testCase.links})
+	installPacked(t, archive, pkg)
 	load := func() (bool, string) {
 		command := exec.CommandContext(t.Context(), node, "-e", runtimeConsumerDriver, testCase.entry)
 		command.Dir = consumer
@@ -290,6 +306,12 @@ func installNodeConsumer(t *testing.T, node string, testCase runtimeConsumerCase
 	}
 	loaded, output := load()
 	missing := !loaded && (strings.Contains(output, "Cannot find module 'dep'") || strings.Contains(output, "Cannot find package 'dep'"))
+	if testCase.unpublished {
+		if loaded || missing || !strings.Contains(output, "Cannot find module") {
+			t.Fatalf("Node consumer of the packed package did not miss an unpublished file: %s", output)
+		}
+		return archive, false
+	}
 	if !loaded && !missing {
 		t.Fatalf("fixture failed for another reason: %s", output)
 	}
@@ -303,7 +325,7 @@ func installNodeConsumer(t *testing.T, node string, testCase runtimeConsumerCase
 	if missing != testCase.needs {
 		t.Fatalf("Node consumer needs dep = %t, case declares %t: %s", missing, testCase.needs, output)
 	}
-	return pkg, missing
+	return archive, missing
 }
 
 type typeConsumerCase struct {
@@ -400,6 +422,16 @@ func TestPackageImportsAgreeWithTypeScriptConsumers(t *testing.T) {
 			files:   map[string]string{"dist/entry": `module.exports = {};`, "dist/entry.d.ts": `export type { Value } from "dep";`},
 			install: map[string]string{"dep/package.json": `{"types":"index.d.ts"}`, "dep/index.d.ts": `export type Value = string;`},
 		},
+		"packed declaration exclusion": {
+			unsupported: true, manifest: `{"name":"pkg","main":"dist/index.js","types":"dist/index.d.ts","files":["dist/index.js","dist/index.d.ts"]}`,
+			declaration: `export type { Value } from "./other.js";`, files: map[string]string{"dist/other.d.ts": `export type Value = string;`},
+		},
+		"packed declaration dependency": {
+			manifest:    `{"name":"pkg","main":"dist/index.js","types":"dist/index.d.ts","files":["dist"],"devDependencies":{"dep":"1.0.0"}}`,
+			declaration: `export type { Value } from "./other.js";`, identity: "dep",
+			files:   map[string]string{"dist/other.d.ts": `export type { Value } from "dep";`},
+			install: map[string]string{"dep/package.json": `{"types":"index.d.ts"}`, "dep/index.d.ts": `export type Value = string;`},
+		},
 		"unreachable private declaration": {
 			declaration: `export declare const value: string;`,
 			files:       map[string]string{"dist/private.d.ts": `export type { Value } from "dep";`},
@@ -428,16 +460,16 @@ func TestPackageImportsAgreeWithTypeScriptConsumers(t *testing.T) {
 	for name, testCase := range cases {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			pkg, consumer := writeTypeConsumer(t, testCase)
+			archive, consumer := writeTypeConsumer(t, node, testCase)
 			if testCase.unsupported {
-				result, err := bundle.PackageImports(t.Context(), pkg, "package.json")
+				result, err := bundle.PackedImports(t.Context(), archive, "pkg")
 				if err != nil || len(result.Unsupported) == 0 {
 					t.Fatalf("PackageImports = %+v, %v; want unsupported", result, err)
 				}
 				return
 			}
 			requireTypeConsumerNeed(t, node, compiler, consumer, testCase)
-			result, err := bundle.PackageImports(t.Context(), pkg, "package.json")
+			result, err := bundle.PackedImports(t.Context(), archive, "pkg")
 			if err != nil || len(result.Unsupported) != 0 {
 				t.Fatalf("PackageImports = %+v, %v", result, err)
 			}
@@ -449,25 +481,24 @@ func TestPackageImportsAgreeWithTypeScriptConsumers(t *testing.T) {
 	}
 }
 
-func writeTypeConsumer(t *testing.T, testCase typeConsumerCase) (string, string) {
+func writeTypeConsumer(t *testing.T, node string, testCase typeConsumerCase) (string, string) {
 	t.Helper()
 	consumer := t.TempDir()
-	pkg := filepath.Join(consumer, "node_modules", "pkg")
-	manifest := testCase.manifest
-	if manifest == "" {
-		manifest = `{"name":"pkg","main":"dist/index.js","types":"dist/index.d.ts"}`
+	files := map[string]string{"package.json": testCase.manifest, "dist/index.js": `module.exports = {};`}
+	if testCase.manifest == "" {
+		files["package.json"] = `{"name":"pkg","main":"dist/index.js","types":"dist/index.d.ts"}`
 	}
-	writeScript(t, filepath.Join(pkg, "package.json"), manifest)
-	writeScript(t, filepath.Join(pkg, "dist/index.js"), `module.exports = {};`)
 	if testCase.declaration != "" {
-		writeScript(t, filepath.Join(pkg, "dist/index.d.ts"), testCase.declaration)
+		files["dist/index.d.ts"] = testCase.declaration
 	}
 	for path, source := range testCase.files {
-		writeScript(t, filepath.Join(pkg, path), source)
+		files[path] = source
 	}
+	archive := packWithPackageManager(t, node, packedFixture{files: files})
+	installPacked(t, archive, filepath.Join(consumer, "node_modules", "pkg"))
 	writeScript(t, filepath.Join(consumer, "index.ts"), "import type * as pkg from \"pkg\";\nexport type Surface = typeof pkg;\n")
 	writeScript(t, filepath.Join(consumer, "compile.cjs"), typeScriptConsumerDriver)
-	return pkg, consumer
+	return archive, consumer
 }
 
 func compileTypeConsumer(t *testing.T, node, compiler, consumer string) []string {

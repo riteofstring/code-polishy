@@ -6,16 +6,31 @@ inline a package into its published JavaScript while retaining it only in
 would misdescribe the production code. npm's `bundleDependencies` describes
 shipping dependency directories, not inlining, and supplies no such evidence.
 
-`scope.bundledDependencies` names an exact package manifest and exact dependency
-names. Scope wildcards are intentionally unsupported: a newly added dependency
+`scope.bundledDependencies` names an exact package manifest, the package's
+packed `.tgz` artifact, and exact dependency names. Scope wildcards are intentionally unsupported: a newly added dependency
 must receive its own declaration. Each name must occur only in that manifest's
 `devDependencies`; runtime, optional, and peer declarations contradict the
 claim. The declaration does not change source classification, dependency
 direction, quality checks, supply-chain analysis, or other packages' dependency
 authority.
 
-The sealed TypeScript parser reads the package's existing built entry files.
-It covers every exact `exports` target and explicit `main`, `module`, `types`,
+The claim concerns the published package, and a development checkout contains
+files that never ship: installed dependencies, symbolic links, ignored files,
+and files outside `files`. The package manager's own pack output is therefore
+the only filesystem verification reads; Code Polishy does not reimplement
+packing rules. The normal build and pack workflow produces the declared archive
+before verification; Code Polishy never builds, packs, installs, or runs
+lifecycle scripts. The archive must be a bounded gzip tarball whose entries are
+regular files or directories under `package/` with contained, unique paths, and
+its packed manifest must name the declared package. It is extracted into a
+temporary directory, and both the runtime and declaration resolvers operate
+only there, so a file present only in the checkout cannot satisfy an artifact
+import. The source manifest still decides whether each name is a development
+dependency; the packed manifest, including any packing rewrite, decides the
+entries.
+
+The sealed TypeScript parser reads the packed entry files. It covers every exact
+`exports` target and explicit `main`, `module`, `types`,
 `typings`, and `bin` entry. Without `exports`, the file Node selects for the
 package directory also joins. Public type entries are the files TypeScript's
 resolvers select for each library entry and for the package directory, so
@@ -42,7 +57,7 @@ The public declaration closure is what TypeScript itself builds. One sealed
 TypeScript Program per consumer resolution mode (Node10, NodeNext ESM and
 CommonJS, and Bundler) starts from the type entries and a virtual consumer file
 importing every library entry and the package directory. A controlled compiler
-host serves only published package files, excluding nested `node_modules`, and
+host serves only packed files, excluding nested `node_modules`, and
 presents the package under `node_modules/<name>`, so entry selection,
 extension substitution, directory manifests, reference paths, and self-imports
 resolve as they do for an installed consumer. Every file any Program loads joins
@@ -119,25 +134,28 @@ package itself or its `@types` counterpart, and a Node built-in with
 identities the consumer could need. Ambient module declarations supplied by
 other packages and consumer path mappings are outside the guarantee.
 
-Missing or malformed files, escaping or linked paths, other artifact types, and
-unresolved local imports fail verification. Export patterns, `browser`,
+Missing or malformed archives and files, other artifact types, and unresolved
+local imports fail verification. Export patterns, `browser`,
 `typesVersions`, and `directories.bin` remain unsupported rather than silently
 losing a possible consumer entry. File, import, byte, and process limits bound
 analysis. The reader does not execute repository code, build artifacts, or
 install packages. Tests cover a matrix of reference forms, resolution origins,
 and specifier kinds, including URL encodings whose meaning differs between
 resolution modes, each loader category, wrapper combinations, package
-layouts, and representative tsc, esbuild, rollup, and webpack output with Node
-execution or TypeScript compilation of an installed consumer, and state the
+layouts, publication boundaries such as checkout-only `node_modules`, omitted
+symbolic links, `files` and ignore-file exclusions, and manifest rewrites, and
+representative tsc, esbuild, rollup, and webpack output. Each case is packed by
+the pinned package manager, verified from that archive, and installed from the
+same archive for Node execution or TypeScript compilation, and state the
 expected verifier outcome for each case, including conservative rejections.
 
 The feature is complete when every documented category agrees with consumers in
 those tests. A finding must name the documented promise it violates; support
 for JavaScript outside the model is a separate feature decision.
 
-Repositories build before architecture verification and keep their ordinary
-build and packed-consumer contracts. Reading a current artifact is not evidence
-of build freshness or arbitrary JavaScript behavior. The check establishes the
-declared dependency boundary of the parsed entry closure; it does not replace
-those contracts. Verification is shared by native and provider imports and
+Repositories build and pack before architecture verification and keep their
+ordinary build and packed-consumer contracts. Reading a packed archive is not
+evidence of build freshness or arbitrary JavaScript behavior. The check
+establishes the declared dependency boundary of the shipped entry closure; it
+does not replace those contracts. Verification is shared by native and provider imports and
 cached only within one architecture analysis, without a new receipt or digest.

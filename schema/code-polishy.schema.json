@@ -252,11 +252,15 @@
     "bundledDependencies": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["manifest", "packages"],
+      "required": ["manifest", "artifact", "packages"],
       "properties": {
         "manifest": {
           "$ref": "#/$defs/exactPath",
           "pattern": "(?:^|/)package\\.json$"
+        },
+        "artifact": {
+          "$ref": "#/$defs/exactPath",
+          "pattern": "\\.tgz$"
         },
         "packages": {
           "type": "array",

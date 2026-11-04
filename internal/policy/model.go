@@ -168,6 +168,7 @@ type GeneratedJavaScript struct {
 
 type BundledDependencies struct {
 	Manifest string   `json:"manifest"`
+	Artifact string   `json:"artifact"`
 	Packages []string `json:"packages"`
 }
 

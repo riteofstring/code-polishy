@@ -322,6 +322,7 @@ declare those exact packages without marking production source as development:
     "bundledDependencies": [
       {
         "manifest": "packages/editor/package.json",
+        "artifact": "packages/editor/editor.tgz",
         "packages": ["@codemirror/state", "@codemirror/view"]
       }
     ]
@@ -334,8 +335,14 @@ Exact package names are required; wildcards, undeclared packages, and conflictin
 runtime, peer, or optional declarations fail. This allowance applies only to the
 owning package and does not change any source classification or other rule.
 
-Build the package before running `architecture` or a gate. Code Polishy parses
-its exact `exports` and explicit `main`, `module`, `types`, `typings`, and `bin`
+Build and pack the package with its package manager to the declared `.tgz` path
+before running `architecture` or a gate, for example with
+`pnpm pack --out packages/editor/editor.tgz`. Code Polishy never builds or packs.
+It extracts that archive and reads only the packed files, so checkout-only
+files such as installed dependencies, symbolic links, and files excluded by
+`files` or ignore rules cannot satisfy an import. The source manifest decides
+the `devDependencies` claim; the packed manifest decides the entries. Code
+Polishy parses its exact `exports` and explicit `main`, `module`, `types`, `typings`, and `bin`
 entry files, the file Node selects for the package directory when `exports` is
 absent, and the type entries TypeScript's resolvers select for those entries and
 the package directory. It follows local JavaScript imports with Node's CommonJS
@@ -347,8 +354,9 @@ literal calls of `require`, `require.resolve`, `module.require`, and
 `getBuiltinModule` for Node built-ins. Any other use of `require` or
 `getBuiltinModule`, `require` calls on other receivers, URL, absolute-path, and
 `#` import specifiers, type references that do not name a package, runtime
-imports of the Node `module` API, computed loader calls, missing artifacts,
-unresolved local imports, escaping paths, artifacts other than JavaScript,
+imports of the Node `module` API, computed loader calls, missing or malformed
+archives, archives for another package, links or escaping paths in archives,
+missing artifacts, unresolved local imports, artifacts other than JavaScript,
 TypeScript, JSON, or CSS, and unreadable output block verification. Export
 patterns, `browser`, `typesVersions`, and `directories.bin` are not supported.
 Unreachable private declarations are not checked. Imports in TypeScript
@@ -357,7 +365,7 @@ built-in imports against `@types/node`. Runtime reflection, keys computed at run
 time, and evaluated strings are outside the check.
 
 Keep build-freshness and packed-consumer tests in the package's ordinary suites.
-The check reads the current outputs and does not execute the build or prove
+The check reads the declared archive and does not prove build freshness or
 arbitrary runtime behavior. Upgrade the locked Code Polishy release before
 adding this configuration. See the [bundled dependency design](../design/bundled-javascript-dependencies.md).
 

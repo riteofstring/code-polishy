@@ -2,6 +2,7 @@ package architecture
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"github.com/riteofstring/code-polishy/internal/javascript"
 	"github.com/riteofstring/code-polishy/internal/policy"
@@ -27,12 +28,13 @@ func (packages *nodePackages) verifyBundledDependencies(owner *nodePackage) {
 		if len(admitted) != len(declaration.Packages) {
 			return
 		}
-		result, err := (javascript.Bundle{PolicyRoot: packages.repo.PolicyRoot}).PackageImports(packages.ctx, packages.repo.Root, manifest)
+		archive := filepath.Join(packages.repo.Root, filepath.FromSlash(declaration.Artifact))
+		result, err := (javascript.Bundle{PolicyRoot: packages.repo.PolicyRoot}).PackedImports(packages.ctx, archive, owner.name)
 		if err != nil {
-			packages.coverage = append(packages.coverage, importCoverageFinding(manifest, "cannot verify bundled dependencies against published artifacts: "+err.Error()))
+			packages.coverage = append(packages.coverage, packedCoverageFinding(declaration.Artifact, err.Error()))
 			return
 		}
-		findings := bundledArtifactFindings(result, admitted)
+		findings := bundledArtifactFindings(declaration.Artifact, result, admitted)
 		packages.coverage = append(packages.coverage, findings...)
 		if len(findings) == 0 {
 			owner.bundled = admitted
@@ -41,18 +43,22 @@ func (packages *nodePackages) verifyBundledDependencies(owner *nodePackage) {
 	}
 }
 
-func bundledArtifactFindings(result javascript.ImportResult, admitted map[string]bool) []policy.Finding {
+func packedCoverageFinding(artifact, reason string) policy.Finding {
+	finding := importCoverageFinding(artifact, "cannot verify bundled dependencies against the packed package: "+reason)
+	finding.Remediation.Summary = "Build and pack the package with its package manager at the declared artifact path, then rerun architecture. Resolve unsupported packed imports or entry mappings."
+	return finding
+}
+
+func bundledArtifactFindings(artifact string, result javascript.ImportResult, admitted map[string]bool) []policy.Finding {
 	findings := []policy.Finding{}
 	for _, item := range result.Unsupported {
-		finding := importCoverageFinding(item.Path, "cannot verify bundled dependencies against published artifacts: "+item.Reason)
-		finding.Remediation.Summary = "Build the package, then rerun architecture with its complete published JavaScript and public declarations present. Resolve unsupported artifact imports or entry mappings."
-		findings = append(findings, finding)
+		findings = append(findings, packedCoverageFinding(artifact, item.Path+": "+item.Reason))
 	}
 	for _, fact := range result.Imports {
 		if admitted[fact.Package] {
 			findings = append(findings, policy.Finding{
-				Check: "architecture.packageDependency", Path: fact.Path, Line: fact.Line, Column: fact.Column, Subject: fact.Package,
-				Message: fmt.Sprintf("published artifact imports bundled development dependency %q; consumers still need this package", fact.Package),
+				Check: "architecture.packageDependency", Path: artifact, Subject: fact.Package,
+				Message: fmt.Sprintf("packed file %s:%d:%d imports bundled development dependency %q; consumers still need this package", fact.Path, fact.Line, fact.Column, fact.Package),
 			})
 		}
 	}

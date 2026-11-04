@@ -1,6 +1,6 @@
 import { lstatSync, realpathSync, statSync } from "node:fs";
 import { createRequire, isBuiltin } from "node:module";
-import { basename, dirname, extname, join } from "node:path";
+import { dirname, extname, join } from "node:path";
 import { normalize } from "node:path/posix";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -11,6 +11,7 @@ import { loaderSpecifiers } from "./package-loaders.mjs";
 import { typeClosure } from "./package-types.mjs";
 import { fail, insideRoot, readTargetFile, unsupported } from "./protocol.mjs";
 
+const MANIFEST = "package.json";
 const MAXIMUM_FILES = 4096;
 const MAXIMUM_IMPORTS = 20000;
 const RUNTIME_EXTENSIONS = new Set(["", ".js", ".mjs", ".cjs"]);
@@ -87,10 +88,9 @@ function packageEntries(manifest) {
   return { entries, executables };
 }
 
-function containedPackagePath(state, path) {
-  const normalized = normalize(path);
+function containedArtifact(state, path) {
   if (
-    normalized !== path ||
+    normalize(path) !== path ||
     path.includes("\\") ||
     path.startsWith("/") ||
     path === ".." ||
@@ -98,23 +98,9 @@ function containedPackagePath(state, path) {
   ) {
     throw new Error(`artifact path is not contained: ${path}`);
   }
-  if (state.directory !== "." && !path.startsWith(`${state.directory}/`)) {
+  const real = realpathSync(join(state.request.root, path));
+  if (insideRoot(state.packageRoot, real.split("\\").join("/")) === null)
     throw new Error(`artifact leaves its package: ${path}`);
-  }
-}
-
-function containedArtifact(state, path) {
-  containedPackagePath(state, path);
-  const absolute = join(state.request.root, path);
-  const real = realpathSync(absolute).split("\\").join("/");
-  if (insideRoot(state.packageRoot, real) === null)
-    throw new Error(`artifact leaves its package: ${path}`);
-  let parent = absolute;
-  while (parent !== state.request.root) {
-    if (lstatSync(parent).isSymbolicLink())
-      throw new Error(`artifact uses a symbolic link: ${path}`);
-    parent = dirname(parent);
-  }
   return path;
 }
 
@@ -145,8 +131,8 @@ function optionalArtifactInfo(root, path) {
   }
 }
 
-function packagePath(state, entry) {
-  return normalize(join(state.directory, entry).split("\\").join("/"));
+function packagePath(entry) {
+  return normalize(entry.split("\\").join("/"));
 }
 
 function packageArtifact(state, absolute) {
@@ -156,7 +142,7 @@ function packageArtifact(state, absolute) {
   );
   if (relative === null)
     throw new Error(`published import leaves its package: ${absolute}`);
-  return packagePath(state, relative);
+  return packagePath(relative);
 }
 
 function runtimeArtifact(state, from, specifier) {
@@ -216,11 +202,7 @@ function selfArtifact(state, from, subpath, resolve) {
     return "";
   }
   if (subpath === ".") return "";
-  return resolve(
-    state,
-    packagePath(state, basename(from)),
-    `.${subpath.slice(1)}`,
-  );
+  return resolve(state, MANIFEST, `.${subpath.slice(1)}`);
 }
 
 function typesCounterpart(name) {
@@ -453,16 +435,14 @@ function readTypeArtifacts(state, roots, entries) {
 }
 
 function enqueueEntry(state, entry) {
-  return enqueue(state, packagePath(state, entry));
+  return enqueue(state, packagePath(entry));
 }
 
 function enqueueRuntimeDirectory(state, manifest) {
   if (manifest.exports !== undefined) return;
   let target;
   try {
-    target = createRequire(
-      join(state.request.root, state.manifestPath),
-    ).resolve("./");
+    target = createRequire(join(state.request.root, MANIFEST)).resolve("./");
   } catch {
     return;
   }
@@ -480,41 +460,35 @@ function packageRoots(state, manifest) {
   enqueueRuntimeDirectory(state, manifest);
   const roots = entries
     .filter(typed)
-    .map((entry) => containedArtifact(state, packagePath(state, entry)));
+    .map((entry) => containedArtifact(state, packagePath(entry)));
   return { roots, entries };
 }
 
 export function packageImports(request) {
-  if (request.paths.length !== 1 || !request.paths[0].endsWith("package.json"))
-    fail("package-imports requires exactly one package manifest");
-  const manifestPath = request.paths[0];
-  const directory = dirname(manifestPath).split("\\").join("/");
+  if (request.paths.length !== 1 || request.paths[0] !== MANIFEST)
+    fail("package-imports requires the packed package manifest");
   const state = {
     request,
-    manifestPath,
-    directory,
-    packageRoot: realpathSync(join(request.root, directory))
-      .split("\\")
-      .join("/"),
+    packageRoot: realpathSync(request.root).split("\\").join("/"),
     analyzed: [],
     imports: [],
     unsupported: [],
     pending: new Set(),
   };
   try {
-    containedArtifact(state, manifestPath);
+    containedArtifact(state, MANIFEST);
     const text = readTargetFile(
-      join(request.root, manifestPath),
-      manifestPath,
+      join(request.root, MANIFEST),
+      MANIFEST,
       state.unsupported,
     );
     if (text === null)
       return { analyzed: [], imports: [], unsupported: state.unsupported };
     state.manifest = JSON.parse(text);
     const { roots, entries } = packageRoots(state, state.manifest);
-    state.analyzed.push(manifestPath);
+    state.analyzed.push(MANIFEST);
     for (const path of state.pending) {
-      if (path === manifestPath) continue;
+      if (path === MANIFEST) continue;
       try {
         readRuntimeArtifact(state, path);
       } catch (error) {
@@ -523,7 +497,7 @@ export function packageImports(request) {
     }
     readTypeArtifacts(state, roots, entries);
   } catch (error) {
-    state.unsupported.push(unsupported(manifestPath, error.message));
+    state.unsupported.push(unsupported(MANIFEST, error.message));
   }
   return {
     analyzed: state.analyzed,
