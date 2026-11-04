@@ -116,6 +116,11 @@ func TestInstalledPackageImportsRejectUnreadableRuntimeTargets(t *testing.T) {
 			"dist/index.cjs":     `module.exports = import("./sub%2fchunk.cjs");`,
 			"dist/sub/chunk.cjs": `module.exports = require("dep");`,
 		},
+		"unreadable package scope": {
+			"dist/index.cjs":        `module.exports = require("./sub/inner.cjs");`,
+			"dist/sub/package.json": `{`,
+			"dist/sub/inner.cjs":    `module.exports = require("pkg");`,
+		},
 		"directory import": {
 			"dist/index.cjs":     `module.exports = import("./sub");`,
 			"dist/sub/index.js":  `module.exports = require("dep");`,

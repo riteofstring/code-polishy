@@ -1,6 +1,6 @@
 import { lstatSync, realpathSync, statSync } from "node:fs";
 import { createRequire, isBuiltin } from "node:module";
-import { dirname, extname, join } from "node:path";
+import { basename, dirname, extname, join } from "node:path";
 import { normalize } from "node:path/posix";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -175,32 +175,76 @@ function importArtifact(state, from, specifier) {
 
 const RESOLVERS = { import: importArtifact, require: runtimeArtifact };
 
-function selfSubpath(state, specifier) {
-  const name = state.manifest?.name;
-  if (typeof name !== "string" || specifiedPackage(specifier) !== name)
-    return null;
-  return `.${specifier.slice(name.length)}`;
-}
-
-function exportedSubpaths(exports) {
-  if (
-    exports === null ||
-    typeof exports !== "object" ||
-    Array.isArray(exports) ||
-    !Object.keys(exports).some((key) => key.startsWith("."))
-  )
-    return ["."];
-  return Object.keys(exports);
-}
-
-function selfArtifact(state, from, subpath, resolve) {
-  if (state.manifest.exports !== undefined) {
-    if (!exportedSubpaths(state.manifest.exports).includes(subpath))
-      throw new Error(
-        `published self-import ${JSON.stringify(subpath)} from ${from} is not an exact package export`,
-      );
-    return "";
+function scopeManifest(state, path) {
+  if (path === MANIFEST) return state.manifest;
+  if (!state.scopes.has(path)) {
+    const text = readTargetFile(
+      join(state.request.root, path),
+      path,
+      state.unsupported,
+    );
+    if (text === null) throw new Error(`package scope ${path} is unreadable`);
+    try {
+      state.scopes.set(path, JSON.parse(text));
+    } catch {
+      throw new Error(`package scope ${path} is not valid JSON`);
+    }
+    state.analyzed.push(path);
   }
+  return state.scopes.get(path);
+}
+
+function packageScope(state, from) {
+  let directory = dirname(from);
+  while (basename(directory) !== "node_modules") {
+    const path = normalize(`${directory}/${MANIFEST}`);
+    if (existingFile(join(state.request.root, path)))
+      return { directory, manifest: scopeManifest(state, path) };
+    if (directory === ".") return null;
+    directory = dirname(directory);
+  }
+  return null;
+}
+
+function exportedValue(exports, subpath) {
+  const keyed =
+    typeof exports === "object" &&
+    !Array.isArray(exports) &&
+    Object.keys(exports).some((key) => key.startsWith("."));
+  if (!keyed) return subpath === "." ? exports : undefined;
+  return Object.hasOwn(exports, subpath) ? exports[subpath] : undefined;
+}
+
+function scopedExport(state, from, scope, subpath) {
+  const value = exportedValue(scope.manifest.exports, subpath);
+  if (value === undefined)
+    throw new Error(
+      `published self-import ${JSON.stringify(subpath)} from ${from} is not an exact package export`,
+    );
+  const targets = [];
+  exportTargets(value, targets);
+  const runtime = targets
+    .filter((target) => !TYPE_EXTENSIONS.has(extname(target)))
+    .map((target) =>
+      enqueue(state, packagePath(`${scope.directory}/${target.slice(2)}`)),
+    );
+  return runtime[0] ?? "";
+}
+
+function selfTarget(state, from, specifier, resolve) {
+  const name = specifiedPackage(specifier);
+  const subpath = `.${specifier.slice(name.length)}`;
+  const scope = packageScope(state, from);
+  if (scope?.manifest.name === name && scope.manifest.exports != null)
+    return scopedExport(state, from, scope, subpath);
+  if (name !== state.manifest.name) return null;
+  if (state.manifest.exports != null)
+    return scopedExport(
+      state,
+      from,
+      { directory: ".", manifest: state.manifest },
+      subpath,
+    );
   if (subpath === ".") return "";
   return resolve(state, MANIFEST, `.${subpath.slice(1)}`);
 }
@@ -251,9 +295,8 @@ function runtimeTarget(state, path, specifier, mode) {
     );
   if (kind === "relative") return { resolved: resolve(state, path, specifier) };
   if (kind === "builtin") return {};
-  const self = selfSubpath(state, specifier);
-  if (self !== null)
-    return { resolved: selfArtifact(state, path, self, resolve) };
+  const self = selfTarget(state, path, specifier, resolve);
+  if (self !== null) return { resolved: self };
   return { packages: [specifiedPackage(specifier)] };
 }
 
@@ -474,6 +517,7 @@ export function packageImports(request) {
     imports: [],
     unsupported: [],
     pending: new Set(),
+    scopes: new Map(),
   };
   try {
     containedArtifact(state, MANIFEST);

@@ -46,11 +46,16 @@ resolver does: the specifier is a URL relative to the importing file, so
 percent-encoding, queries, fragments, and backslashes follow URL rules, and the
 result must be an existing file, without extension search or directory
 resolution. Encoded path separators fail, as they do in Node. Entry targets
-containing `%` are unsupported because Node decodes them as URLs. Runtime
-imports of the package's own name resolve into the same closure: with
-`exports`, the subpath must be an exact export key whose targets are already
-entries; without `exports`, the subpath resolves from the package root in the
-reference's mode. TypeScript sources cannot run
+containing `%` are unsupported because Node decodes them as URLs. Bare
+runtime imports resolve self-references as Node does: the importing file's
+package scope is its nearest `package.json`, stopping at `node_modules`. When
+that scope's name matches the specifier and it has `exports`, the subpath must
+be an exact export key of that scope, and every runtime condition target of
+that key joins the closure, so nested manifests cannot redirect a self-import
+to an unvisited file. Otherwise an import of the package's own name resolves to
+the package root as consumer `node_modules` lookup does: through its exact
+export keys, or without `exports` from the package root in the reference's
+mode. Other bare names are external packages. TypeScript sources cannot run
 from an installed package, so reaching one at runtime fails verification.
 
 The public declaration closure is what TypeScript itself builds. One sealed

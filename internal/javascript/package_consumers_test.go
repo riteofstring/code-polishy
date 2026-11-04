@@ -135,7 +135,20 @@ func TestPackageImportsAgreeWithNodeConsumers(t *testing.T) {
 		"packed/omitted symlink":             unpublished(runtimeConsumerCase{source: `module.exports = require("./link.cjs");`, files: map[string]string{"dist/real.cjs": `module.exports = {};`}, links: map[string]string{"dist/link.cjs": "real.cjs"}}),
 		"packed/files exclusion":             unpublished(runtimeConsumerCase{manifest: `{"name":"pkg","main":"dist/index.cjs","files":["dist/index.cjs"]}`, source: `module.exports = require("./chunk.cjs");`, files: map[string]string{"dist/chunk.cjs": `module.exports = {};`}}),
 		"packed/ignore file exclusion":       unpublished(runtimeConsumerCase{source: `module.exports = require("./chunk.cjs");`, files: map[string]string{"dist/chunk.cjs": `module.exports = {};`, ".npmignore": "dist/chunk.cjs\n"}}),
-		"layout/unreferenced artifact":       {source: `module.exports = {};`, files: map[string]string{"dist/unused.cjs": `module.exports = require("dep");`}},
+		"layout/nested scope self import": needing(runtimeConsumerCase{source: `module.exports = require("./sub/inner.cjs");`, files: map[string]string{
+			"dist/sub/package.json": `{"name":"pkg","exports":"./other.cjs"}`, "dist/sub/inner.cjs": `module.exports = require("pkg");`, "dist/sub/other.cjs": `module.exports = require("dep");`,
+		}}, verifiedImport),
+		"layout/nested scope other name": needing(runtimeConsumerCase{source: `module.exports = require("./sub/inner.cjs");`, files: map[string]string{
+			"dist/sub/package.json": `{"name":"local-name","exports":{".":{"require":"./other.cjs","types":"./other.d.ts"}}}`, "dist/sub/inner.cjs": `module.exports = require("local-name");`, "dist/sub/other.cjs": `module.exports = require("dep");`,
+		}}, verifiedImport),
+		"layout/nested scope esm self import": needing(esmPackage(map[string]string{
+			"dist/index.mjs": `import "./sub/inner.mjs";`, "dist/sub/inner.mjs": `import "pkg/other";`,
+			"dist/sub/package.json": `{"name":"pkg","exports":{"./other":"./other.cjs"}}`, "dist/sub/other.cjs": `module.exports = require("dep");`,
+		}), verifiedImport),
+		"layout/nested scope without exports": {source: `module.exports = require("./sub/inner.cjs");`, files: map[string]string{
+			"dist/sub/package.json": `{"name":"pkg","main":"other.cjs"}`, "dist/sub/inner.cjs": `module.exports = require("pkg");`, "dist/sub/other.cjs": `module.exports = require("dep");`,
+		}},
+		"layout/unreferenced artifact": {source: `module.exports = {};`, files: map[string]string{"dist/unused.cjs": `module.exports = require("dep");`}},
 		"layout/bin entry": needing(runtimeConsumerCase{
 			manifest: `{"name":"pkg","main":"dist/index.cjs","bin":{"tool":"bin/tool"}}`, source: `module.exports = {};`, entry: "bin/tool",
 			files: map[string]string{"bin/tool": "#!/usr/bin/env node\nrequire(\"dep\");\n"},
@@ -430,6 +443,15 @@ func TestPackageImportsAgreeWithTypeScriptConsumers(t *testing.T) {
 			manifest:    `{"name":"pkg","main":"dist/index.js","types":"dist/index.d.ts","files":["dist"],"devDependencies":{"dep":"1.0.0"}}`,
 			declaration: `export type { Value } from "./other.js";`, identity: "dep",
 			files:   map[string]string{"dist/other.d.ts": `export type { Value } from "dep";`},
+			install: map[string]string{"dep/package.json": `{"types":"index.d.ts"}`, "dep/index.d.ts": `export type Value = string;`},
+		},
+		"nested scope self type import": {
+			declaration: `export type { Value } from "./sub/inner.js";`, identity: "dep",
+			files: map[string]string{
+				"dist/sub/package.json": `{"name":"pkg","exports":{".":{"types":"./other.d.ts","default":"./other.js"}}}`,
+				"dist/sub/inner.d.ts":   `export type { Value } from "pkg";`,
+				"dist/sub/other.d.ts":   `export type { Value } from "dep";`,
+			},
 			install: map[string]string{"dep/package.json": `{"types":"index.d.ts"}`, "dep/index.d.ts": `export type Value = string;`},
 		},
 		"unreachable private declaration": {
