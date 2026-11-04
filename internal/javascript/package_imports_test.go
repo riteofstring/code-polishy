@@ -38,18 +38,21 @@ func TestInstalledPackageImportsFollowRuntimeAndPublicTypes(t *testing.T) {
 func TestInstalledPackageImportsRejectIncompleteArtifacts(t *testing.T) {
 	bundle := installedPackageImportBundle(t)
 	for name, source := range map[string]string{
-		"missing chunk":              `export * from "./missing.js";`,
-		"computed import":            `export const load = (name) => import(name);`,
-		"computed require":           `export const load = (name) => require(name);`,
-		"invalid syntax":             `export const =`,
-		"unresolved imports mapping": `export * from "#internal";`,
-		"aliased require":            `const load = require; export const value = load("dep");`,
-		"require shim":               `export const load = typeof require === "function" ? require : null;`,
-		"destructured require":       `const { require: load } = module; export const value = load("dep");`,
-		"module loader":              `import { createRequire as make } from "node:module"; export const value = make(import.meta.url)("dep");`,
-		"builtin module loader":      `export const value = process.getBuiltinModule("module").createRequire(import.meta.url)("dep");`,
-		"computed builtin":           `export const load = (name) => process.getBuiltinModule(name);`,
-		"module constructor":         `export const value = module.constructor._load("dep");`,
+		"missing chunk":               `export * from "./missing.js";`,
+		"computed import":             `export const load = (name) => import(name);`,
+		"computed require":            `export const load = (name) => require(name);`,
+		"invalid syntax":              `export const =`,
+		"unresolved imports mapping":  `export * from "#internal";`,
+		"aliased require":             `const load = require; export const value = load("dep");`,
+		"require shim":                `export const load = typeof require === "function" ? require : null;`,
+		"destructured require":        `const { require: load } = module; export const value = load("dep");`,
+		"module loader":               `import { createRequire as make } from "node:module"; export const value = make(import.meta.url)("dep");`,
+		"builtin module loader":       `export const value = process.getBuiltinModule("module").createRequire(import.meta.url)("dep");`,
+		"computed builtin":            `export const load = (name) => process.getBuiltinModule(name);`,
+		"module constructor":          `export const value = module.constructor._load("dep");`,
+		"quoted destructured require": `const { "require": load } = module; export const value = load.call(module, "dep");`,
+		"computed destructured key":   "const { [`require`]: load } = module; export const value = load.call(module, \"dep\");",
+		"reflected require":           `export const value = Reflect.get(module, "require").call(module, "dep");`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			root := t.TempDir()

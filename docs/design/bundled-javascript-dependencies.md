@@ -37,8 +37,9 @@ Missing or malformed files, escaping or linked paths, computed loaders, other
 artifact types, and unresolved local imports fail verification. The Node loader
 boundary is a fixed set of named APIs: runtime imports of `module`, any
 reference to `require`, `getBuiltinModule`, `createRequire`, or `mainModule`
-other than a direct literal call or a declaration, and `module.constructor`.
-These close every alias of those loaders. Code evaluated from strings or reached
+other than a direct literal call or a declaration, any string literal equal to
+one of those names, and `module.constructor`. Rejecting the quoted names covers
+quoted or computed destructuring keys, element access, and literal reflection. Code evaluated from strings or reached
 through general reflection is outside this syntactic boundary. Export patterns,
 `browser`, `typesVersions`, `directories.bin`, and directory imports governed by
 a nested `package.json` remain unsupported rather than silently losing or

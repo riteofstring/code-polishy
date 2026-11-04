@@ -341,12 +341,7 @@ function moduleConstructor(node) {
 }
 
 function indirectLoader(node) {
-  if (typescript.isStringLiteralLike(node))
-    return (
-      LOADER_NAMES.has(node.text) &&
-      typescript.isElementAccessExpression(node.parent) &&
-      node.parent.argumentExpression === node
-    );
+  if (typescript.isStringLiteralLike(node)) return LOADER_NAMES.has(node.text);
   if (!typescript.isIdentifier(node) || !LOADER_NAMES.has(node.text))
     return false;
   return !(
