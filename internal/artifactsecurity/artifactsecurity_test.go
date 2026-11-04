@@ -342,6 +342,15 @@ func TestRunPublishesEvidenceThroughTheScannerBoundary(t *testing.T) {
 	if len(result.Findings) != 0 || len(result.Notes) != 5 || !strings.Contains(result.Notes[0], "unix:///var/run/docker.sock (rootful)") {
 		t.Fatalf("artifact security result = %+v", result)
 	}
+	planned := PlannedCommands(repo)
+	if len(boundary.commands) != len(planned) {
+		t.Fatalf("artifact security ran %d commands, planned %d", len(boundary.commands), len(planned))
+	}
+	for index, command := range boundary.commands {
+		if !MatchesPlannedCommand(planned[index], command) {
+			t.Fatalf("artifact security command %d: expected=%+v actual=%+v", index+1, planned[index], command)
+		}
+	}
 	for _, target := range []string{"agent", "image", "producer", "code-polishy-scanner"} {
 		output := filepath.Join(root, ".code-polishy-reports", "artifact-security", target)
 		runs, readErr := os.ReadDir(output)
@@ -492,6 +501,7 @@ type scannerBoundary struct {
 	rootless         bool
 	databaseError    error
 	t                *testing.T
+	commands         []policy.Command
 	containers       map[string][]string
 	findings         []map[string]any
 	blockingFindings []map[string]any
@@ -783,6 +793,7 @@ func (double unavailableScannerBoundary) Execute(ctx context.Context, invocation
 }
 
 func (double *scannerBoundary) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	double.commands = append(double.commands, invocation.Command)
 	if invocation.Capture != runner.CaptureNone {
 		return double.runOutput(ctx, invocation.Root, invocation.Command)
 	}

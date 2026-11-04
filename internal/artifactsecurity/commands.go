@@ -25,8 +25,8 @@ func PlannedCommands(repo repository.Repository) []policy.Command {
 	commands = appendScannerCommands(commands, "scanner-version")
 	commands = appendScannerCommands(commands, "database-download")
 	commands = append(commands,
-		plannedDockerCommand("save-scanner"),
-		plannedDockerCommand("inspect-scanner"),
+		plannedDockerCommand("scanner-inspect"),
+		plannedDockerCommand("scanner-save"),
 	)
 	commands = appendScannerCommands(commands, "scanner-self-observed")
 	commands = appendScannerCommands(commands, "scanner-self-enforced")
