@@ -230,6 +230,15 @@ func referenceMatrix() map[string]runtimeConsumerCase {
 	cases["origin/nested relative require"] = needing(runtimeConsumerCase{source: `module.exports = require("./sub/inner.cjs");`, files: map[string]string{
 		"dist/sub/inner.cjs": `module.exports = require("../target.cjs");`, "dist/target.cjs": `module.exports = require("dep");`, "target.cjs": `module.exports = {};`,
 	}}, verifiedImport)
+	nested := func(inner string) runtimeConsumerCase {
+		return needing(runtimeConsumerCase{source: `module.exports = require("./sub/inner.cjs");`, files: map[string]string{
+			"dist/sub/inner.cjs": inner, "dist/chunk.cjs": `module.exports = require("dep");`, "dist/sub/chunk.cjs": `module.exports = {};`,
+		}}, unsupportedUse)
+	}
+	cases["origin/shadowed module receiver"] = nested(`module.exports = ((module) => module.require("./chunk.cjs"))(module.parent);`)
+	cases["origin/reassigned module"] = nested(`const original = module; module = module.parent; original.exports = module.require("./chunk.cjs");`)
+	cases["origin/with scope"] = nested(`with (module.parent) { module.exports = require("./chunk.cjs"); }`)
+	cases["origin/locally bound require"] = runtimeConsumerCase{source: `{ const { require } = module; module.exports = require("node:path").sep; }`, outcome: unsupportedUse}
 	cases["origin/parent receiver"] = needing(runtimeConsumerCase{source: `module.exports = require("./sub/inner.cjs");`, files: map[string]string{
 		"dist/sub/inner.cjs": `module.exports = module.parent.require("./chunk.cjs");`, "dist/chunk.cjs": `module.exports = require("dep");`, "dist/sub/chunk.cjs": `module.exports = {};`,
 	}}, unsupportedUse)

@@ -4,6 +4,7 @@ import { parseForESLint } from "@typescript-eslint/parser";
 
 const LOADER_NAMES = new Set(["require", "getBuiltinModule"]);
 const REQUIRE_PROPERTIES = new Set(["main", "cache"]);
+const ORIGIN_NAMES = new Set(["require", "module"]);
 const ORDINARY = "ordinary";
 const UNSUPPORTED = "unsupported";
 
@@ -37,6 +38,32 @@ function valueReferences(scopeManager) {
       if (reference.isValueReference)
         references.set(reference.identifier, reference);
   return references;
+}
+
+function freeIdentifier(references, node, name) {
+  return (
+    node.type === "Identifier" &&
+    node.name === name &&
+    references.get(node)?.resolved === null
+  );
+}
+
+function rejectUnknownOrigins(scopeManager) {
+  for (const scope of scopeManager.scopes) {
+    if (scope.type === "with")
+      throw new Error(
+        "published artifact uses a with statement, so its loader origins are unknown",
+      );
+    for (const reference of scope.references)
+      if (
+        ORIGIN_NAMES.has(reference.identifier.name) &&
+        reference.isWrite() &&
+        reference.resolved === null
+      )
+        throw new Error(
+          `published artifact reassigns ${reference.identifier.name}, so its loader origin is unknown`,
+        );
+  }
 }
 
 function chainOuter(node) {
@@ -84,7 +111,7 @@ function keyRole(key) {
   return KEY_ROLES[key.parent.type]?.(key.parent, key) ?? null;
 }
 
-function requireMemberRole(identifier, parent) {
+function requireMemberRole(identifier, parent, free) {
   if (
     identifier.name !== "require" ||
     parent.type !== "MemberExpression" ||
@@ -93,24 +120,26 @@ function requireMemberRole(identifier, parent) {
   )
     return UNSUPPORTED;
   if (REQUIRE_PROPERTIES.has(parent.property.name)) return ORDINARY;
-  return parent.property.name === "resolve"
+  return parent.property.name === "resolve" && free
     ? (calledBy(parent) ?? UNSUPPORTED)
     : UNSUPPORTED;
 }
 
-function readRole(identifier) {
+function readRole(identifier, references) {
+  const free = freeIdentifier(references, identifier, "require");
   const call = calledBy(identifier);
-  if (call) return call;
+  if (call) return identifier.name === "require" && !free ? UNSUPPORTED : call;
   const parent = chainOuter(identifier).parent;
   if (parent.type === "UnaryExpression" && parent.operator === "typeof")
     return ORDINARY;
-  return requireMemberRole(identifier, parent);
+  return requireMemberRole(identifier, parent, free);
 }
 
 function loaderRole(node, references) {
   if (!LOADER_NAMES.has(loaderText(node))) return ORDINARY;
   const reference = node.type === "Identifier" ? references.get(node) : null;
-  if (reference) return reference.isRead() ? readRole(node) : ORDINARY;
+  if (reference)
+    return reference.isRead() ? readRole(node, references) : ORDINARY;
   return keyRole(node) ?? ORDINARY;
 }
 
@@ -119,7 +148,7 @@ function calleeName(callee) {
   return callee.computed ? loaderText(callee.property) : callee.property.name;
 }
 
-function requireLoaderPolicy(callee, specifier) {
+function requireLoaderPolicy(callee, specifier, references) {
   const name = calleeName(callee);
   if (name === "getBuiltinModule" && !isBuiltin(specifier))
     throw new Error("getBuiltinModule must name a Node built-in");
@@ -127,14 +156,14 @@ function requireLoaderPolicy(callee, specifier) {
   if (
     name === "require" &&
     receiver !== null &&
-    !(receiver.type === "Identifier" && receiver.name === "module")
+    !freeIdentifier(references, receiver, "module")
   )
     throw new Error(
-      "a require member call on a receiver other than module has an unknown resolution origin",
+      "a require member call on a receiver other than the module binding has an unknown resolution origin",
     );
 }
 
-function loaderCall(call) {
+function loaderCall(call, references) {
   const [argument] = call.arguments;
   if (argument?.type !== "Literal" || typeof argument.value !== "string")
     throw new Error("published artifact has a computed loader call");
@@ -143,6 +172,7 @@ function loaderCall(call) {
       ? call.callee.expression
       : call.callee,
     argument.value,
+    references,
   );
   return {
     text: argument.value,
@@ -154,6 +184,7 @@ function loaderCall(call) {
 export function loaderSpecifiers(path, text) {
   const { ast, scopeManager, visitorKeys } = parsedScript(path, text);
   linkParents(ast, null, visitorKeys);
+  rejectUnknownOrigins(scopeManager);
   const references = valueReferences(scopeManager);
   const specifiers = [];
   const visit = (node) => {
@@ -162,7 +193,7 @@ export function loaderSpecifiers(path, text) {
       throw new Error(
         "published artifact uses require or getBuiltinModule outside a supported loader call",
       );
-    if (role !== ORDINARY) specifiers.push(loaderCall(role));
+    if (role !== ORDINARY) specifiers.push(loaderCall(role, references));
     for (const key of visitorKeys[node.type] ?? []) {
       const value = node[key];
       for (const child of Array.isArray(value) ? value : [value])

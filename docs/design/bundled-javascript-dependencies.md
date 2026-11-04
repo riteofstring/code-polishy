@@ -82,13 +82,15 @@ other.
 
 - Loader calls: a call of `require`, `require.resolve`, `module.require`, or a
   `getBuiltinModule` binding or member, named by an identifier or literal key,
-  with a string literal specifier. A `require` member call resolves from the
-  current module only when its receiver is `module`; any other receiver, such as
-  `module.parent`, has an unknown origin and fails. `getBuiltinModule` must name
+  with a string literal specifier. Resolution origin comes from bindings, not
+  spelling: `require` calls and `require.resolve` must use the free `require`
+  binding, and `module.require` the free `module` binding. Locally bound or
+  shadowed loaders, other receivers such as `module.parent`, assignments to the
+  free `require` or `module`, and `with` scopes have unknown origins and fail. `getBuiltinModule` must name
   a Node built-in. Runtime imports of `module` or `node:module` fail, which
   covers `createRequire` and the Module class. A non-literal specifier fails.
 - Ordinary uses: declarations, labels, bindings that reuse the loader name, such
-  as `import { getBuiltinModule }` or `const { require } = module`, object
+  as `import { getBuiltinModule }`, object
   literal keys, `typeof`, `require.main` and `require.cache` reads, type
   positions, and string values that are not keys.
 - Unsupported uses: every other occurrence, including aliases, `call`, `apply`,
