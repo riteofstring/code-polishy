@@ -337,17 +337,17 @@ owning package and does not change any source classification or other rule.
 Build the package before running `architecture` or a gate. Code Polishy parses
 its exact `exports` and explicit `main`, `module`, `types`, `typings`, and `bin`
 entry files, plus root `index.js` and `index.d.ts` fallbacks when the matching
-fields are absent. It follows local JavaScript and public declaration imports,
-parses extensionless files as JavaScript, and refuses the allowance if that
+fields are absent. It follows local JavaScript imports with Node's CommonJS
+resolver, public type imports with TypeScript's resolvers, and imports of the
+package's own name, parses extensionless files as JavaScript, and refuses the allowance if that
 closure still imports a bundled package. This is a bounded static check of
 supported loader forms: imports, literal dynamic imports, and literal calls of
 `require`, `require.resolve`, `.require`, and `getBuiltinModule`. Any other use
 of `require` or `getBuiltinModule`, runtime imports of the Node `module` API,
 computed loader calls, missing artifacts, unresolved local imports, escaping
 paths, artifacts other than JavaScript, TypeScript, JSON, or CSS, and unreadable
-output block verification. Export patterns, `browser`, `typesVersions`,
-`directories.bin`, and directory imports through a nested `package.json` are not
-supported. Existing declaration companions are included; unreachable private
+output block verification. Export patterns, `browser`, `typesVersions`, and
+`directories.bin` are not supported. Existing declaration companions are included; unreachable private
 declarations are not. Imports in TypeScript artifacts count against the package
 and its `@types` counterpart, and Node built-in imports against `@types/node`.
 Runtime reflection, keys computed at run time, and evaluated strings are outside

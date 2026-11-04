@@ -19,10 +19,18 @@ It covers every exact `exports` target, explicit `main`, `module`, `types`,
 and extensionless entries. Consumers also reach the root `index.js` when neither
 `exports` nor `main` is declared, and the root `index.d.ts` when neither `types`
 nor `typings` is declared, so existing fallback files join the closure.
-It follows local runtime imports through actual JavaScript files, never their
-TypeScript substitutes, trying an extensionless specifier as Node's CommonJS
-resolver does: exact, `.js`, `.json`, `.node`, then the directory index. It
-follows reachable public declarations separately.
+Runtime and type resolution stay distinct because consumers select different
+files for them. Local runtime imports resolve with Node's own CommonJS resolver,
+which reads package metadata without executing code, so extension order,
+directory manifests, and index files match Node. ESM consumers accept only exact
+paths, a subset of those results. Local imports from TypeScript artifacts use
+the sealed TypeScript resolver under Node10, NodeNext ESM and CommonJS, and
+Bundler resolution, and every file any of them selects joins the closure.
+`reference path` directives name files directly. A resolved file outside the
+package fails verification. Imports of the package's own name resolve into
+the same closure: with `exports`, the subpath must be an exact export key whose
+targets are already entries; without `exports`, the subpath resolves as a local
+file from the package root.
 Private declaration files outside that closure do not impose consumer needs.
 Extensionless files are parsed as JavaScript because Node executes them; only
 JSON and CSS remain opaque. A remaining import of a declared bundled name blocks
@@ -31,7 +39,8 @@ both the artifact and the source allowance.
 ## Guarantee
 
 The check is a bounded static dependency check, not a proof that arbitrary
-JavaScript cannot load a package. It guarantees that every loader form in the
+JavaScript cannot load a package. Behavior outside the model below is a
+documented limitation, not a defect to patch case by case. It guarantees that every loader form in the
 supported model names a literal specifier and that each other use of a loader
 name fails verification. Unsupported forms block the allowance; they never pass
 silently as clean coverage.
@@ -49,8 +58,8 @@ type positions, and string values remain ordinary code. Keys computed at run
 time, reflection APIs, reflection through `constructor` or prototypes, and code
 evaluated from strings are outside the guarantee.
 
-Declaration artifacts support imports, re-exports, import types, and
-`reference` directives. TypeScript may satisfy a bare specifier with the package
+Declaration and TypeScript artifacts support imports, re-exports, import types,
+and `reference` directives. TypeScript may satisfy a bare specifier with the package
 itself or its `@types` counterpart, and a Node built-in with `@types/node`, so
 each import in a TypeScript artifact counts against all identities the consumer
 could need. Ambient module declarations supplied by other packages and consumer
@@ -58,12 +67,13 @@ path mappings are outside the guarantee.
 
 Missing or malformed files, escaping or linked paths, other artifact types, and
 unresolved local imports fail verification. Export patterns, `browser`,
-`typesVersions`, `directories.bin`, and directory imports governed by a nested
-`package.json` remain unsupported rather than silently losing or misresolving a
-possible consumer entry. File, import, byte, and process limits bound analysis.
+`typesVersions`, and `directories.bin` remain unsupported rather than silently
+losing a possible consumer entry. File, import, byte, and process limits bound analysis.
 The reader does not execute repository code, build artifacts, or install
-packages. Tests compare each supported and rejected form with Node execution or
-TypeScript compilation of a consumer, including valid neighboring cases.
+packages. Tests compare loader spellings and package layouts, including self-imports,
+competing extensions, directory manifests, and entry mappings, with Node
+execution or TypeScript compilation of an installed consumer, including valid
+neighboring cases.
 
 Repositories build before architecture verification and keep their ordinary
 build and packed-consumer contracts. Reading a current artifact is not evidence

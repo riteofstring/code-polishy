@@ -94,27 +94,20 @@ func TestInstalledPackageImportsFollowExecutableAndImplicitEntries(t *testing.T)
 	}
 }
 
-func TestInstalledPackageImportsResolveExtensionlessRequiresLikeNode(t *testing.T) {
+func TestInstalledPackageImportsRejectUnexportedSelfImports(t *testing.T) {
 	root := t.TempDir()
-	writeScript(t, filepath.Join(root, "package.json"), `{"main":"dist/index.cjs"}`)
-	writeScript(t, filepath.Join(root, "dist/index.cjs"), `module.exports = require("./chunk");`)
-	writeScript(t, filepath.Join(root, "dist/chunk.cjs"), `module.exports = {};`)
-	writeScript(t, filepath.Join(root, "dist/chunk/index.js"), `module.exports = require("dep");`)
+	writeScript(t, filepath.Join(root, "package.json"), `{"name":"pkg","exports":"./dist/index.cjs"}`)
+	writeScript(t, filepath.Join(root, "dist/index.cjs"), `module.exports = require("pkg/dist/chunk.cjs");`)
+	writeScript(t, filepath.Join(root, "dist/chunk.cjs"), `module.exports = require("dep");`)
 	result, err := installedPackageImportBundle(t).PackageImports(t.Context(), root, "package.json")
-	if err != nil || len(result.Unsupported) != 0 || !slices.ContainsFunc(result.Imports, func(fact ImportFact) bool { return fact.Package == "dep" }) {
+	if err != nil || len(result.Unsupported) != 1 || result.Unsupported[0].Path != "dist/index.cjs" {
 		t.Fatalf("PackageImports = %+v, %v", result, err)
 	}
 }
 
-func TestInstalledPackageImportsRejectUnmodeledRuntimeTargets(t *testing.T) {
+func TestInstalledPackageImportsRejectUnreadableRuntimeTargets(t *testing.T) {
 	bundle := installedPackageImportBundle(t)
 	for name, files := range map[string]map[string]string{
-		"nested package manifest": {
-			"dist/index.cjs":          `module.exports = require("./chunk");`,
-			"dist/chunk/package.json": `{"main":"actual.cjs"}`,
-			"dist/chunk/actual.cjs":   `module.exports = require("dep");`,
-			"dist/chunk/index.js":     `module.exports = {};`,
-		},
 		"unknown artifact type": {
 			"dist/index.cjs": `module.exports = require("./data.txt");`,
 			"dist/data.txt":  `require("dep");`,

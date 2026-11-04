@@ -40,7 +40,7 @@ const RESOLUTION_OPTIONS = {
   target: typescript.ScriptTarget.ESNext,
 };
 
-function containedResolutionHost(root) {
+export function containedResolutionHost(root) {
   return {
     useCaseSensitiveFileNames: true,
     getCurrentDirectory: () => root,

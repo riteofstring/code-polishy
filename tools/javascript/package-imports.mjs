@@ -1,11 +1,15 @@
 import { lstatSync, realpathSync } from "node:fs";
-import { isBuiltin } from "node:module";
-import { dirname, extname, join } from "node:path";
+import { createRequire, isBuiltin } from "node:module";
+import { basename, dirname, extname, join } from "node:path";
 import { normalize } from "node:path/posix";
 
 import typescript from "typescript";
 
-import { sourceSpecifiers, specifiedPackage } from "./imports.mjs";
+import {
+  containedResolutionHost,
+  sourceSpecifiers,
+  specifiedPackage,
+} from "./imports.mjs";
 import { fail, insideRoot, readTargetFile, unsupported } from "./protocol.mjs";
 
 const MAXIMUM_FILES = 4096;
@@ -23,6 +27,30 @@ const CODE_EXTENSIONS = new Set([
 const OPAQUE_EXTENSIONS = new Set([".json", ".css"]);
 const TYPE_EXTENSIONS = new Set([".ts", ".mts", ".cts", ".tsx"]);
 const DECLARATION_FILE = /\.d\.[cm]?ts$/;
+const TYPE_RESOLUTIONS = [
+  [{ moduleResolution: typescript.ModuleResolutionKind.Node10 }, undefined],
+  [
+    {
+      module: typescript.ModuleKind.NodeNext,
+      moduleResolution: typescript.ModuleResolutionKind.NodeNext,
+    },
+    typescript.ModuleKind.ESNext,
+  ],
+  [
+    {
+      module: typescript.ModuleKind.NodeNext,
+      moduleResolution: typescript.ModuleResolutionKind.NodeNext,
+    },
+    typescript.ModuleKind.CommonJS,
+  ],
+  [
+    {
+      module: typescript.ModuleKind.ESNext,
+      moduleResolution: typescript.ModuleResolutionKind.Bundler,
+    },
+    undefined,
+  ],
+];
 const NODE_LOADER_MODULES = new Set(["module", "node:module"]);
 const LOADER_NAMES = new Set(["require", "getBuiltinModule"]);
 const REQUIRE_PROPERTIES = new Set(["main", "cache"]);
@@ -160,32 +188,114 @@ function enqueue(state, path) {
   return contained;
 }
 
-function localArtifact(state, from, specifier) {
-  const candidate = normalize(
-    join(dirname(from), specifier).split("\\").join("/"),
-  );
-  const declaration = DECLARATION_FILE.test(from);
-  const candidates = declaration
-    ? [
-        candidate.replace(/\.[cm]?js$/, (suffix) =>
-          suffix === ".js" ? ".d.ts" : suffix === ".mjs" ? ".d.mts" : ".d.cts",
-        ),
-        `${candidate}.d.ts`,
-      ]
-    : [candidate, `${candidate}.js`, `${candidate}.json`, `${candidate}.node`];
-  for (const path of candidates) {
-    const info = optionalArtifactInfo(state.request.root, path);
-    if (info && !info.isDirectory()) return enqueue(state, path);
-  }
-  if (optionalArtifactInfo(state.request.root, `${candidate}/package.json`))
-    throw new Error(
-      `published import ${JSON.stringify(specifier)} from ${from} resolves through a nested package manifest; import its file directly`,
-    );
-  const index = `${candidate}/index${declaration ? ".d.ts" : ".js"}`;
-  const info = optionalArtifactInfo(state.request.root, index);
-  if (info && !info.isDirectory()) return enqueue(state, index);
-  throw new Error(
+function localCandidate(from, specifier) {
+  return normalize(join(dirname(from), specifier).split("\\").join("/"));
+}
+
+function missingArtifact(from, specifier) {
+  return new Error(
     `published import ${JSON.stringify(specifier)} from ${from} has no contained artifact`,
+  );
+}
+
+function existingFile(state, candidates) {
+  return candidates.find((path) => {
+    const info = optionalArtifactInfo(state.request.root, path);
+    return info && !info.isDirectory();
+  });
+}
+
+function runtimeArtifact(state, from, specifier) {
+  let target;
+  try {
+    target = createRequire(join(state.request.root, from)).resolve(specifier);
+  } catch {
+    throw missingArtifact(from, specifier);
+  }
+  return enqueue(state, packageArtifact(state, target));
+}
+
+function referencedArtifact(state, from, specifier) {
+  const candidate = localCandidate(from, specifier);
+  const file = existingFile(state, [
+    candidate,
+    `${candidate}.ts`,
+    `${candidate}.tsx`,
+    `${candidate}.d.ts`,
+  ]);
+  if (file) return enqueue(state, file);
+  throw missingArtifact(from, specifier);
+}
+
+function typeArtifact(state, from, specifier) {
+  const host = containedResolutionHost(state.request.root);
+  const containing = join(state.request.root, from);
+  const resolved = new Set();
+  for (const [options, mode] of TYPE_RESOLUTIONS) {
+    const target = typescript.resolveModuleName(
+      specifier,
+      containing,
+      options,
+      host,
+      undefined,
+      undefined,
+      mode,
+    ).resolvedModule;
+    if (target) resolved.add(packageArtifact(state, target.resolvedFileName));
+  }
+  if (resolved.size === 0) throw missingArtifact(from, specifier);
+  return [...resolved].map((path) => enqueue(state, path))[0];
+}
+
+function packageArtifact(state, absolute) {
+  const relative = insideRoot(
+    state.packageRoot,
+    realpathSync(absolute).split("\\").join("/"),
+  );
+  if (relative === null)
+    throw new Error(`published import leaves its package: ${absolute}`);
+  return packagePath(state, relative);
+}
+
+function localArtifact(state, from, specifier, reference) {
+  if (reference) return referencedArtifact(state, from, specifier);
+  if (TYPE_EXTENSIONS.has(extname(from)))
+    return typeArtifact(state, from, specifier);
+  return runtimeArtifact(state, from, specifier);
+}
+
+function selfSubpath(state, specifier) {
+  const name = state.manifest?.name;
+  if (typeof name !== "string" || specifiedPackage(specifier) !== name)
+    return null;
+  return `.${specifier.slice(name.length)}`;
+}
+
+function exportedSubpaths(exports) {
+  if (
+    exports === null ||
+    typeof exports !== "object" ||
+    Array.isArray(exports) ||
+    !Object.keys(exports).some((key) => key.startsWith("."))
+  )
+    return ["."];
+  return Object.keys(exports);
+}
+
+function selfArtifact(state, from, subpath) {
+  if (state.manifest.exports !== undefined) {
+    if (!exportedSubpaths(state.manifest.exports).includes(subpath))
+      throw new Error(
+        `published self-import ${JSON.stringify(subpath)} from ${from} is not an exact package export`,
+      );
+    return "";
+  }
+  if (subpath === ".") return "";
+  return localArtifact(
+    state,
+    packagePath(state, basename(from)),
+    `.${subpath.slice(1)}`,
+    false,
   );
 }
 
@@ -225,18 +335,24 @@ function typeIdentities(path, specifier) {
     : [...identities, name, typesCounterpart(name)];
 }
 
-function artifactReference(state, source, specifier, position, kind) {
-  const path = source.fileName;
-  const location = source.getLineAndCharacterOfPosition(position);
-  rejectLoaderModule(path, specifier, kind);
-  let resolved = "";
-  if (specifier.startsWith(".")) {
-    resolved = localArtifact(state, path, specifier);
-  } else if (/^[/#]/.test(specifier)) {
+function resolvedReference(state, path, specifier, reference) {
+  if (specifier.startsWith("."))
+    return localArtifact(state, path, specifier, reference);
+  if (/^[/#]/.test(specifier))
     throw new Error(
       `published import ${JSON.stringify(specifier)} needs explicit artifact resolution`,
     );
-  }
+  const self = selfSubpath(state, specifier);
+  return self === null ? null : selfArtifact(state, path, self);
+}
+
+function artifactReference(state, source, reference, position, kind) {
+  const { specifier, file = false } = reference;
+  const path = source.fileName;
+  const location = source.getLineAndCharacterOfPosition(position);
+  rejectLoaderModule(path, specifier, kind);
+  const local = resolvedReference(state, path, specifier, file);
+  const resolved = local ?? "";
   const fact = {
     path,
     line: location.line + 1,
@@ -247,7 +363,8 @@ function artifactReference(state, source, specifier, position, kind) {
     kind,
   };
   state.imports.push(fact);
-  for (const identity of new Set(typeIdentities(path, specifier)))
+  const identities = local === null ? typeIdentities(path, specifier) : [];
+  for (const identity of new Set(identities))
     if (identity !== fact.package)
       state.imports.push({ ...fact, package: identity });
   if (state.imports.length > MAXIMUM_IMPORTS)
@@ -292,14 +409,23 @@ function readArtifact(state, path) {
   specifiers.push(...loaderSpecifiers(source));
   state.analyzed.push(path);
   for (const { node, kind } of specifiers)
-    artifactReference(state, source, node.text, node.getStart(source), kind);
+    artifactReference(
+      state,
+      source,
+      { specifier: node.text },
+      node.getStart(source),
+      kind,
+    );
   for (const directive of source.referencedFiles)
     artifactReference(
       state,
       source,
-      directive.fileName.startsWith(".")
-        ? directive.fileName
-        : `./${directive.fileName}`,
+      {
+        specifier: directive.fileName.startsWith(".")
+          ? directive.fileName
+          : `./${directive.fileName}`,
+        file: true,
+      },
       directive.pos,
       "type-only",
     );
@@ -307,7 +433,7 @@ function readArtifact(state, path) {
     artifactReference(
       state,
       source,
-      directive.fileName,
+      { specifier: directive.fileName },
       directive.pos,
       "type-only",
     );
@@ -468,7 +594,8 @@ export function packageImports(request) {
     );
     if (text === null)
       return { analyzed: [], imports: [], unsupported: state.unsupported };
-    enqueuePackageEntries(state, JSON.parse(text));
+    state.manifest = JSON.parse(text);
+    enqueuePackageEntries(state, state.manifest);
     state.analyzed.push(manifestPath);
     for (const path of state.pending) {
       if (path === manifestPath) continue;
