@@ -1,4 +1,5 @@
 import { lstatSync, realpathSync } from "node:fs";
+import { isBuiltin } from "node:module";
 import { dirname, extname, join } from "node:path";
 import { normalize } from "node:path/posix";
 
@@ -23,7 +24,9 @@ const OPAQUE_EXTENSIONS = new Set([".json", ".css"]);
 const TYPE_EXTENSIONS = new Set([".ts", ".mts", ".cts", ".tsx"]);
 const DECLARATION_FILE = /\.d\.[cm]?ts$/;
 const NODE_LOADER_MODULES = new Set(["module", "node:module"]);
-const REQUIRE_DECLARATIONS = new Set([
+const LOADER_CALLS = new Set(["require", "getBuiltinModule"]);
+const LOADER_NAMES = new Set([...LOADER_CALLS, "createRequire", "mainModule"]);
+const LOADER_DECLARATIONS = new Set([
   typescript.SyntaxKind.Parameter,
   typescript.SyntaxKind.VariableDeclaration,
   typescript.SyntaxKind.FunctionDeclaration,
@@ -200,9 +203,10 @@ function rejectLoaderModule(path, specifier, kind) {
     );
 }
 
-function typesPackage(path, name) {
-  if (name === "" || name.startsWith("@types/")) return "";
+function typesPackage(path, specifier, name) {
   if (!TYPE_EXTENSIONS.has(extname(path))) return "";
+  if (isBuiltin(specifier)) return "@types/node";
+  if (name === "" || name.startsWith("@types/")) return "";
   return `@types/${name.startsWith("@") ? name.slice(1).replace("/", "__") : name}`;
 }
 
@@ -228,7 +232,7 @@ function artifactReference(state, source, specifier, position, kind) {
     kind,
   };
   state.imports.push(fact);
-  const types = typesPackage(path, fact.package);
+  const types = typesPackage(path, specifier, fact.package);
   if (types !== "") state.imports.push({ ...fact, package: types });
   if (state.imports.length > MAXIMUM_IMPORTS)
     throw new Error(`published imports exceed ${MAXIMUM_IMPORTS} facts`);
@@ -269,7 +273,7 @@ function readArtifact(state, path) {
   const { specifiers, computed } = sourceSpecifiers(source);
   if (computed.length > 0)
     throw new Error("published artifact has a computed dynamic import");
-  specifiers.push(...memberRequires(source));
+  specifiers.push(...loaderSpecifiers(source));
   state.analyzed.push(path);
   for (const { node, kind } of specifiers)
     artifactReference(state, source, node.text, node.getStart(source), kind);
@@ -321,47 +325,63 @@ function enqueuePackageEntries(state, manifest) {
   implicitEntries(state, manifest);
 }
 
-function requireCallee(node) {
+function calledName(node) {
+  if (typescript.isIdentifier(node)) return node.text;
+  if (typescript.isPropertyAccessExpression(node)) return node.name.text;
+  return "";
+}
+
+function moduleConstructor(node) {
   return (
-    (typescript.isIdentifier(node) && node.text === "require") ||
-    (typescript.isPropertyAccessExpression(node) &&
-      node.name.text === "require")
+    typescript.isPropertyAccessExpression(node) &&
+    node.name.text === "constructor" &&
+    typescript.isIdentifier(node.expression) &&
+    node.expression.text === "module"
   );
 }
 
-function indirectRequire(node) {
+function indirectLoader(node) {
   if (typescript.isStringLiteralLike(node))
     return (
-      node.text === "require" &&
+      LOADER_NAMES.has(node.text) &&
       typescript.isElementAccessExpression(node.parent) &&
       node.parent.argumentExpression === node
     );
-  if (!typescript.isIdentifier(node) || node.text !== "require") return false;
+  if (!typescript.isIdentifier(node) || !LOADER_NAMES.has(node.text))
+    return false;
   return !(
-    REQUIRE_DECLARATIONS.has(node.parent.kind) && node.parent.name === node
+    LOADER_DECLARATIONS.has(node.parent.kind) && node.parent.name === node
   );
 }
 
-function memberRequire(node, specifiers) {
+function loaderCall(node, specifiers) {
   if (!typescript.isStringLiteral(node.arguments[0] ?? node))
-    throw new Error("published artifact has a computed require");
-  if (typescript.isPropertyAccessExpression(node.expression))
+    throw new Error(
+      "published artifact has a computed require or getBuiltinModule call",
+    );
+  if (
+    !typescript.isIdentifier(node.expression) ||
+    node.expression.text !== "require"
+  )
     specifiers.push({ node: node.arguments[0], kind: "runtime" });
 }
 
-function memberRequires(source) {
+function loaderSpecifiers(source) {
   const specifiers = [];
   const visit = (node) => {
-    if (typescript.isCallExpression(node) && requireCallee(node.expression)) {
-      memberRequire(node, specifiers);
+    if (
+      typescript.isCallExpression(node) &&
+      LOADER_CALLS.has(calledName(node.expression))
+    ) {
+      loaderCall(node, specifiers);
       if (typescript.isPropertyAccessExpression(node.expression))
         visit(node.expression.expression);
       node.arguments.forEach(visit);
       return;
     }
-    if (indirectRequire(node))
+    if (indirectLoader(node) || moduleConstructor(node))
       throw new Error(
-        "published artifact uses require indirectly; call it directly with a literal specifier",
+        "published artifact reaches a Node module loader indirectly; call require or getBuiltinModule directly with a literal specifier",
       );
     typescript.forEachChild(node, visit);
   };

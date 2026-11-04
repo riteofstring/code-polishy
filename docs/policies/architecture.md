@@ -340,14 +340,15 @@ entry files, plus root `index.js` and `index.d.ts` fallbacks when the matching
 fields are absent. It follows local JavaScript and public declaration imports,
 parses extensionless files as JavaScript, and refuses the allowance if that
 closure still imports a bundled package. Missing artifacts, unresolved local
-imports, computed imports or requires, indirect `require` use, runtime imports of
-the Node `module` API, escaping paths, artifacts other than
+imports, computed imports or requires, indirect use of Node loader APIs such as
+`require`, `getBuiltinModule`, or `createRequire`, runtime imports of the Node
+`module` API, escaping paths, artifacts other than
 JavaScript, TypeScript, JSON, or CSS, and unreadable output block verification.
 Export patterns, `browser`, `typesVersions`, `directories.bin`, and directory
 imports through a nested `package.json` are not supported by this verification.
 Existing declaration companions are included; unreachable private declarations
 are not. Imports in TypeScript artifacts also count against the matching `@types`
-package.
+package, and Node built-in imports against `@types/node`.
 
 Keep build-freshness and packed-consumer tests in the package's ordinary suites.
 The check reads the current outputs and does not execute the build or prove
