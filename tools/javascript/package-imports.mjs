@@ -150,7 +150,7 @@ function localArtifact(state, from, specifier) {
         ),
         `${candidate}.d.ts`,
       ]
-    : [candidate, `${candidate}.js`, `${candidate}.cjs`];
+    : [candidate, `${candidate}.js`, `${candidate}.json`, `${candidate}.node`];
   for (const path of candidates) {
     const info = optionalArtifactInfo(state.request.root, path);
     if (info && !info.isDirectory()) return enqueue(state, path);

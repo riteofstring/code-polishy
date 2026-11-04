@@ -20,7 +20,9 @@ and extensionless entries. Consumers also reach the root `index.js` when neither
 `exports` nor `main` is declared, and the root `index.d.ts` when neither `types`
 nor `typings` is declared, so existing fallback files join the closure.
 It follows local runtime imports through actual JavaScript files, never their
-TypeScript substitutes, and follows reachable public declarations separately.
+TypeScript substitutes, trying an extensionless specifier as Node's CommonJS
+resolver does: exact, `.js`, `.json`, `.node`, then the directory index. It
+follows reachable public declarations separately.
 Private declaration files outside that closure do not impose consumer needs.
 Extensionless files are parsed as JavaScript because Node executes them; only
 JSON and CSS remain opaque. Re-exports, literal dynamic imports, literal
