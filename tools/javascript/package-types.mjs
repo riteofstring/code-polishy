@@ -84,7 +84,7 @@ function packageHost(options, packageRoot, entries) {
   };
 }
 
-function typePrograms(packageRoot, roots, entries) {
+function typePrograms(packageRoot, entries) {
   const imports = [...entries, "./"]
     .map((entry) => `import type {} from ${JSON.stringify(entry)};\n`)
     .join("");
@@ -92,36 +92,51 @@ function typePrograms(packageRoot, roots, entries) {
     const options = { ...BASE_OPTIONS, ...mode };
     const entry = `${packageRoot}/__published_entries__${extension}`;
     const host = packageHost(options, packageRoot, new Map([[entry, imports]]));
-    return {
-      entry,
-      program: typescript.createProgram([entry, ...roots], options, host),
-    };
+    return { entry, program: typescript.createProgram([entry], options, host) };
   });
 }
 
-export function typeClosure(packageRoot, roots, entries) {
+function resolvedFile(program, file, node) {
+  return (
+    program.getResolvedModule(
+      file,
+      node.text,
+      program.getModeForUsageLocation(file, node),
+    )?.resolvedModule?.resolvedFileName ?? null
+  );
+}
+
+function recordResolutions(program, file, resolutions) {
+  for (const { node } of sourceSpecifiers(file).specifiers) {
+    const position = node.getStart(file);
+    const outcomes = resolutions.get(position) ?? [];
+    outcomes.push(resolvedFile(program, file, node));
+    resolutions.set(position, outcomes);
+  }
+}
+
+function recordEntries(program, file, resolvedEntries) {
+  for (const { node } of sourceSpecifiers(file).specifiers)
+    if (resolvedFile(program, file, node) !== null)
+      resolvedEntries.add(node.text);
+}
+
+export function typeClosure(packageRoot, entries) {
   const files = new Map();
-  for (const { entry, program } of typePrograms(packageRoot, roots, entries)) {
+  const resolvedEntries = new Set();
+  for (const { entry, program } of typePrograms(packageRoot, entries)) {
     for (const file of program.getSourceFiles()) {
-      if (file.fileName === entry) continue;
+      if (file.fileName === entry) {
+        recordEntries(program, file, resolvedEntries);
+        continue;
+      }
       const record = files.get(file.fileName) ?? {
         source: file,
         resolutions: new Map(),
       };
       files.set(file.fileName, record);
-      for (const { node } of sourceSpecifiers(file).specifiers) {
-        const resolved = program.getResolvedModule(
-          file,
-          node.text,
-          program.getModeForUsageLocation(file, node),
-        )?.resolvedModule;
-        if (!resolved) continue;
-        const position = node.getStart(file);
-        const targets = record.resolutions.get(position) ?? new Set();
-        targets.add(resolved.resolvedFileName);
-        record.resolutions.set(position, targets);
-      }
+      recordResolutions(program, file, record.resolutions);
     }
   }
-  return files;
+  return { files, resolvedEntries };
 }

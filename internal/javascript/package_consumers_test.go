@@ -56,7 +56,10 @@ func TestPackageImportsAgreeWithNodeConsumers(t *testing.T) {
 		"call/require resolve":          needing(runtimeConsumerCase{source: `module.exports = require.resolve("dep");`}, verifiedImport),
 		"call/literal dynamic import":   needing(runtimeConsumerCase{source: `module.exports = import("dep");`}, verifiedImport),
 
-		"unsupported/computed require":         needing(runtimeConsumerCase{source: `const name = ["d", "e", "p"].join(""); module.exports = require(name);`}, unsupportedUse),
+		"unsupported/computed require": needing(runtimeConsumerCase{source: `const name = ["d", "e", "p"].join(""); module.exports = require(name);`}, unsupportedUse),
+		"unsupported/require resolve options": {source: `module.exports = require.resolve("./target.cjs", { paths: [require("node:path").join(__dirname, "..")] });`, files: map[string]string{
+			"target.cjs": `module.exports = require("dep");`, "dist/target.cjs": `module.exports = {};`,
+		}, outcome: unsupportedUse},
 		"unsupported/alias":                    needing(runtimeConsumerCase{source: `const load = require; module.exports = load("dep");`}, unsupportedUse),
 		"unsupported/call method":              needing(runtimeConsumerCase{source: `module.exports = require.call(null, "dep");`}, unsupportedUse),
 		"unsupported/constructed":              needing(runtimeConsumerCase{source: `module.exports = new require("dep");`}, unsupportedUse),
@@ -377,12 +380,13 @@ func installNodeConsumer(t *testing.T, node string, testCase runtimeConsumerCase
 }
 
 type typeConsumerCase struct {
-	unsupported bool
-	manifest    string
-	declaration string
-	files       map[string]string
-	identity    string
-	install     map[string]string
+	unsupported  bool
+	manifest     string
+	declaration  string
+	files        map[string]string
+	identity     string
+	install      map[string]string
+	incompatible []string
 }
 
 func TestPackageImportsAgreeWithTypeScriptConsumers(t *testing.T) {
@@ -442,7 +446,8 @@ func TestPackageImportsAgreeWithTypeScriptConsumers(t *testing.T) {
 			files:       map[string]string{"dist/other.d.ts": `export type Value = string;`},
 		},
 		"exports types condition": {
-			manifest: `{"name":"pkg","exports":{".":{"types":"./dist/types.d.ts","default":"./dist/index.js"}}}`, identity: "dep",
+			incompatible: []string{"node10"},
+			manifest:     `{"name":"pkg","exports":{".":{"types":"./dist/types.d.ts","default":"./dist/index.js"}}}`, identity: "dep",
 			files:   map[string]string{"dist/types.d.ts": `export type { Value } from "dep";`},
 			install: map[string]string{"dep/package.json": `{"types":"index.d.ts"}`, "dep/index.d.ts": `export type Value = string;`},
 		},
@@ -456,7 +461,8 @@ func TestPackageImportsAgreeWithTypeScriptConsumers(t *testing.T) {
 			install: map[string]string{"dep/package.json": `{"types":"index.d.ts"}`, "dep/index.d.ts": `export type Value = string;`},
 		},
 		"exports entry selecting TypeScript source": {
-			manifest: `{"name":"pkg","exports":"./dist/index.js"}`, identity: "dep",
+			incompatible: []string{"node10"},
+			manifest:     `{"name":"pkg","exports":"./dist/index.js"}`, identity: "dep",
 			files:   map[string]string{"dist/index.ts": "import type { Value as Source } from \"dep\";\nexport type Value = Source;\n"},
 			install: map[string]string{"dep/package.json": `{"types":"index.d.ts"}`, "dep/index.d.ts": `export type Value = string;`},
 		},
@@ -481,12 +487,35 @@ func TestPackageImportsAgreeWithTypeScriptConsumers(t *testing.T) {
 			install: map[string]string{"dep/package.json": `{"types":"index.d.ts"}`, "dep/index.d.ts": `export type Value = string;`},
 		},
 		"nested scope self type import": {
-			declaration: `export type { Value } from "./sub/inner.js";`, identity: "dep",
+			incompatible: []string{"node10"},
+			declaration:  `export type { Value } from "./sub/inner.js";`, identity: "dep",
 			files: map[string]string{
 				"dist/sub/package.json": `{"name":"pkg","exports":{".":{"types":"./other.d.ts","default":"./other.js"}}}`,
 				"dist/sub/inner.d.ts":   `export type { Value } from "pkg";`,
 				"dist/sub/other.d.ts":   `export type { Value } from "dep";`,
 			},
+			install: map[string]string{"dep/package.json": `{"types":"index.d.ts"}`, "dep/index.d.ts": `export type Value = string;`},
+		},
+		"dependency only node10 resolves": {
+			declaration: `export type { Value } from "./sub/inner.js";`, identity: "dep",
+			files: map[string]string{
+				"dist/sub/package.json": `{"name":"dep","exports":{".":{"types":"./local.d.ts","default":"./local.js"}}}`,
+				"dist/sub/inner.d.ts":   `export type { Value } from "dep";`,
+				"dist/sub/local.d.ts":   `export type Value = string;`,
+			},
+			install: map[string]string{"dep/package.json": `{"types":"index.d.ts"}`, "dep/index.d.ts": `export type Value = string;`},
+		},
+		"extensionless types entry": {
+			manifest: `{"name":"pkg","main":"dist/index.js","types":"dist/types"}`,
+			files:    map[string]string{"dist/types.d.ts": `export type Value = string;`},
+		},
+		"directory typings entry": {
+			manifest: `{"name":"pkg","main":"dist/index.js","typings":"dist/types"}`,
+			files:    map[string]string{"dist/types/index.d.ts": `export type Value = string;`},
+		},
+		"extensionless types entry dependency": {
+			manifest: `{"name":"pkg","main":"dist/index.js","types":"dist/types"}`, identity: "dep",
+			files:   map[string]string{"dist/types.d.ts": `export type { Value } from "dep";`},
 			install: map[string]string{"dep/package.json": `{"types":"index.d.ts"}`, "dep/index.d.ts": `export type Value = string;`},
 		},
 		"unreachable private declaration": {
@@ -553,12 +582,14 @@ func writeTypeConsumer(t *testing.T, node string, testCase typeConsumerCase) (st
 	}
 	archive := packWithPackageManager(t, node, packedFixture{files: files})
 	installPacked(t, archive, filepath.Join(consumer, "node_modules", "pkg"))
-	writeScript(t, filepath.Join(consumer, "index.ts"), "import type * as pkg from \"pkg\";\nexport type Surface = typeof pkg;\n")
+	for _, name := range []string{"index.ts", "index.mts", "index.cts"} {
+		writeScript(t, filepath.Join(consumer, name), "import type * as pkg from \"pkg\";\nexport type Surface = typeof pkg;\n")
+	}
 	writeScript(t, filepath.Join(consumer, "compile.cjs"), typeScriptConsumerDriver)
 	return archive, consumer
 }
 
-func compileTypeConsumer(t *testing.T, node, compiler, consumer string) []string {
+func compileTypeConsumer(t *testing.T, node, compiler, consumer string) map[string][]string {
 	t.Helper()
 	command := exec.CommandContext(t.Context(), node, filepath.Join(consumer, "compile.cjs"), compiler, consumer)
 	command.Dir = consumer
@@ -569,30 +600,46 @@ func compileTypeConsumer(t *testing.T, node, compiler, consumer string) []string
 	if err != nil {
 		t.Fatalf("compile consumer: %v: %s", err, stderr.String())
 	}
-	diagnostics := []string{}
-	if err := json.Unmarshal(output, &diagnostics); err != nil {
-		t.Fatal(err)
+	diagnostics := map[string][]string{}
+	if err := json.Unmarshal(output, &diagnostics); err != nil || len(diagnostics) != len(typeConsumerConfigurations) {
+		t.Fatalf("consumer diagnostics %s: %v", output, err)
 	}
 	return diagnostics
 }
 
+var typeConsumerConfigurations = []string{"node10", "nodenext-esm", "nodenext-cjs", "bundler"}
+
 func requireTypeConsumerNeed(t *testing.T, node, compiler, consumer string, testCase typeConsumerCase) {
 	t.Helper()
 	before := compileTypeConsumer(t, node, compiler, consumer)
+	failing := []string{}
+	for _, configuration := range typeConsumerConfigurations {
+		if len(before[configuration]) != 0 && !slices.Contains(testCase.incompatible, configuration) {
+			failing = append(failing, configuration)
+		}
+	}
 	if testCase.identity == "" {
-		if len(before) != 0 {
+		if len(failing) != 0 {
 			t.Fatalf("neighbor fixture does not compile: %v", before)
 		}
 		return
 	}
-	if len(before) == 0 {
-		t.Fatal("fixture compiles without its type dependency")
+	if len(failing) == 0 {
+		t.Fatal("fixture compiles without its type dependency in every configuration")
 	}
 	for path, source := range testCase.install {
 		writeScript(t, filepath.Join(consumer, "node_modules", path), source)
 	}
-	if after := compileTypeConsumer(t, node, compiler, consumer); len(after) != 0 {
-		t.Fatalf("fixture does not compile with %s installed: %v", testCase.identity, after)
+	after := compileTypeConsumer(t, node, compiler, consumer)
+	for _, configuration := range failing {
+		if len(after[configuration]) != 0 {
+			t.Fatalf("fixture does not compile under %s with %s installed: %v", configuration, testCase.identity, after[configuration])
+		}
+	}
+	for _, configuration := range testCase.incompatible {
+		if len(after[configuration]) == 0 {
+			t.Fatalf("fixture declares %s incompatible but it compiles with %s installed", configuration, testCase.identity)
+		}
 	}
 }
 
@@ -610,17 +657,22 @@ if (entry) {
 
 const typeScriptConsumerDriver = `const [compiler, project] = process.argv.slice(2);
 const ts = require(compiler);
-const { existsSync } = require("node:fs");
-const nodeTypes = existsSync(require("node:path").join(project, "node_modules", "@types", "node"));
-const program = ts.createProgram([require("node:path").join(project, "index.ts")], {
-  module: ts.ModuleKind.NodeNext,
-  moduleResolution: ts.ModuleResolutionKind.NodeNext,
-  lib: ["lib.es5.d.ts"],
-  types: nodeTypes ? ["node"] : [],
-  noEmit: true,
-  strict: true,
-  skipLibCheck: false,
-});
-process.stdout.write(JSON.stringify(ts.getPreEmitDiagnostics(program).map((diagnostic) =>
-  diagnostic.code + " " + ts.flattenDiagnosticMessageText(diagnostic.messageText, " "))));
+const { join } = require("node:path");
+const nodeTypes = require("node:fs").existsSync(join(project, "node_modules", "@types", "node"));
+const configurations = {
+  "node10": ["index.ts", ts.ModuleKind.CommonJS, ts.ModuleResolutionKind.Node10],
+  "nodenext-esm": ["index.mts", ts.ModuleKind.NodeNext, ts.ModuleResolutionKind.NodeNext],
+  "nodenext-cjs": ["index.cts", ts.ModuleKind.NodeNext, ts.ModuleResolutionKind.NodeNext],
+  "bundler": ["index.ts", ts.ModuleKind.ESNext, ts.ModuleResolutionKind.Bundler],
+};
+const results = {};
+for (const [name, [root, module, moduleResolution]] of Object.entries(configurations)) {
+  const program = ts.createProgram([join(project, root)], {
+    module, moduleResolution, lib: ["lib.es5.d.ts"], types: nodeTypes ? ["node"] : [],
+    noEmit: true, strict: true, skipLibCheck: false, ignoreDeprecations: "6.0",
+  });
+  results[name] = ts.getPreEmitDiagnostics(program).map((diagnostic) =>
+    diagnostic.code + " " + ts.flattenDiagnosticMessageText(diagnostic.messageText, " "));
+}
+process.stdout.write(JSON.stringify(results));
 `

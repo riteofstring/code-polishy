@@ -22,7 +22,7 @@ const URL_SPECIFIER = /^[A-Za-z][A-Za-z0-9+.-]*:/;
 const NODE_LOADER_MODULES = new Set(["module", "node:module"]);
 const NOT_FOUND = new Set(["MODULE_NOT_FOUND", "ERR_MODULE_NOT_FOUND"]);
 
-function exportTargets(value, targets) {
+function exportTargets(value, entries, kind) {
   if (value === null) return;
   if (typeof value === "string") {
     if (!value.startsWith("./") || /[*\\?#%]/.test(value)) {
@@ -30,23 +30,23 @@ function exportTargets(value, targets) {
         "package exports must name exact local files for bundled dependency verification",
       );
     }
-    targets.push(value);
+    entries[kind].push(value);
     return;
   }
   if (typeof value !== "object")
     throw new Error("package exports are not readable");
-  for (const target of Object.values(value)) exportTargets(target, targets);
+  for (const [condition, target] of Object.entries(value))
+    exportTargets(target, entries, condition === "types" ? "types" : kind);
 }
 
-function fieldTarget(name, value, targets) {
+function fieldTarget(name, value, entries, kind) {
   if (typeof value !== "string")
     throw new Error(`package ${name} must name a file`);
-  exportTargets(value.startsWith("./") ? value : `./${value}`, targets);
+  exportTargets(value.startsWith("./") ? value : `./${value}`, entries, kind);
 }
 
-function executableEntries(manifest) {
-  const executables = [];
-  if (manifest.bin === undefined) return executables;
+function executableEntries(manifest, entries) {
+  if (manifest.bin === undefined) return;
   if (
     manifest.bin === null ||
     !["string", "object"].includes(typeof manifest.bin)
@@ -56,8 +56,8 @@ function executableEntries(manifest) {
     typeof manifest.bin === "string"
       ? [manifest.bin]
       : Object.values(manifest.bin);
-  for (const target of targets) fieldTarget("bin", target, executables);
-  return executables;
+  for (const target of targets)
+    fieldTarget("bin", target, entries, "executables");
 }
 
 function rejectUnmodeledMappings(manifest) {
@@ -73,21 +73,24 @@ function rejectUnmodeledMappings(manifest) {
 }
 
 function packageEntries(manifest) {
-  const literal = [];
-  if (manifest.exports !== undefined) exportTargets(manifest.exports, literal);
-  for (const name of ["module", "types", "typings"]) {
-    if (manifest[name] !== undefined)
-      fieldTarget(name, manifest[name], literal);
-  }
-  const main = [];
-  if (manifest.main !== undefined) fieldTarget("main", manifest.main, main);
-  const executables = executableEntries(manifest);
+  const entries = { runtime: [], types: [], main: [], executables: [] };
+  if (manifest.exports !== undefined)
+    exportTargets(manifest.exports, entries, "runtime");
+  for (const [field, kind] of [
+    ["main", "main"],
+    ["module", "runtime"],
+    ["types", "types"],
+    ["typings", "types"],
+  ])
+    if (manifest[field] !== undefined)
+      fieldTarget(field, manifest[field], entries, kind);
+  executableEntries(manifest, entries);
   rejectUnmodeledMappings(manifest);
-  if (literal.length + main.length + executables.length === 0)
+  if (Object.values(entries).every((list) => list.length === 0))
     throw new Error(
       "package has no explicit published entry files; declare exports, main/types, or bin before claiming bundled dependencies",
     );
-  return { literal, entries: [...literal, ...main], executables };
+  return entries;
 }
 
 function containedArtifact(state, path) {
@@ -324,14 +327,19 @@ function readRuntimeArtifact(state, path) {
     });
 }
 
-function typeImportTarget(state, specifier, targets) {
-  const kind = specifierKind(specifier);
-  if (targets !== undefined)
-    return { resolved: packageArtifact(state, [...targets][0]) };
+function typeImportTarget(state, specifier, kind, outcome) {
+  if (outcome !== null) return { resolved: packageArtifact(state, outcome) };
   if (kind === "relative") throw new Error("has no contained artifact");
   if (kind === "builtin") return { packages: builtinTypePackages(specifier) };
   const name = specifiedPackage(specifier);
   return { packages: [name, typesCounterpart(name)] };
+}
+
+function typeImportTargets(state, specifier, outcomes) {
+  const kind = specifierKind(specifier);
+  return [...new Set(outcomes ?? [null])].map((outcome) =>
+    typeImportTarget(state, specifier, kind, outcome),
+  );
 }
 
 function typeReferencePackages(specifier) {
@@ -395,30 +403,36 @@ function readTypeArtifact(state, path, { source, resolutions }) {
   state.analyzed.push(path);
   for (const { node, kind } of specifiers) {
     const position = node.getStart(source);
-    let target;
+    let targets;
     try {
-      target = typeImportTarget(state, node.text, resolutions.get(position));
+      targets = typeImportTargets(state, node.text, resolutions.get(position));
     } catch (error) {
       throw new Error(
         `published import ${JSON.stringify(node.text)} from ${path} ${error.message}`,
       );
     }
-    recordFacts(state, source, position, {
-      path,
-      specifier: node.text,
-      kind,
-      ...target,
-    });
+    for (const target of targets)
+      recordFacts(state, source, position, {
+        path,
+        specifier: node.text,
+        kind,
+        ...target,
+      });
   }
   typeDirectives(state, path, source);
 }
 
-function readTypeArtifacts(state, roots, entries) {
-  const files = typeClosure(
-    state.packageRoot,
-    roots.map((path) => realpathSync(join(state.request.root, path))),
-    entries,
-  );
+function readTypeArtifacts(state, entries) {
+  const { files, resolvedEntries } = typeClosure(state.packageRoot, [
+    ...entries.runtime,
+    ...entries.main,
+    ...entries.types,
+  ]);
+  for (const entry of entries.types)
+    if (!resolvedEntries.has(entry))
+      state.unsupported.push(
+        unsupported(MANIFEST, `package type entry ${entry} does not resolve`),
+      );
   if (files.size + state.pending.size > MAXIMUM_FILES)
     throw new Error(`published artifact graph exceeds ${MAXIMUM_FILES} files`);
   for (const [fileName, record] of files) {
@@ -465,18 +479,11 @@ function enqueueNodeEntries(state, manifest) {
 }
 
 function packageRoots(state, manifest) {
-  const { literal, entries, executables } = packageEntries(manifest);
-  const typed = (entry) => TYPE_EXTENSIONS.has(extname(entry));
-  for (const entry of [
-    ...literal.filter((entry) => !typed(entry)),
-    ...executables,
-  ])
+  const entries = packageEntries(manifest);
+  for (const entry of [...entries.runtime, ...entries.executables])
     enqueueEntry(state, entry);
   enqueueNodeEntries(state, manifest);
-  const roots = entries
-    .filter(typed)
-    .map((entry) => containedArtifact(state, packagePath(entry)));
-  return { roots, entries };
+  return entries;
 }
 
 export function packageImports(request) {
@@ -500,7 +507,7 @@ export function packageImports(request) {
     if (text === null)
       return { analyzed: [], imports: [], unsupported: state.unsupported };
     state.manifest = JSON.parse(text);
-    const { roots, entries } = packageRoots(state, state.manifest);
+    const entries = packageRoots(state, state.manifest);
     state.analyzed.push(MANIFEST);
     for (const path of state.pending) {
       if (path === MANIFEST) continue;
@@ -510,7 +517,7 @@ export function packageImports(request) {
         state.unsupported.push(unsupported(path, error.message));
       }
     }
-    readTypeArtifacts(state, roots, entries);
+    readTypeArtifacts(state, entries);
   } catch (error) {
     state.unsupported.push(unsupported(MANIFEST, error.message));
   }

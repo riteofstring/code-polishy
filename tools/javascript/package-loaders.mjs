@@ -148,8 +148,12 @@ function calleeName(callee) {
   return callee.computed ? loaderText(callee.property) : callee.property.name;
 }
 
-function requireLoaderPolicy(callee, specifier, references) {
+function requireLoaderPolicy(callee, call, specifier, references) {
   const name = calleeName(callee);
+  if (name === "resolve" && call.arguments.length !== 1)
+    throw new Error(
+      "require.resolve with lookup options has an unknown resolution origin",
+    );
   if (name === "getBuiltinModule" && !isBuiltin(specifier))
     throw new Error("getBuiltinModule must name a Node built-in");
   const receiver = callee.type === "MemberExpression" ? callee.object : null;
@@ -171,6 +175,7 @@ function loaderCall(call, references) {
     call.callee.type === "ChainExpression"
       ? call.callee.expression
       : call.callee,
+    call,
     argument.value,
     references,
   );

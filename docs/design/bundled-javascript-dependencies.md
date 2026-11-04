@@ -29,16 +29,18 @@ import. The source manifest still decides whether each name is a development
 dependency; the packed manifest, including any packing rewrite, decides the
 entries.
 
-The sealed TypeScript parser reads the packed entry files. Every exact `exports`
-target under every condition and every explicit `module`, `types`, `typings`,
-and `bin` entry joins as a policy enumeration, because a consumer may select any
-of them. `main` and the package's own name join through Node's entry selection:
-the files Node's CommonJS and ESM resolvers select for the package from a
-consumer, and the file Node selects for `main`, so extension search and
-directory `main` match Node. Public type entries are the files TypeScript's
-resolvers select for each library entry and for the package directory, so
-preferred TypeScript sources, declaration companions, extensionless entries, and
-the root `index.d.ts` fallback match consumers.
+Each entry keeps the kind its manifest field gives it; nothing infers a kind
+from a file extension. Runtime entries are every exact `exports` target outside
+a `types` condition and the `module` field; executable entries are `bin`
+targets. Both join the runtime closure as exact packed files, as a policy
+enumeration, because a consumer may select any of them. `main` and the
+package's own name join through Node's entry selection: the files Node's
+CommonJS and ESM resolvers select for the package from a consumer, and the file
+Node selects for `main`, so extension search and directory `main` match Node.
+Type entries are `types` and `typings` fields and `types` export conditions.
+They go only to TypeScript, which resolves them with its own extension
+substitution and directory rules; a declared type entry that no consumer
+configuration resolves fails verification.
 
 Runtime resolution belongs to Node. Runtime and type resolution stay distinct
 because consumers select different files for them, and runtime references keep
@@ -70,15 +72,21 @@ reads them as paths while Node decodes them as URLs. TypeScript sources cannot
 run from an installed package, so reaching one at runtime fails verification.
 
 The public declaration closure is what TypeScript itself builds. One sealed
-TypeScript Program per consumer resolution mode (Node10, NodeNext ESM and
-CommonJS, and Bundler) starts from the type entries and a virtual consumer file
-importing every library entry and the package directory. A controlled compiler
+TypeScript Program per consumer configuration (Node10, NodeNext ESM and
+CommonJS, and Bundler) starts from a virtual consumer file importing every
+runtime, `main`, and type entry and the package directory, so TypeScript
+selects declaration companions, preferred TypeScript sources, and the root
+`index.d.ts` fallback as consumers do. A controlled compiler
 host serves only packed files, excluding nested `node_modules`, from the staged
 installed package, so entry selection,
 extension substitution, directory manifests, reference paths, and self-imports
 resolve as they do for an installed consumer. Every file any Program loads joins
-the closure; an unresolved relative import fails verification, and an
-unresolved package import names that external package.
+the closure. Each Program records its own outcome for every import of every
+file it loads, and outcomes are combined only afterward, so success in one
+configuration never cancels another configuration's requirement or failure: a
+local result is traversed, an unresolved package import names that external
+package and its `@types` counterpart, an unresolved built-in names
+`@types/node`, and an unresolved relative import fails verification.
 Private declaration files outside that closure do not impose consumer needs.
 Extensionless files are parsed as JavaScript because Node executes them; only
 JSON and CSS remain opaque. A remaining import of a declared bundled name blocks
@@ -122,7 +130,10 @@ other.
 
 - Loader calls: a call of `require`, `require.resolve`, `module.require`, or a
   `getBuiltinModule` binding or member, named by an identifier or literal key,
-  with a string literal specifier. Resolution origin comes from bindings, not
+  with exactly one string literal specifier argument; `require.resolve` with
+  lookup options changes the resolution origin and fails, while extra
+  arguments Node ignores for `require` and `module.require` are ordinary.
+  Resolution origin comes from bindings, not
   spelling: `require` calls and `require.resolve` must use the free `require`
   binding, and `module.require` the free `module` binding. Locally bound or
   shadowed loaders, other receivers such as `module.parent`, assignments to the
@@ -163,8 +174,11 @@ layouts, publication boundaries such as checkout-only `node_modules`, omitted
 symbolic links, `files` and ignore-file exclusions, and manifest rewrites, and
 representative tsc, esbuild, rollup, and webpack output. Each case is packed by
 the pinned package manager, verified from that archive, and installed from the
-same archive for Node execution or TypeScript compilation, and state the
-expected verifier outcome for each case, including conservative rejections.
+same archive for Node execution or for TypeScript compilation under each of the
+four consumer configurations, and state the expected verifier outcome for each
+case, including conservative rejections. A configuration counts as needing a
+dependency when it fails without the dependency and compiles with it; a case
+names any configuration that cannot consume the package either way.
 
 The feature is complete when every documented category agrees with consumers in
 those tests. A finding must name the documented promise it violates; support
