@@ -336,22 +336,23 @@ owning package and does not change any source classification or other rule.
 
 Build the package before running `architecture` or a gate. Code Polishy parses
 its exact `exports` and explicit `main`, `module`, `types`, `typings`, and `bin`
-entry files, plus root `index.js` and `index.d.ts` fallbacks when the matching
-fields are absent. It follows local JavaScript imports with Node's CommonJS
+entry files, the file Node selects for the package directory when `exports` is
+absent, and the type entries TypeScript's resolvers select for those entries and
+the package directory. It follows local JavaScript imports with Node's CommonJS
 resolver, public type imports with TypeScript's resolvers, and imports of the
-package's own name, parses extensionless files as JavaScript, and refuses the allowance if that
-closure still imports a bundled package. This is a bounded static check of
-supported loader forms: imports, literal dynamic imports, and literal calls of
-`require`, `require.resolve`, `.require`, and `getBuiltinModule`. Any other use
-of `require` or `getBuiltinModule`, runtime imports of the Node `module` API,
-computed loader calls, missing artifacts, unresolved local imports, escaping
-paths, artifacts other than JavaScript, TypeScript, JSON, or CSS, and unreadable
-output block verification. Export patterns, `browser`, `typesVersions`, and
-`directories.bin` are not supported. Existing declaration companions are included; unreachable private
-declarations are not. Imports in TypeScript artifacts count against the package
-and its `@types` counterpart, and Node built-in imports against `@types/node`.
-Runtime reflection, keys computed at run time, and evaluated strings are outside
-the check.
+package's own name, parses extensionless files as JavaScript, and refuses the
+allowance if that closure still imports a bundled package. This is a bounded
+static check of supported loader forms: imports, literal dynamic imports, and
+literal calls of `require`, `require.resolve`, `.require`, and
+`getBuiltinModule`. Any other use of `require` or `getBuiltinModule`, runtime
+imports of the Node `module` API, computed loader calls, missing artifacts,
+unresolved local imports, escaping paths, artifacts other than JavaScript,
+TypeScript, JSON, or CSS, and unreadable output block verification. Export
+patterns, `browser`, `typesVersions`, and `directories.bin` are not supported.
+Unreachable private declarations are not checked. Imports in TypeScript
+artifacts count against the package and its `@types` counterpart, and Node
+built-in imports against `@types/node`. Runtime reflection, keys computed at run
+time, and evaluated strings are outside the check.
 
 Keep build-freshness and packed-consumer tests in the package's ordinary suites.
 The check reads the current outputs and does not execute the build or prove

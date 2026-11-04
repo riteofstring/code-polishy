@@ -216,6 +216,21 @@ func TestPackageImportsAgreeWithTypeScriptConsumers(t *testing.T) {
 			files:   map[string]string{"index.d.ts": `export type { Value } from "dep";`},
 			install: map[string]string{"dep/package.json": `{"types":"index.d.ts"}`, "dep/index.d.ts": `export type Value = string;`},
 		},
+		"exports entry selecting TypeScript source": {
+			manifest: `{"name":"pkg","exports":"./dist/index.js"}`, identity: "dep",
+			files:   map[string]string{"dist/index.ts": "import type { Value as Source } from \"dep\";\nexport type Value = Source;\n"},
+			install: map[string]string{"dep/package.json": `{"types":"index.d.ts"}`, "dep/index.d.ts": `export type Value = string;`},
+		},
+		"main entry selecting TypeScript source": {
+			manifest: `{"name":"pkg","main":"dist/index.js"}`, declaration: `export type Value = string;`, identity: "dep",
+			files:   map[string]string{"dist/index.ts": "import type { Value as Source } from \"dep\";\nexport type Value = Source;\n"},
+			install: map[string]string{"dep/package.json": `{"types":"index.d.ts"}`, "dep/index.d.ts": `export type Value = string;`},
+		},
+		"extensionless main declaration": {
+			manifest: `{"name":"pkg","main":"dist/entry"}`, identity: "dep",
+			files:   map[string]string{"dist/entry": `module.exports = {};`, "dist/entry.d.ts": `export type { Value } from "dep";`},
+			install: map[string]string{"dep/package.json": `{"types":"index.d.ts"}`, "dep/index.d.ts": `export type Value = string;`},
+		},
 		"unreachable private declaration": {
 			declaration: `export declare const value: string;`,
 			files:       map[string]string{"dist/private.d.ts": `export type { Value } from "dep";`},

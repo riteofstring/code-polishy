@@ -9,16 +9,18 @@ shipping dependency directories, not inlining, and supplies no such evidence.
 `scope.bundledDependencies` names an exact package manifest and exact dependency
 names. Scope wildcards are intentionally unsupported: a newly added dependency
 must receive its own declaration. Each name must occur only in that manifest's
-`devDependencies`; runtime, optional, and peer declarations contradict the claim.
-The declaration does not change source classification, dependency direction,
-quality checks, supply-chain analysis, or other packages' dependency authority.
+`devDependencies`; runtime, optional, and peer declarations contradict the
+claim. The declaration does not change source classification, dependency
+direction, quality checks, supply-chain analysis, or other packages' dependency
+authority.
 
 The sealed TypeScript parser reads the package's existing built entry files.
-It covers every exact `exports` target, explicit `main`, `module`, `types`,
-`typings`, and `bin` entry, and existing declaration companions of JavaScript
-and extensionless entries. Consumers also reach the root `index.js` when neither
-`exports` nor `main` is declared, and the root `index.d.ts` when neither `types`
-nor `typings` is declared, so existing fallback files join the closure.
+It covers every exact `exports` target and explicit `main`, `module`, `types`,
+`typings`, and `bin` entry. Without `exports`, the file Node selects for the
+package directory also joins. Public type entries are the files TypeScript's
+resolvers select for each library entry and for the package directory, so
+preferred TypeScript sources, declaration companions, extensionless entries, and
+the root `index.d.ts` fallback match consumers.
 Runtime and type resolution stay distinct because consumers select different
 files for them. Local runtime imports resolve with Node's own CommonJS resolver,
 which reads package metadata without executing code, so extension order,
@@ -40,10 +42,10 @@ both the artifact and the source allowance.
 
 The check is a bounded static dependency check, not a proof that arbitrary
 JavaScript cannot load a package. Behavior outside the model below is a
-documented limitation, not a defect to patch case by case. It guarantees that every loader form in the
-supported model names a literal specifier and that each other use of a loader
-name fails verification. Unsupported forms block the allowance; they never pass
-silently as clean coverage.
+documented limitation, not a defect to patch case by case. It guarantees that
+every loader form in the supported model names a literal specifier and that each
+other use of a loader name fails verification. Unsupported forms block the
+allowance; they never pass silently as clean coverage.
 
 Runtime artifacts support static imports and re-exports, literal dynamic
 imports, and literal calls of `require`, `require.resolve`, any `.require`
@@ -59,21 +61,21 @@ time, reflection APIs, reflection through `constructor` or prototypes, and code
 evaluated from strings are outside the guarantee.
 
 Declaration and TypeScript artifacts support imports, re-exports, import types,
-and `reference` directives. TypeScript may satisfy a bare specifier with the package
-itself or its `@types` counterpart, and a Node built-in with `@types/node`, so
-each import in a TypeScript artifact counts against all identities the consumer
-could need. Ambient module declarations supplied by other packages and consumer
-path mappings are outside the guarantee.
+and `reference` directives. TypeScript may satisfy a bare specifier with the
+package itself or its `@types` counterpart, and a Node built-in with
+`@types/node`, so each import in a TypeScript artifact counts against all
+identities the consumer could need. Ambient module declarations supplied by
+other packages and consumer path mappings are outside the guarantee.
 
 Missing or malformed files, escaping or linked paths, other artifact types, and
 unresolved local imports fail verification. Export patterns, `browser`,
 `typesVersions`, and `directories.bin` remain unsupported rather than silently
-losing a possible consumer entry. File, import, byte, and process limits bound analysis.
-The reader does not execute repository code, build artifacts, or install
-packages. Tests compare loader spellings and package layouts, including self-imports,
-competing extensions, directory manifests, and entry mappings, with Node
-execution or TypeScript compilation of an installed consumer, including valid
-neighboring cases.
+losing a possible consumer entry. File, import, byte, and process limits bound
+analysis. The reader does not execute repository code, build artifacts, or
+install packages. Tests compare loader spellings and package layouts, including
+self-imports, competing extensions, directory manifests, and entry mappings,
+with Node execution or TypeScript compilation of an installed consumer,
+including valid neighboring cases.
 
 Repositories build before architecture verification and keep their ordinary
 build and packed-consumer contracts. Reading a current artifact is not evidence

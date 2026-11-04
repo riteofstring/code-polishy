@@ -137,18 +137,6 @@ function packageEntries(manifest) {
   return { entries, executables };
 }
 
-function implicitEntries(state, manifest) {
-  const implicit = [];
-  if (manifest.exports === undefined && manifest.main === undefined)
-    implicit.push("index.js");
-  if (manifest.types === undefined && manifest.typings === undefined)
-    implicit.push("index.d.ts");
-  for (const entry of implicit) {
-    const path = packagePath(state, entry);
-    if (optionalArtifactInfo(state.request.root, path)) enqueue(state, path);
-  }
-}
-
 function containedPackagePath(state, path) {
   const normalized = normalize(path);
   if (
@@ -227,7 +215,7 @@ function referencedArtifact(state, from, specifier) {
   throw missingArtifact(from, specifier);
 }
 
-function typeArtifact(state, from, specifier) {
+function typeResolutions(state, from, specifier) {
   const host = containedResolutionHost(state.request.root);
   const containing = join(state.request.root, from);
   const resolved = new Set();
@@ -243,6 +231,11 @@ function typeArtifact(state, from, specifier) {
     ).resolvedModule;
     if (target) resolved.add(packageArtifact(state, target.resolvedFileName));
   }
+  return resolved;
+}
+
+function typeArtifact(state, from, specifier) {
+  const resolved = typeResolutions(state, from, specifier);
   if (resolved.size === 0) throw missingArtifact(from, specifier);
   return [...resolved].map((path) => enqueue(state, path))[0];
 }
@@ -447,24 +440,26 @@ function enqueueEntry(state, entry) {
   return enqueue(state, packagePath(state, entry));
 }
 
-function enqueueLibraryEntry(state, entry) {
-  const path = enqueueEntry(state, entry);
-  const extension = extname(path);
-  let declaration = null;
-  if (extension === "") declaration = `${path}.d.ts`;
-  else if (/^\.[cm]?js$/.test(extension))
-    declaration = path.replace(/\.[cm]?js$/, (suffix) =>
-      suffix === ".js" ? ".d.ts" : suffix === ".mjs" ? ".d.mts" : ".d.cts",
-    );
-  if (declaration && optionalArtifactInfo(state.request.root, declaration))
-    enqueue(state, declaration);
+function enqueueRuntimeDirectory(state, manifest) {
+  if (manifest.exports !== undefined) return;
+  let target;
+  try {
+    target = createRequire(
+      join(state.request.root, state.manifestPath),
+    ).resolve("./");
+  } catch {
+    return;
+  }
+  enqueue(state, packageArtifact(state, target));
 }
 
 function enqueuePackageEntries(state, manifest) {
   const { entries, executables } = packageEntries(manifest);
-  for (const entry of entries) enqueueLibraryEntry(state, entry);
-  for (const entry of executables) enqueueEntry(state, entry);
-  implicitEntries(state, manifest);
+  for (const entry of [...entries, ...executables]) enqueueEntry(state, entry);
+  enqueueRuntimeDirectory(state, manifest);
+  for (const entry of [...entries, "./"])
+    for (const path of typeResolutions(state, state.manifestPath, entry))
+      enqueue(state, path);
 }
 
 function requireMember(node, names) {
@@ -576,6 +571,7 @@ export function packageImports(request) {
   const directory = dirname(manifestPath).split("\\").join("/");
   const state = {
     request,
+    manifestPath,
     directory,
     packageRoot: realpathSync(join(request.root, directory))
       .split("\\")
