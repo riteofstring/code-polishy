@@ -172,11 +172,19 @@ function resolvedArtifact(state, target) {
   return enqueue(state, packageArtifact(state, target));
 }
 
+function localFailure(state, error) {
+  return (
+    typeof error?.path === "string" &&
+    insideRoot(state.packageRoot, error.path.split("\\").join("/")) !== null
+  );
+}
+
 function externalPackage(state, kind, specifier, error) {
   const name = specifiedPackage(specifier);
   return kind === "package" &&
     name !== state.manifest.name &&
-    (error === undefined || NOT_FOUND.has(error.code))
+    (error === undefined ||
+      (NOT_FOUND.has(error.code) && !localFailure(state, error)))
     ? { packages: [name] }
     : null;
 }

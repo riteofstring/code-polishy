@@ -174,6 +174,13 @@ func TestPackageImportsAgreeWithNodeConsumers(t *testing.T) {
 		"layout/clean directory main": {manifest: `{"name":"pkg","main":"lib"}`, files: map[string]string{
 			"lib/index.js": `module.exports = {};`, "lib/package.json": `{"main":"entry.js"}`, "lib/entry.js": `module.exports = require("dep");`,
 		}},
+		"layout/broken nested self import": unpublished(runtimeConsumerCase{source: `module.exports = require("./sub/inner.cjs");`, files: map[string]string{
+			"dist/sub/package.json": `{"name":"local-name","exports":"./missing.cjs"}`, "dist/sub/inner.cjs": `module.exports = require("local-name");`,
+		}}),
+		"layout/broken nested esm self import": unpublished(esmPackage(map[string]string{
+			"dist/index.mjs": `import "./sub/inner.mjs";`, "dist/sub/inner.mjs": `import "local-name";`,
+			"dist/sub/package.json": `{"name":"local-name","exports":"./missing.cjs"}`,
+		})),
 		"layout/missing self subpath":  unpublished(runtimeConsumerCase{source: `module.exports = require("pkg/dist/missing.cjs");`}),
 		"layout/missing esm target":    unpublished(esmPackage(map[string]string{"dist/index.mjs": `import "./missing.mjs";`})),
 		"layout/unreferenced artifact": {source: `module.exports = {};`, files: map[string]string{"dist/unused.cjs": `module.exports = require("dep");`}},

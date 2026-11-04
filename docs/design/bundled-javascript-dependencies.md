@@ -59,6 +59,9 @@ target must be an existing regular file. Each reference then has one outcome:
 - A Node built-in names no package.
 - A bare name other than the package's own that Node cannot find, or that
   resolves outside the staged package, is an external package dependency.
+  A not-found error that Node attributes to a manifest inside the staged
+  package, such as a nested scope whose export target is missing, is a broken
+  local reference, not an external one.
 - Anything else, including any failed relative or own-name reference and any
   other resolver error, is unsupported and blocks the allowance.
 
