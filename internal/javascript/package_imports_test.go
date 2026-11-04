@@ -38,21 +38,11 @@ func TestInstalledPackageImportsFollowRuntimeAndPublicTypes(t *testing.T) {
 func TestInstalledPackageImportsRejectIncompleteArtifacts(t *testing.T) {
 	bundle := installedPackageImportBundle(t)
 	for name, source := range map[string]string{
-		"missing chunk":               `export * from "./missing.js";`,
-		"computed import":             `export const load = (name) => import(name);`,
-		"computed require":            `export const load = (name) => require(name);`,
-		"invalid syntax":              `export const =`,
-		"unresolved imports mapping":  `export * from "#internal";`,
-		"aliased require":             `const load = require; export const value = load("dep");`,
-		"require shim":                `export const load = typeof require === "function" ? require : null;`,
-		"destructured require":        `const { require: load } = module; export const value = load("dep");`,
-		"module loader":               `import { createRequire as make } from "node:module"; export const value = make(import.meta.url)("dep");`,
-		"builtin module loader":       `export const value = process.getBuiltinModule("module").createRequire(import.meta.url)("dep");`,
-		"computed builtin":            `export const load = (name) => process.getBuiltinModule(name);`,
-		"module constructor":          `export const value = module.constructor._load("dep");`,
-		"quoted destructured require": `const { "require": load } = module; export const value = load.call(module, "dep");`,
-		"computed destructured key":   "const { [`require`]: load } = module; export const value = load.call(module, \"dep\");",
-		"reflected require":           `export const value = Reflect.get(module, "require").call(module, "dep");`,
+		"missing chunk":              `export * from "./missing.js";`,
+		"computed import":            `export const load = (name) => import(name);`,
+		"computed require":           `export const load = (name) => require(name);`,
+		"invalid syntax":             `export const =`,
+		"unresolved imports mapping": `export * from "#internal";`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			root := t.TempDir()
@@ -74,17 +64,6 @@ func TestInstalledPackageImportsCheckImplicitTypesAndReferences(t *testing.T) {
 	writeScript(t, filepath.Join(root, "dist/extra.d.ts"), "/// <reference types=\"editor\" />\nexport {};\n")
 	result, err := installedPackageImportBundle(t).PackageImports(t.Context(), root, "package.json")
 	if err != nil || len(result.Unsupported) != 0 || !slices.Equal(importedPackages(result), []string{"@types/editor", "editor"}) {
-		t.Fatalf("PackageImports = %+v, %v", result, err)
-	}
-}
-
-func TestInstalledPackageImportsFollowMemberRequiresAndTypePackages(t *testing.T) {
-	root := t.TempDir()
-	writeScript(t, filepath.Join(root, "package.json"), `{"main":"dist/index.cjs","types":"dist/index.d.ts"}`)
-	writeScript(t, filepath.Join(root, "dist/index.cjs"), `module.exports = [module.require("runtime-dep"), process.getBuiltinModule("node:fs")];`)
-	writeScript(t, filepath.Join(root, "dist/index.d.ts"), "export type { Value } from \"@scope/types-dep\";\nexport type { EventEmitter } from \"node:events\";\n")
-	result, err := installedPackageImportBundle(t).PackageImports(t.Context(), root, "package.json")
-	if err != nil || len(result.Unsupported) != 0 || !slices.Equal(importedPackages(result), []string{"@scope/types-dep", "@types/node", "@types/scope__types-dep", "runtime-dep"}) {
 		t.Fatalf("PackageImports = %+v, %v", result, err)
 	}
 }

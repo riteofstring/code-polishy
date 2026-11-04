@@ -9,8 +9,10 @@
 - Allow exact `scope.bundledDependencies` declarations for packages inlined from
   `devDependencies`. Verify built JavaScript and reachable public declarations
   before admitting their source imports; missing artifacts, leaked imports, and
-  contradictory manifest declarations remain blocking. Upgrade the locked
-  release before using the new configuration.
+  contradictory manifest declarations remain blocking. The check is a bounded
+  static model of supported loader forms; other uses of `require` or
+  `getBuiltinModule` and the Node `module` API block the allowance. Upgrade the
+  locked release before using the new configuration.
 
 ## 0.32.0 - 2026-11-03
 
