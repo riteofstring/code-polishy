@@ -47,21 +47,32 @@ every loader form in the supported model names a literal specifier and that each
 other use of a loader name fails verification. Unsupported forms block the
 allowance; they never pass silently as clean coverage.
 
-Runtime artifacts support static imports and re-exports, literal dynamic
-imports, and literal calls of `require`, `require.resolve`, any `.require`
-member, and `getBuiltinModule`. Runtime imports of `module` or `node:module`
-fail, which covers `createRequire` and the Module class reached through either
-loader. The names `require` and `getBuiltinModule` are treated as loaders
-regardless of binding. Every other reference fails: aliases, `call` or `apply`,
-member reads, element access, shorthand properties, destructuring or
-assignment-pattern keys, and import or export specifier names. A literal key is
-an identifier or a string literal, optionally parenthesized or written as a
-computed property name. Declarations, object-literal keys, `typeof`,
-`require.main`, `require.cache`, type positions, and string values remain
-ordinary code. Keys produced by any other expression, such as concatenation or
-comma and conditional expressions, are computed at run time and, with reflection
-APIs, reflection through `constructor` or prototypes, and code evaluated from
-strings, are outside the guarantee.
+Runtime artifacts support static imports and re-exports and literal dynamic
+imports. Every occurrence of the loader names `require` and `getBuiltinModule`,
+as an identifier or a string literal, is classified into one category,
+regardless of binding. Classification first removes harmless wrappers:
+parentheses and TypeScript `as`, `satisfies`, non-null, and type assertions. A
+computed property name with a literal is a key like any other.
+
+- Loader calls: a call of `require`, `require.resolve`, or a `require` or
+  `getBuiltinModule` member, named by an identifier or literal key, with a
+  string literal specifier. The specifier joins the closure; runtime imports of
+  `module` or `node:module` fail, which covers `createRequire` and the Module
+  class. A non-literal specifier fails.
+- Ordinary uses: declarations, labels, bindings that reuse the loader name, such
+  as `import { getBuiltinModule }` or `const { require } = module`, object
+  literal keys, `typeof`, `require.main` and `require.cache` reads, type
+  positions, and string values that are not keys.
+- Unsupported uses: every other occurrence, including aliases, `call`, `apply`,
+  or construction, member reads that are not called, renamed destructuring and
+  assignment-pattern keys, shorthand property values, and import or export
+  specifier names that rename a loader. These fail verification.
+
+Keys produced by any other expression, such as concatenation or comma and
+conditional expressions, are computed at run time and, with reflection APIs,
+reflection through `constructor` or prototypes, and code evaluated from strings,
+are outside the guarantee. Some harmless code is rejected conservatively, such
+as an unused alias or a value exported under a loader name.
 
 Declaration and TypeScript artifacts support imports, re-exports, import types,
 and `reference` directives. TypeScript may satisfy a bare specifier with the
@@ -75,10 +86,14 @@ unresolved local imports fail verification. Export patterns, `browser`,
 `typesVersions`, and `directories.bin` remain unsupported rather than silently
 losing a possible consumer entry. File, import, byte, and process limits bound
 analysis. The reader does not execute repository code, build artifacts, or
-install packages. Tests compare loader spellings and package layouts, including
-self-imports, competing extensions, directory manifests, and entry mappings,
-with Node execution or TypeScript compilation of an installed consumer,
-including valid neighboring cases.
+install packages. Tests compare each loader category, wrapper combinations, package layouts,
+and representative tsc, esbuild, rollup, and webpack output with Node execution
+or TypeScript compilation of an installed consumer, and state the expected
+verifier outcome for each case, including conservative rejections.
+
+The feature is complete when every documented category agrees with consumers in
+those tests. A finding must name the documented promise it violates; support
+for JavaScript outside the model is a separate feature decision.
 
 Repositories build before architecture verification and keep their ordinary
 build and packed-consumer contracts. Reading a current artifact is not evidence

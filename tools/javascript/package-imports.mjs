@@ -54,8 +54,16 @@ const TYPE_RESOLUTIONS = [
 const NODE_LOADER_MODULES = new Set(["module", "node:module"]);
 const LOADER_NAMES = new Set(["require", "getBuiltinModule"]);
 const REQUIRE_PROPERTIES = new Set(["main", "cache"]);
-const REQUIRE_CALLS = new Set(["resolve"]);
-const LOADER_DECLARATIONS = new Set([
+const ORDINARY = "ordinary";
+const UNSUPPORTED = "unsupported";
+const EXPRESSION_WRAPPERS = new Set([
+  typescript.SyntaxKind.ParenthesizedExpression,
+  typescript.SyntaxKind.AsExpression,
+  typescript.SyntaxKind.SatisfiesExpression,
+  typescript.SyntaxKind.NonNullExpression,
+  typescript.SyntaxKind.TypeAssertionExpression,
+]);
+const NAME_DECLARATIONS = new Set([
   typescript.SyntaxKind.Parameter,
   typescript.SyntaxKind.VariableDeclaration,
   typescript.SyntaxKind.FunctionDeclaration,
@@ -68,7 +76,20 @@ const LOADER_DECLARATIONS = new Set([
   typescript.SyntaxKind.SetAccessor,
   typescript.SyntaxKind.PropertySignature,
   typescript.SyntaxKind.MethodSignature,
-  typescript.SyntaxKind.ImportSpecifier,
+  typescript.SyntaxKind.EnumMember,
+  typescript.SyntaxKind.ImportClause,
+  typescript.SyntaxKind.NamespaceImport,
+  typescript.SyntaxKind.ImportEqualsDeclaration,
+  typescript.SyntaxKind.InterfaceDeclaration,
+  typescript.SyntaxKind.TypeAliasDeclaration,
+  typescript.SyntaxKind.TypeParameter,
+  typescript.SyntaxKind.ModuleDeclaration,
+  typescript.SyntaxKind.JsxAttribute,
+]);
+const LABEL_STATEMENTS = new Set([
+  typescript.SyntaxKind.LabeledStatement,
+  typescript.SyntaxKind.BreakStatement,
+  typescript.SyntaxKind.ContinueStatement,
 ]);
 
 function exportTargets(value, targets) {
@@ -462,84 +483,108 @@ function enqueuePackageEntries(state, manifest) {
       enqueue(state, path);
 }
 
-function requireMember(node, names) {
-  return (
-    typescript.isIdentifier(node.expression) &&
-    node.expression.text === "require" &&
-    names.has(node.name.text)
-  );
+function unwrapped(node) {
+  let outer = node;
+  while (
+    EXPRESSION_WRAPPERS.has(outer.parent.kind) &&
+    outer.parent.expression === outer
+  )
+    outer = outer.parent;
+  return outer;
 }
 
-function loaderCallee(node) {
-  if (typescript.isIdentifier(node)) return LOADER_NAMES.has(node.text);
-  return (
-    typescript.isPropertyAccessExpression(node) &&
-    (LOADER_NAMES.has(node.name.text) || requireMember(node, REQUIRE_CALLS))
-  );
+function calledBy(node) {
+  const outer = unwrapped(node);
+  const parent = outer.parent;
+  return typescript.isCallExpression(parent) && parent.expression === outer
+    ? parent
+    : null;
 }
 
-function literalKey(node) {
-  let key = node;
-  while (typescript.isParenthesizedExpression(key.parent)) key = key.parent;
-  return typescript.isComputedPropertyName(key.parent) ? key.parent : key;
+function memberKeyRole(parent, key) {
+  if (
+    (typescript.isPropertyAccessExpression(parent) && parent.name === key) ||
+    (typescript.isElementAccessExpression(parent) &&
+      parent.argumentExpression === key)
+  )
+    return calledBy(parent) ?? UNSUPPORTED;
+  return null;
 }
 
-function patternKey(parent, key) {
+function specifierKeyRole(parent, key) {
+  if (typescript.isExportSpecifier(parent)) return UNSUPPORTED;
+  if (typescript.isImportSpecifier(parent))
+    return parent.propertyName === key ? UNSUPPORTED : ORDINARY;
   if (typescript.isBindingElement(parent))
-    return (parent.propertyName ?? parent.name) === key;
-  return (
-    (typescript.isPropertyAssignment(parent) ||
-      typescript.isShorthandPropertyAssignment(parent)) &&
-    parent.name === key &&
-    typescript.isAssignmentTarget(parent.parent)
-  );
+    return parent.propertyName === key ? UNSUPPORTED : ORDINARY;
+  return null;
 }
 
-function readKey(node) {
-  const key = literalKey(node);
+function objectKeyRole(parent, key) {
+  if (typescript.isShorthandPropertyAssignment(parent))
+    return typescript.isAssignmentTarget(parent.parent)
+      ? ORDINARY
+      : UNSUPPORTED;
+  if (typescript.isPropertyAssignment(parent) && parent.name === key)
+    return typescript.isAssignmentTarget(parent.parent)
+      ? UNSUPPORTED
+      : ORDINARY;
+  return null;
+}
+
+function declarationKeyRole(parent, key) {
+  if (NAME_DECLARATIONS.has(parent.kind) && parent.name === key)
+    return ORDINARY;
+  if (LABEL_STATEMENTS.has(parent.kind) && parent.label === key)
+    return ORDINARY;
+  return null;
+}
+
+function keyRole(key) {
   const parent = key.parent;
-  if (typescript.isElementAccessExpression(parent))
-    return parent.argumentExpression === key;
-  if (
-    typescript.isImportSpecifier(parent) ||
-    typescript.isExportSpecifier(parent)
-  )
-    return true;
-  return patternKey(parent, key);
-}
-
-function declaredLoaderName(node) {
-  const parent = node.parent;
-  if (typescript.isPropertyAssignment(parent))
-    return (
-      parent.name === node && !typescript.isAssignmentTarget(parent.parent)
-    );
-  return LOADER_DECLARATIONS.has(parent.kind) && parent.name === node;
-}
-
-function supportedLoaderReference(node) {
-  const parent = node.parent;
-  if (
-    typescript.isPartOfTypeNode(node) ||
-    typescript.isTypeOfExpression(parent)
-  )
-    return true;
-  if (
-    typescript.isPropertyAccessExpression(parent) &&
-    parent.expression === node
-  )
-    return requireMember(parent, REQUIRE_PROPERTIES);
-  return declaredLoaderName(node);
-}
-
-function unsupportedLoaderName(node) {
-  if (typescript.isStringLiteralLike(node))
-    return LOADER_NAMES.has(node.text) && readKey(node);
   return (
-    typescript.isIdentifier(node) &&
-    LOADER_NAMES.has(node.text) &&
-    !supportedLoaderReference(node)
+    memberKeyRole(parent, key) ??
+    specifierKeyRole(parent, key) ??
+    objectKeyRole(parent, key) ??
+    declarationKeyRole(parent, key)
   );
+}
+
+function valueRole(identifier) {
+  const call = calledBy(identifier);
+  if (call) return call;
+  const outer = unwrapped(identifier);
+  const parent = outer.parent;
+  if (typescript.isTypeOfExpression(parent)) return ORDINARY;
+  if (
+    identifier.text !== "require" ||
+    !typescript.isPropertyAccessExpression(parent) ||
+    parent.expression !== outer
+  )
+    return UNSUPPORTED;
+  if (REQUIRE_PROPERTIES.has(parent.name.text)) return ORDINARY;
+  return (parent.name.text === "resolve" && calledBy(parent)) || UNSUPPORTED;
+}
+
+function identifierRole(identifier) {
+  if (typescript.isPartOfTypeNode(identifier)) return ORDINARY;
+  return keyRole(identifier) ?? valueRole(identifier);
+}
+
+function stringRole(literal) {
+  const outer = unwrapped(literal);
+  const key = typescript.isComputedPropertyName(outer.parent)
+    ? outer.parent
+    : outer;
+  return keyRole(key) ?? ORDINARY;
+}
+
+function loaderRole(node) {
+  if (typescript.isIdentifier(node) && LOADER_NAMES.has(node.text))
+    return identifierRole(node);
+  if (typescript.isStringLiteralLike(node) && LOADER_NAMES.has(node.text))
+    return stringRole(node);
+  return ORDINARY;
 }
 
 function loaderCall(node, specifiers) {
@@ -556,21 +601,12 @@ function loaderSpecifiers(source) {
   const specifiers = [];
   if (DECLARATION_FILE.test(source.fileName)) return specifiers;
   const visit = (node) => {
-    if (typescript.isCallExpression(node) && loaderCallee(node.expression)) {
-      loaderCall(node, specifiers);
-      const callee = node.expression;
-      if (
-        typescript.isPropertyAccessExpression(callee) &&
-        LOADER_NAMES.has(callee.name.text)
-      )
-        visit(callee.expression);
-      node.arguments.forEach(visit);
-      return;
-    }
-    if (unsupportedLoaderName(node))
+    const role = loaderRole(node);
+    if (role === UNSUPPORTED)
       throw new Error(
-        "published artifact uses require or getBuiltinModule outside a direct literal call",
+        "published artifact uses require or getBuiltinModule outside a supported loader call",
       );
+    if (role !== ORDINARY) loaderCall(role, specifiers);
     typescript.forEachChild(node, visit);
   };
   visit(source);
