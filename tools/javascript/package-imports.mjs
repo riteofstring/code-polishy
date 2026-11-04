@@ -478,13 +478,13 @@ function loaderCallee(node) {
   );
 }
 
-function readKey(node) {
-  const key = typescript.isComputedPropertyName(node.parent)
-    ? node.parent
-    : node;
-  const parent = key.parent;
-  if (typescript.isElementAccessExpression(parent))
-    return parent.argumentExpression === node;
+function literalKey(node) {
+  let key = node;
+  while (typescript.isParenthesizedExpression(key.parent)) key = key.parent;
+  return typescript.isComputedPropertyName(key.parent) ? key.parent : key;
+}
+
+function patternKey(parent, key) {
   if (typescript.isBindingElement(parent))
     return (parent.propertyName ?? parent.name) === key;
   return (
@@ -493,6 +493,19 @@ function readKey(node) {
     parent.name === key &&
     typescript.isAssignmentTarget(parent.parent)
   );
+}
+
+function readKey(node) {
+  const key = literalKey(node);
+  const parent = key.parent;
+  if (typescript.isElementAccessExpression(parent))
+    return parent.argumentExpression === key;
+  if (
+    typescript.isImportSpecifier(parent) ||
+    typescript.isExportSpecifier(parent)
+  )
+    return true;
+  return patternKey(parent, key);
 }
 
 function declaredLoaderName(node) {

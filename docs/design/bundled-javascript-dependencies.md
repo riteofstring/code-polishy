@@ -53,12 +53,15 @@ member, and `getBuiltinModule`. Runtime imports of `module` or `node:module`
 fail, which covers `createRequire` and the Module class reached through either
 loader. The names `require` and `getBuiltinModule` are treated as loaders
 regardless of binding. Every other reference fails: aliases, `call` or `apply`,
-member reads, element access, shorthand properties, and destructuring or
-assignment-pattern keys, whether bare, quoted, or computed from a literal.
-Declarations, object-literal keys, `typeof`, `require.main`, `require.cache`,
-type positions, and string values remain ordinary code. Keys computed at run
-time, reflection APIs, reflection through `constructor` or prototypes, and code
-evaluated from strings are outside the guarantee.
+member reads, element access, shorthand properties, destructuring or
+assignment-pattern keys, and import or export specifier names. A literal key is
+an identifier or a string literal, optionally parenthesized or written as a
+computed property name. Declarations, object-literal keys, `typeof`,
+`require.main`, `require.cache`, type positions, and string values remain
+ordinary code. Keys produced by any other expression, such as concatenation or
+comma and conditional expressions, are computed at run time and, with reflection
+APIs, reflection through `constructor` or prototypes, and code evaluated from
+strings, are outside the guarantee.
 
 Declaration and TypeScript artifacts support imports, re-exports, import types,
 and `reference` directives. TypeScript may satisfy a bare specifier with the
