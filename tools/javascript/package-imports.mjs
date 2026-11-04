@@ -515,13 +515,15 @@ function specifierKeyRole(parent, key) {
   if (typescript.isExportSpecifier(parent)) return UNSUPPORTED;
   if (typescript.isImportSpecifier(parent))
     return parent.propertyName === key ? UNSUPPORTED : ORDINARY;
-  if (typescript.isBindingElement(parent))
-    return parent.propertyName === key ? UNSUPPORTED : ORDINARY;
+  if (typescript.isBindingElement(parent)) {
+    if (parent.propertyName === key) return UNSUPPORTED;
+    return parent.name === key ? ORDINARY : null;
+  }
   return null;
 }
 
 function objectKeyRole(parent, key) {
-  if (typescript.isShorthandPropertyAssignment(parent))
+  if (typescript.isShorthandPropertyAssignment(parent) && parent.name === key)
     return typescript.isAssignmentTarget(parent.parent)
       ? ORDINARY
       : UNSUPPORTED;
