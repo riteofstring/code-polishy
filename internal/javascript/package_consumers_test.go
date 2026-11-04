@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -87,16 +88,16 @@ func TestPackageImportsAgreeWithNodeConsumers(t *testing.T) {
 		"ordinary/local resolve":             {source: `module.exports = require.resolve("./local.cjs");`, files: map[string]string{"dist/local.cjs": `module.exports = {};`}},
 		"ordinary/builtin loads":             {source: `module.exports = [require("node:path").sep, process.getBuiltinModule("node:fs").constants];`},
 		"ordinary/same-name getter binding":  {source: `const { getBuiltinModule } = process; module.exports = getBuiltinModule("node:fs").constants;`},
-		"ordinary/method named require":      {source: `class Store { require(key) { return key; } } module.exports = new Store().require("value");`},
 		"ordinary/defaults with loader data": {source: `const { word = "require" } = {}; const [name = ("getBuiltinModule")] = []; module.exports = [word, name];`},
 		"ordinary/labels and declarations":   {source: `function load(require) { return typeof require; } require: for (;;) { break require; } module.exports = load;`},
 		"ordinary/imported getter": esmPackage(map[string]string{
 			"dist/index.mjs": `import { getBuiltinModule } from "node:process"; export default getBuiltinModule("node:fs").constants;`,
 		}),
 
-		"conservative/unused alias":       {source: `const keep = require; module.exports = typeof keep;`, outcome: unsupportedUse},
-		"conservative/comma callee":       {source: `module.exports = (0, require)("node:path").sep;`, outcome: unsupportedUse},
-		"conservative/quoted export name": {manifest: `{"name":"pkg","exports":"./dist/index.mjs"}`, files: map[string]string{"dist/index.mjs": `const value = 1; export { value as "require" };`}, outcome: unsupportedUse},
+		"conservative/method named require": {source: `class Store { require(key) { return key; } } module.exports = new Store().require("value");`, outcome: unsupportedUse},
+		"conservative/unused alias":         {source: `const keep = require; module.exports = typeof keep;`, outcome: unsupportedUse},
+		"conservative/comma callee":         {source: `module.exports = (0, require)("node:path").sep;`, outcome: unsupportedUse},
+		"conservative/quoted export name":   {manifest: `{"name":"pkg","exports":"./dist/index.mjs"}`, files: map[string]string{"dist/index.mjs": `const value = 1; export { value as "require" };`}, outcome: unsupportedUse},
 
 		"layout/self subpath import": needing(runtimeConsumerCase{source: `module.exports = require("pkg/dist/chunk.cjs");`, files: map[string]string{"dist/chunk.cjs": `module.exports = require("dep");`}}, verifiedImport),
 		"layout/self exported subpath": needing(runtimeConsumerCase{
@@ -142,6 +143,9 @@ func TestPackageImportsAgreeWithNodeConsumers(t *testing.T) {
 		"build/webpack library":         needing(runtimeConsumerCase{source: "(() => {\n  var __webpack_modules__ = { 1: (module) => { module.exports = require(\"dep\"); } };\n  var __webpack_module_cache__ = {};\n  function __webpack_require__(moduleId) {\n    var cachedModule = __webpack_module_cache__[moduleId];\n    if (cachedModule !== undefined) return cachedModule.exports;\n    var module = (__webpack_module_cache__[moduleId] = { exports: {} });\n    __webpack_modules__[moduleId](module, module.exports, __webpack_require__);\n    return module.exports;\n  }\n  module.exports = __webpack_require__(1);\n})();\n"}, verifiedImport),
 		"build/rollup esm":              needing(esmPackage(map[string]string{"dist/index.mjs": "import dep from 'dep';\n\nexport { dep as value };\n"}), verifiedImport),
 	}
+	for name, testCase := range referenceMatrix() {
+		cases[name] = testCase
+	}
 	bundle := installedPackageImportBundle(t)
 	node, _, err := bundle.paths()
 	if err != nil {
@@ -167,6 +171,71 @@ func TestPackageImportsAgreeWithNodeConsumers(t *testing.T) {
 	}
 }
 
+type referenceForm struct {
+	esm      bool
+	executes bool
+	urls     bool
+	source   func(string) string
+}
+
+type specifierCase struct {
+	specifier string
+	local     bool
+	external  bool
+	outcome   string
+}
+
+func referenceMatrix() map[string]runtimeConsumerCase {
+	forms := map[string]referenceForm{
+		"static import":   {esm: true, executes: true, urls: true, source: func(s string) string { return "import " + strconv.Quote(s) + ";" }},
+		"re-export":       {esm: true, executes: true, urls: true, source: func(s string) string { return "export * from " + strconv.Quote(s) + ";" }},
+		"dynamic import":  {executes: true, urls: true, source: func(s string) string { return "module.exports = import(" + strconv.Quote(s) + ");" }},
+		"require":         {executes: true, source: func(s string) string { return "module.exports = require(" + strconv.Quote(s) + ");" }},
+		"module require":  {executes: true, source: func(s string) string { return "module.exports = module.require(" + strconv.Quote(s) + ");" }},
+		"require resolve": {source: func(s string) string { return "module.exports = require.resolve(" + strconv.Quote(s) + ");" }},
+	}
+	specifiers := map[string]specifierCase{
+		"relative needing dep": {specifier: "./target.cjs", local: true, outcome: verifiedImport},
+		"relative clean":       {specifier: "./clean.cjs", outcome: cleanArtifact},
+		"self needing dep":     {specifier: "pkg/dist/target.cjs", local: true, outcome: verifiedImport},
+		"external":             {specifier: "dep", external: true, outcome: verifiedImport},
+		"builtin":              {specifier: "node:path", outcome: cleanArtifact},
+		"absolute path":        {specifier: "{{PKG}}/dist/target.cjs", local: true, outcome: unsupportedUse},
+		"file url":             {specifier: "file://{{PKG}}/dist/target.cjs", local: true, outcome: unsupportedUse},
+	}
+	cases := map[string]runtimeConsumerCase{}
+	for formName, form := range forms {
+		for specifierName, specifier := range specifiers {
+			if specifierName == "file url" && !form.urls {
+				continue
+			}
+			testCase := runtimeConsumerCase{
+				manifest: `{"name":"pkg","main":"dist/index.cjs"}`,
+				files: map[string]string{
+					"dist/target.cjs": `module.exports = require("dep");`,
+					"dist/clean.cjs":  `module.exports = {};`,
+				},
+				outcome: specifier.outcome,
+				needs:   specifier.external || specifier.local && form.executes,
+			}
+			if form.esm {
+				testCase.manifest = `{"name":"pkg","main":"dist/index.mjs"}`
+				testCase.files["dist/index.mjs"] = form.source(specifier.specifier)
+			} else {
+				testCase.source = form.source(specifier.specifier)
+			}
+			cases["matrix/"+formName+"/"+specifierName] = testCase
+		}
+	}
+	cases["origin/nested relative require"] = needing(runtimeConsumerCase{source: `module.exports = require("./sub/inner.cjs");`, files: map[string]string{
+		"dist/sub/inner.cjs": `module.exports = require("../target.cjs");`, "dist/target.cjs": `module.exports = require("dep");`, "target.cjs": `module.exports = {};`,
+	}}, verifiedImport)
+	cases["origin/parent receiver"] = needing(runtimeConsumerCase{source: `module.exports = require("./sub/inner.cjs");`, files: map[string]string{
+		"dist/sub/inner.cjs": `module.exports = module.parent.require("./chunk.cjs");`, "dist/chunk.cjs": `module.exports = require("dep");`, "dist/sub/chunk.cjs": `module.exports = {};`,
+	}}, unsupportedUse)
+	return cases
+}
+
 func verifierOutcome(result ImportResult) string {
 	if len(result.Unsupported) > 0 {
 		return unsupportedUse
@@ -186,11 +255,11 @@ func installNodeConsumer(t *testing.T, node string, testCase runtimeConsumerCase
 		manifest = `{"name":"pkg","main":"dist/index.cjs"}`
 	}
 	writeScript(t, filepath.Join(pkg, "package.json"), manifest)
-	if testCase.source != "" {
-		writeScript(t, filepath.Join(pkg, "dist/index.cjs"), testCase.source)
-	}
 	for path, source := range testCase.files {
-		writeScript(t, filepath.Join(pkg, path), source)
+		writeScript(t, filepath.Join(pkg, path), strings.ReplaceAll(source, "{{PKG}}", pkg))
+	}
+	if testCase.source != "" {
+		writeScript(t, filepath.Join(pkg, "dist/index.cjs"), strings.ReplaceAll(testCase.source, "{{PKG}}", pkg))
 	}
 	load := func() (bool, string) {
 		command := exec.CommandContext(t.Context(), node, "-e", runtimeConsumerDriver, testCase.entry)
@@ -218,6 +287,7 @@ func installNodeConsumer(t *testing.T, node string, testCase runtimeConsumerCase
 }
 
 type typeConsumerCase struct {
+	unsupported bool
 	manifest    string
 	declaration string
 	files       map[string]string
@@ -314,6 +384,17 @@ func TestPackageImportsAgreeWithTypeScriptConsumers(t *testing.T) {
 			declaration: `export declare const value: string;`,
 			files:       map[string]string{"dist/private.d.ts": `export type { Value } from "dep";`},
 		},
+		"reference path to type reference": {
+			declaration: "/// <reference path=\"./extra.d.ts\" />\nexport declare const value: Marker;\n", identity: "@types/dep",
+			files:   map[string]string{"dist/extra.d.ts": "/// <reference types=\"dep\" />\n"},
+			install: map[string]string{"@types/dep/index.d.ts": `interface Marker {}`},
+		},
+		"relative type reference":     {unsupported: true, declaration: "/// <reference types=\"./local\" />\nexport {};\n", files: map[string]string{"dist/local.d.ts": `export {};`}},
+		"subpath type reference":      {unsupported: true, declaration: "/// <reference types=\"dep/sub\" />\nexport {};\n"},
+		"absolute reference path":     {unsupported: true, declaration: "/// <reference path=\"/types/extra.d.ts\" />\nexport {};\n"},
+		"file url type import":        {unsupported: true, declaration: `export type Value = import("file:///types/value").Value;`},
+		"absolute type import":        {unsupported: true, declaration: `export type { Value } from "/types/value";`},
+		"package imports type import": {unsupported: true, declaration: `export type { Value } from "#types";`},
 		"library reference": {
 			declaration: "/// <reference lib=\"es2015.promise\" />\nexport declare const value: Promise<string>;\n",
 		},
@@ -327,54 +408,15 @@ func TestPackageImportsAgreeWithTypeScriptConsumers(t *testing.T) {
 	for name, testCase := range cases {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			consumer := t.TempDir()
-			pkg := filepath.Join(consumer, "node_modules", "pkg")
-			manifest := testCase.manifest
-			if manifest == "" {
-				manifest = `{"name":"pkg","main":"dist/index.js","types":"dist/index.d.ts"}`
+			pkg, consumer := writeTypeConsumer(t, testCase)
+			if testCase.unsupported {
+				result, err := bundle.PackageImports(t.Context(), pkg, "package.json")
+				if err != nil || len(result.Unsupported) == 0 {
+					t.Fatalf("PackageImports = %+v, %v; want unsupported", result, err)
+				}
+				return
 			}
-			writeScript(t, filepath.Join(pkg, "package.json"), manifest)
-			writeScript(t, filepath.Join(pkg, "dist/index.js"), `module.exports = {};`)
-			if testCase.declaration != "" {
-				writeScript(t, filepath.Join(pkg, "dist/index.d.ts"), testCase.declaration)
-			}
-			for path, source := range testCase.files {
-				writeScript(t, filepath.Join(pkg, path), source)
-			}
-			writeScript(t, filepath.Join(consumer, "index.ts"), "import type * as pkg from \"pkg\";\nexport type Surface = typeof pkg;\n")
-			writeScript(t, filepath.Join(consumer, "compile.cjs"), typeScriptConsumerDriver)
-			compile := func() []string {
-				command := exec.CommandContext(t.Context(), node, filepath.Join(consumer, "compile.cjs"), compiler, consumer)
-				command.Dir = consumer
-				command.Env = []string{}
-				var stderr bytes.Buffer
-				command.Stderr = &stderr
-				output, err := command.Output()
-				if err != nil {
-					t.Fatalf("compile consumer: %v: %s", err, stderr.String())
-				}
-				diagnostics := []string{}
-				if err := json.Unmarshal(output, &diagnostics); err != nil {
-					t.Fatal(err)
-				}
-				return diagnostics
-			}
-			before := compile()
-			if testCase.identity == "" {
-				if len(before) != 0 {
-					t.Fatalf("neighbor fixture does not compile: %v", before)
-				}
-			} else {
-				if len(before) == 0 {
-					t.Fatal("fixture compiles without its type dependency")
-				}
-				for path, source := range testCase.install {
-					writeScript(t, filepath.Join(consumer, "node_modules", path), source)
-				}
-				if after := compile(); len(after) != 0 {
-					t.Fatalf("fixture does not compile with %s installed: %v", testCase.identity, after)
-				}
-			}
+			requireTypeConsumerNeed(t, node, compiler, consumer, testCase)
 			result, err := bundle.PackageImports(t.Context(), pkg, "package.json")
 			if err != nil || len(result.Unsupported) != 0 {
 				t.Fatalf("PackageImports = %+v, %v", result, err)
@@ -384,6 +426,65 @@ func TestPackageImportsAgreeWithTypeScriptConsumers(t *testing.T) {
 				t.Fatalf("verifier identities %v do not match the consumer's need for %q", packages, testCase.identity)
 			}
 		})
+	}
+}
+
+func writeTypeConsumer(t *testing.T, testCase typeConsumerCase) (string, string) {
+	t.Helper()
+	consumer := t.TempDir()
+	pkg := filepath.Join(consumer, "node_modules", "pkg")
+	manifest := testCase.manifest
+	if manifest == "" {
+		manifest = `{"name":"pkg","main":"dist/index.js","types":"dist/index.d.ts"}`
+	}
+	writeScript(t, filepath.Join(pkg, "package.json"), manifest)
+	writeScript(t, filepath.Join(pkg, "dist/index.js"), `module.exports = {};`)
+	if testCase.declaration != "" {
+		writeScript(t, filepath.Join(pkg, "dist/index.d.ts"), testCase.declaration)
+	}
+	for path, source := range testCase.files {
+		writeScript(t, filepath.Join(pkg, path), source)
+	}
+	writeScript(t, filepath.Join(consumer, "index.ts"), "import type * as pkg from \"pkg\";\nexport type Surface = typeof pkg;\n")
+	writeScript(t, filepath.Join(consumer, "compile.cjs"), typeScriptConsumerDriver)
+	return pkg, consumer
+}
+
+func compileTypeConsumer(t *testing.T, node, compiler, consumer string) []string {
+	t.Helper()
+	command := exec.CommandContext(t.Context(), node, filepath.Join(consumer, "compile.cjs"), compiler, consumer)
+	command.Dir = consumer
+	command.Env = []string{}
+	var stderr bytes.Buffer
+	command.Stderr = &stderr
+	output, err := command.Output()
+	if err != nil {
+		t.Fatalf("compile consumer: %v: %s", err, stderr.String())
+	}
+	diagnostics := []string{}
+	if err := json.Unmarshal(output, &diagnostics); err != nil {
+		t.Fatal(err)
+	}
+	return diagnostics
+}
+
+func requireTypeConsumerNeed(t *testing.T, node, compiler, consumer string, testCase typeConsumerCase) {
+	t.Helper()
+	before := compileTypeConsumer(t, node, compiler, consumer)
+	if testCase.identity == "" {
+		if len(before) != 0 {
+			t.Fatalf("neighbor fixture does not compile: %v", before)
+		}
+		return
+	}
+	if len(before) == 0 {
+		t.Fatal("fixture compiles without its type dependency")
+	}
+	for path, source := range testCase.install {
+		writeScript(t, filepath.Join(consumer, "node_modules", path), source)
+	}
+	if after := compileTypeConsumer(t, node, compiler, consumer); len(after) != 0 {
+		t.Fatalf("fixture does not compile with %s installed: %v", testCase.identity, after)
 	}
 }
 

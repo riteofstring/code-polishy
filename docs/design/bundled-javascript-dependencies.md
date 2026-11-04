@@ -47,6 +47,21 @@ every loader form in the supported model names a literal specifier and that each
 other use of a loader name fails verification. Unsupported forms block the
 allowance; they never pass silently as clean coverage.
 
+Every reference keeps its category, resolution origin, and specifier kind
+through resolution and ends in exactly one outcome: a resolved local artifact,
+an identified external package, or an unsupported result. The categories are
+CommonJS loader calls, ESM static and dynamic imports, TypeScript module
+imports, type-reference directives, and reference-path directives.
+
+- Module references resolve from their own file. Relative specifiers use the
+  runtime or TypeScript resolver for that file; package names resolve as
+  self-imports or external packages; Node built-ins name no package, except
+  `@types/node` and the matching package identities for TypeScript artifacts.
+  URL, absolute-path, `#` import, and other specifiers are unsupported.
+- Type-reference directives must name a type package, which counts with its
+  `@types` counterpart. They never resolve as module paths.
+- Reference-path directives must name a relative file.
+
 Runtime artifacts support static imports and re-exports and literal dynamic
 imports. Every occurrence of the loader names `require` and `getBuiltinModule`,
 as an identifier or a string literal, is classified into one category,
@@ -54,11 +69,13 @@ regardless of binding. Classification first removes harmless wrappers:
 parentheses and TypeScript `as`, `satisfies`, non-null, and type assertions. A
 computed property name with a literal is a key like any other.
 
-- Loader calls: a call of `require`, `require.resolve`, or a `require` or
-  `getBuiltinModule` member, named by an identifier or literal key, with a
-  string literal specifier. The specifier joins the closure; runtime imports of
-  `module` or `node:module` fail, which covers `createRequire` and the Module
-  class. A non-literal specifier fails.
+- Loader calls: a call of `require`, `require.resolve`, `module.require`, or a
+  `getBuiltinModule` binding or member, named by an identifier or literal key,
+  with a string literal specifier. A `require` member call resolves from the
+  current module only when its receiver is `module`; any other receiver, such as
+  `module.parent`, has an unknown origin and fails. `getBuiltinModule` must name
+  a Node built-in. Runtime imports of `module` or `node:module` fail, which
+  covers `createRequire` and the Module class. A non-literal specifier fails.
 - Ordinary uses: declarations, labels, bindings that reuse the loader name, such
   as `import { getBuiltinModule }` or `const { require } = module`, object
   literal keys, `typeof`, `require.main` and `require.cache` reads, type
@@ -86,10 +103,11 @@ unresolved local imports fail verification. Export patterns, `browser`,
 `typesVersions`, and `directories.bin` remain unsupported rather than silently
 losing a possible consumer entry. File, import, byte, and process limits bound
 analysis. The reader does not execute repository code, build artifacts, or
-install packages. Tests compare each loader category, wrapper combinations, package layouts,
-and representative tsc, esbuild, rollup, and webpack output with Node execution
-or TypeScript compilation of an installed consumer, and state the expected
-verifier outcome for each case, including conservative rejections.
+install packages. Tests cover a matrix of reference forms, resolution origins,
+and specifier kinds, each loader category, wrapper combinations, package
+layouts, and representative tsc, esbuild, rollup, and webpack output with Node
+execution or TypeScript compilation of an installed consumer, and state the
+expected verifier outcome for each case, including conservative rejections.
 
 The feature is complete when every documented category agrees with consumers in
 those tests. A finding must name the documented promise it violates; support

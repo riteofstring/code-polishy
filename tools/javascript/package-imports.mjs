@@ -51,6 +51,8 @@ const TYPE_RESOLUTIONS = [
     undefined,
   ],
 ];
+const RELATIVE_SPECIFIER = /^\.\.?(?:\/|$)/;
+const URL_SPECIFIER = /^[A-Za-z][A-Za-z0-9+.-]*:/;
 const NODE_LOADER_MODULES = new Set(["module", "node:module"]);
 const LOADER_NAMES = new Set(["require", "getBuiltinModule"]);
 const REQUIRE_PROPERTIES = new Set(["main", "cache"]);
@@ -338,49 +340,93 @@ function typesCounterpart(name) {
   return `@types/${name.startsWith("@") ? name.slice(1).replace("/", "__") : name}`;
 }
 
-function typeIdentities(path, specifier) {
-  if (!TYPE_EXTENSIONS.has(extname(path))) return [];
-  const builtin = isBuiltin(specifier);
-  const identities = builtin ? ["@types/node"] : [];
-  if (specifier.startsWith("node:")) return identities;
-  const name = builtin ? specifier.split("/")[0] : specifiedPackage(specifier);
-  return name === ""
-    ? identities
-    : [...identities, name, typesCounterpart(name)];
+function specifierKind(specifier) {
+  if (RELATIVE_SPECIFIER.test(specifier)) return "relative";
+  if (isBuiltin(specifier)) return "builtin";
+  if (!URL_SPECIFIER.test(specifier) && specifiedPackage(specifier) !== "")
+    return "package";
+  return "unsupported";
 }
 
-function resolvedReference(state, path, specifier, reference) {
-  if (specifier.startsWith("."))
-    return localArtifact(state, path, specifier, reference);
-  if (/^[/#]/.test(specifier))
-    throw new Error(
-      `published import ${JSON.stringify(specifier)} needs explicit artifact resolution`,
-    );
+function builtinTypePackages(specifier) {
+  if (specifier.startsWith("node:")) return ["@types/node"];
+  const name = specifier.split("/")[0];
+  return ["@types/node", name, typesCounterpart(name)];
+}
+
+function packageTarget(state, path, specifier) {
   const self = selfSubpath(state, specifier);
-  return self === null ? null : selfArtifact(state, path, self);
+  if (self !== null) return { resolved: selfArtifact(state, path, self) };
+  const name = specifiedPackage(specifier);
+  const types = TYPE_EXTENSIONS.has(extname(path))
+    ? [typesCounterpart(name)]
+    : [];
+  return { resolved: "", packages: [name, ...types] };
+}
+
+function moduleTarget(state, path, specifier) {
+  const kind = specifierKind(specifier);
+  if (kind === "relative")
+    return { resolved: localArtifact(state, path, specifier, false) };
+  if (kind === "builtin")
+    return {
+      resolved: "",
+      packages: TYPE_EXTENSIONS.has(extname(path))
+        ? ["", ...builtinTypePackages(specifier)]
+        : [""],
+    };
+  if (kind === "package") return packageTarget(state, path, specifier);
+  throw new Error(
+    `published import ${JSON.stringify(specifier)} is not a relative path, Node built-in, or package name`,
+  );
+}
+
+function typeReferenceTarget(specifier) {
+  const name =
+    specifiedPackage(specifier) ||
+    (isBuiltin(specifier) ? specifier.split("/")[0] : "");
+  if (name !== specifier || URL_SPECIFIER.test(specifier))
+    throw new Error(
+      `type reference ${JSON.stringify(specifier)} must name a type package`,
+    );
+  return { resolved: "", packages: [name, typesCounterpart(name)] };
+}
+
+function fileTarget(state, path, specifier) {
+  if (specifier.startsWith("/") || URL_SPECIFIER.test(specifier))
+    throw new Error(
+      `reference path ${JSON.stringify(specifier)} must name a relative file`,
+    );
+  const relative = RELATIVE_SPECIFIER.test(specifier)
+    ? specifier
+    : `./${specifier}`;
+  return { resolved: localArtifact(state, path, relative, true) };
+}
+
+function referenceTarget(state, path, reference) {
+  if (reference.category === "type")
+    return typeReferenceTarget(reference.specifier);
+  if (reference.category === "file")
+    return fileTarget(state, path, reference.specifier);
+  return moduleTarget(state, path, reference.specifier);
 }
 
 function artifactReference(state, source, reference, position, kind) {
-  const { specifier, file = false } = reference;
+  const { specifier } = reference;
   const path = source.fileName;
   const location = source.getLineAndCharacterOfPosition(position);
   rejectLoaderModule(path, specifier, kind);
-  const local = resolvedReference(state, path, specifier, file);
-  const resolved = local ?? "";
-  const fact = {
-    path,
-    line: location.line + 1,
-    column: location.character + 1,
-    specifier,
-    resolved,
-    package: specifiedPackage(specifier),
-    kind,
-  };
-  state.imports.push(fact);
-  const identities = local === null ? typeIdentities(path, specifier) : [];
-  for (const identity of new Set(identities))
-    if (identity !== fact.package)
-      state.imports.push({ ...fact, package: identity });
+  const { resolved, packages = [""] } = referenceTarget(state, path, reference);
+  for (const identity of new Set(packages))
+    state.imports.push({
+      path,
+      line: location.line + 1,
+      column: location.character + 1,
+      specifier,
+      resolved,
+      package: identity,
+      kind,
+    });
   if (state.imports.length > MAXIMUM_IMPORTS)
     throw new Error(`published imports exceed ${MAXIMUM_IMPORTS} facts`);
 }
@@ -426,31 +472,22 @@ function readArtifact(state, path) {
     artifactReference(
       state,
       source,
-      { specifier: node.text },
+      { category: "module", specifier: node.text },
       node.getStart(source),
       kind,
     );
-  for (const directive of source.referencedFiles)
-    artifactReference(
-      state,
-      source,
-      {
-        specifier: directive.fileName.startsWith(".")
-          ? directive.fileName
-          : `./${directive.fileName}`,
-        file: true,
-      },
-      directive.pos,
-      "type-only",
-    );
-  for (const directive of source.typeReferenceDirectives)
-    artifactReference(
-      state,
-      source,
-      { specifier: directive.fileName },
-      directive.pos,
-      "type-only",
-    );
+  for (const [category, directives] of [
+    ["file", source.referencedFiles],
+    ["type", source.typeReferenceDirectives],
+  ])
+    for (const directive of directives)
+      artifactReference(
+        state,
+        source,
+        { category, specifier: directive.fileName },
+        directive.pos,
+        "type-only",
+      );
 }
 
 function packagePath(state, entry) {
@@ -589,14 +626,46 @@ function loaderRole(node) {
   return ORDINARY;
 }
 
+function unwrappedExpression(node) {
+  let inner = node;
+  while (EXPRESSION_WRAPPERS.has(inner.kind)) inner = inner.expression;
+  return inner;
+}
+
+function memberName(callee) {
+  if (typescript.isPropertyAccessExpression(callee)) return callee.name.text;
+  return unwrappedExpression(callee.argumentExpression).text;
+}
+
+function loaderTarget(callee, specifier) {
+  const name = typescript.isIdentifier(callee)
+    ? callee.text
+    : memberName(callee);
+  const receiver = typescript.isIdentifier(callee)
+    ? null
+    : unwrappedExpression(callee.expression);
+  if (name === "getBuiltinModule" && !isBuiltin(specifier))
+    throw new Error("getBuiltinModule must name a Node built-in");
+  if (
+    name === "require" &&
+    receiver !== null &&
+    !(typescript.isIdentifier(receiver) && receiver.text === "module")
+  )
+    throw new Error(
+      "a require member call on a receiver other than module has an unknown resolution origin",
+    );
+}
+
 function loaderCall(node, specifiers) {
-  if (!typescript.isStringLiteral(node.arguments[0] ?? node))
+  const [argument] = node.arguments;
+  if (!typescript.isStringLiteral(argument ?? node))
     throw new Error("published artifact has a computed loader call");
+  loaderTarget(unwrappedExpression(node.expression), argument.text);
   if (
     !typescript.isIdentifier(node.expression) ||
     node.expression.text !== "require"
   )
-    specifiers.push({ node: node.arguments[0], kind: "runtime" });
+    specifiers.push({ node: argument, kind: "runtime" });
 }
 
 function loaderSpecifiers(source) {

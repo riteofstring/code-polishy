@@ -343,8 +343,10 @@ resolver, public type imports with TypeScript's resolvers, and imports of the
 package's own name, parses extensionless files as JavaScript, and refuses the
 allowance if that closure still imports a bundled package. This is a bounded
 static check of supported loader forms: imports, literal dynamic imports, and
-literal calls of `require`, `require.resolve`, `.require`, and
-`getBuiltinModule`. Any other use of `require` or `getBuiltinModule`, runtime
+literal calls of `require`, `require.resolve`, `module.require`, and
+`getBuiltinModule` for Node built-ins. Any other use of `require` or
+`getBuiltinModule`, `require` calls on other receivers, URL, absolute-path, and
+`#` import specifiers, type references that do not name a package, runtime
 imports of the Node `module` API, computed loader calls, missing artifacts,
 unresolved local imports, escaping paths, artifacts other than JavaScript,
 TypeScript, JSON, or CSS, and unreadable output block verification. Export
