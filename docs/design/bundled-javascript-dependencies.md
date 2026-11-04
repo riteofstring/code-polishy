@@ -25,14 +25,22 @@ Runtime and type resolution stay distinct because consumers select different
 files for them. Local runtime imports resolve with Node's own CommonJS resolver,
 which reads package metadata without executing code, so extension order,
 directory manifests, and index files match Node. ESM consumers accept only exact
-paths, a subset of those results. Local imports from TypeScript artifacts use
-the sealed TypeScript resolver under Node10, NodeNext ESM and CommonJS, and
-Bundler resolution, and every file any of them selects joins the closure.
-`reference path` directives name files directly. A resolved file outside the
-package fails verification. Imports of the package's own name resolve into
-the same closure: with `exports`, the subpath must be an exact export key whose
-targets are already entries; without `exports`, the subpath resolves as a local
-file from the package root.
+paths, a subset of those results. Runtime imports of the package's own name
+resolve into the same closure: with `exports`, the subpath must be an exact
+export key whose targets are already entries; without `exports`, the subpath
+resolves as a local file from the package root. TypeScript sources cannot run
+from an installed package, so reaching one at runtime fails verification.
+
+The public declaration closure is what TypeScript itself builds. One sealed
+TypeScript Program per consumer resolution mode (Node10, NodeNext ESM and
+CommonJS, and Bundler) starts from the type entries and a virtual consumer file
+importing every library entry and the package directory. A controlled compiler
+host serves only published package files, excluding nested `node_modules`, and
+presents the package under `node_modules/<name>`, so entry selection,
+extension substitution, directory manifests, reference paths, and self-imports
+resolve as they do for an installed consumer. Every file any Program loads joins
+the closure; an unresolved relative import fails verification, and an
+unresolved package import names that external package.
 Private declaration files outside that closure do not impose consumer needs.
 Extensionless files are parsed as JavaScript because Node executes them; only
 JSON and CSS remain opaque. A remaining import of a declared bundled name blocks
@@ -65,9 +73,12 @@ imports, type-reference directives, and reference-path directives.
 Runtime artifacts support static imports and re-exports and literal dynamic
 imports. Every occurrence of the loader names `require` and `getBuiltinModule`,
 as an identifier or a string literal, is classified into one category,
-regardless of binding. Classification first removes harmless wrappers:
-parentheses and TypeScript `as`, `satisfies`, non-null, and type assertions. A
-computed property name with a literal is a key like any other.
+regardless of binding. The sealed typescript-eslint parser and its scope
+manager decide whether an identifier is a value read, a binding write, or only a
+name, so declarations, defaults, and shorthand properties follow the language
+rather than a local table. Parentheses do not survive parsing, optional chains
+are unwrapped, and a computed property name with a literal is a key like any
+other.
 
 - Loader calls: a call of `require`, `require.resolve`, `module.require`, or a
   `getBuiltinModule` binding or member, named by an identifier or literal key,

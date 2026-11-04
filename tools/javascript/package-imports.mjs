@@ -5,94 +5,19 @@ import { normalize } from "node:path/posix";
 
 import typescript from "typescript";
 
-import {
-  containedResolutionHost,
-  sourceSpecifiers,
-  specifiedPackage,
-} from "./imports.mjs";
+import { sourceSpecifiers, specifiedPackage } from "./imports.mjs";
+import { loaderSpecifiers } from "./package-loaders.mjs";
+import { typeClosure } from "./package-types.mjs";
 import { fail, insideRoot, readTargetFile, unsupported } from "./protocol.mjs";
 
 const MAXIMUM_FILES = 4096;
 const MAXIMUM_IMPORTS = 20000;
-const CODE_EXTENSIONS = new Set([
-  ".js",
-  ".mjs",
-  ".cjs",
-  ".ts",
-  ".mts",
-  ".cts",
-  ".jsx",
-  ".tsx",
-]);
+const RUNTIME_EXTENSIONS = new Set(["", ".js", ".mjs", ".cjs"]);
 const OPAQUE_EXTENSIONS = new Set([".json", ".css"]);
 const TYPE_EXTENSIONS = new Set([".ts", ".mts", ".cts", ".tsx"]);
-const DECLARATION_FILE = /\.d\.[cm]?ts$/;
-const TYPE_RESOLUTIONS = [
-  [{ moduleResolution: typescript.ModuleResolutionKind.Node10 }, undefined],
-  [
-    {
-      module: typescript.ModuleKind.NodeNext,
-      moduleResolution: typescript.ModuleResolutionKind.NodeNext,
-    },
-    typescript.ModuleKind.ESNext,
-  ],
-  [
-    {
-      module: typescript.ModuleKind.NodeNext,
-      moduleResolution: typescript.ModuleResolutionKind.NodeNext,
-    },
-    typescript.ModuleKind.CommonJS,
-  ],
-  [
-    {
-      module: typescript.ModuleKind.ESNext,
-      moduleResolution: typescript.ModuleResolutionKind.Bundler,
-    },
-    undefined,
-  ],
-];
 const RELATIVE_SPECIFIER = /^\.\.?(?:\/|$)/;
 const URL_SPECIFIER = /^[A-Za-z][A-Za-z0-9+.-]*:/;
 const NODE_LOADER_MODULES = new Set(["module", "node:module"]);
-const LOADER_NAMES = new Set(["require", "getBuiltinModule"]);
-const REQUIRE_PROPERTIES = new Set(["main", "cache"]);
-const ORDINARY = "ordinary";
-const UNSUPPORTED = "unsupported";
-const EXPRESSION_WRAPPERS = new Set([
-  typescript.SyntaxKind.ParenthesizedExpression,
-  typescript.SyntaxKind.AsExpression,
-  typescript.SyntaxKind.SatisfiesExpression,
-  typescript.SyntaxKind.NonNullExpression,
-  typescript.SyntaxKind.TypeAssertionExpression,
-]);
-const NAME_DECLARATIONS = new Set([
-  typescript.SyntaxKind.Parameter,
-  typescript.SyntaxKind.VariableDeclaration,
-  typescript.SyntaxKind.FunctionDeclaration,
-  typescript.SyntaxKind.FunctionExpression,
-  typescript.SyntaxKind.ClassDeclaration,
-  typescript.SyntaxKind.ClassExpression,
-  typescript.SyntaxKind.PropertyDeclaration,
-  typescript.SyntaxKind.MethodDeclaration,
-  typescript.SyntaxKind.GetAccessor,
-  typescript.SyntaxKind.SetAccessor,
-  typescript.SyntaxKind.PropertySignature,
-  typescript.SyntaxKind.MethodSignature,
-  typescript.SyntaxKind.EnumMember,
-  typescript.SyntaxKind.ImportClause,
-  typescript.SyntaxKind.NamespaceImport,
-  typescript.SyntaxKind.ImportEqualsDeclaration,
-  typescript.SyntaxKind.InterfaceDeclaration,
-  typescript.SyntaxKind.TypeAliasDeclaration,
-  typescript.SyntaxKind.TypeParameter,
-  typescript.SyntaxKind.ModuleDeclaration,
-  typescript.SyntaxKind.JsxAttribute,
-]);
-const LABEL_STATEMENTS = new Set([
-  typescript.SyntaxKind.LabeledStatement,
-  typescript.SyntaxKind.BreakStatement,
-  typescript.SyntaxKind.ContinueStatement,
-]);
 
 function exportTargets(value, targets) {
   if (value === null) return;
@@ -209,58 +134,17 @@ function missingArtifact(from, specifier) {
   );
 }
 
-function existingFile(state, candidates) {
-  return candidates.find((path) => {
-    const info = optionalArtifactInfo(state.request.root, path);
-    return info && !info.isDirectory();
-  });
-}
-
-function runtimeArtifact(state, from, specifier) {
-  let target;
+function optionalArtifactInfo(root, path) {
   try {
-    target = createRequire(join(state.request.root, from)).resolve(specifier);
-  } catch {
-    throw missingArtifact(from, specifier);
+    return lstatSync(join(root, path));
+  } catch (error) {
+    if (error.code === "ENOENT" || error.code === "ENOTDIR") return null;
+    throw error;
   }
-  return enqueue(state, packageArtifact(state, target));
 }
 
-function referencedArtifact(state, from, specifier) {
-  const candidate = localCandidate(from, specifier);
-  const file = existingFile(state, [
-    candidate,
-    `${candidate}.ts`,
-    `${candidate}.tsx`,
-    `${candidate}.d.ts`,
-  ]);
-  if (file) return enqueue(state, file);
-  throw missingArtifact(from, specifier);
-}
-
-function typeResolutions(state, from, specifier) {
-  const host = containedResolutionHost(state.request.root);
-  const containing = join(state.request.root, from);
-  const resolved = new Set();
-  for (const [options, mode] of TYPE_RESOLUTIONS) {
-    const target = typescript.resolveModuleName(
-      specifier,
-      containing,
-      options,
-      host,
-      undefined,
-      undefined,
-      mode,
-    ).resolvedModule;
-    if (target) resolved.add(packageArtifact(state, target.resolvedFileName));
-  }
-  return resolved;
-}
-
-function typeArtifact(state, from, specifier) {
-  const resolved = typeResolutions(state, from, specifier);
-  if (resolved.size === 0) throw missingArtifact(from, specifier);
-  return [...resolved].map((path) => enqueue(state, path))[0];
+function packagePath(state, entry) {
+  return normalize(join(state.directory, entry).split("\\").join("/"));
 }
 
 function packageArtifact(state, absolute) {
@@ -273,11 +157,14 @@ function packageArtifact(state, absolute) {
   return packagePath(state, relative);
 }
 
-function localArtifact(state, from, specifier, reference) {
-  if (reference) return referencedArtifact(state, from, specifier);
-  if (TYPE_EXTENSIONS.has(extname(from)))
-    return typeArtifact(state, from, specifier);
-  return runtimeArtifact(state, from, specifier);
+function runtimeArtifact(state, from, specifier) {
+  let target;
+  try {
+    target = createRequire(join(state.request.root, from)).resolve(specifier);
+  } catch {
+    throw missingArtifact(from, specifier);
+  }
+  return enqueue(state, packageArtifact(state, target));
 }
 
 function selfSubpath(state, specifier) {
@@ -307,32 +194,11 @@ function selfArtifact(state, from, subpath) {
     return "";
   }
   if (subpath === ".") return "";
-  return localArtifact(
+  return runtimeArtifact(
     state,
     packagePath(state, basename(from)),
     `.${subpath.slice(1)}`,
-    false,
   );
-}
-
-function optionalArtifactInfo(root, path) {
-  try {
-    return lstatSync(join(root, path));
-  } catch (error) {
-    if (error.code === "ENOENT" || error.code === "ENOTDIR") return null;
-    throw error;
-  }
-}
-
-function rejectLoaderModule(path, specifier, kind) {
-  if (
-    NODE_LOADER_MODULES.has(specifier) &&
-    kind !== "type-only" &&
-    !DECLARATION_FILE.test(path)
-  )
-    throw new Error(
-      "published artifact imports the Node module loader API; its loaded packages cannot be verified",
-    );
 }
 
 function typesCounterpart(name) {
@@ -345,95 +211,52 @@ function specifierKind(specifier) {
   if (isBuiltin(specifier)) return "builtin";
   if (!URL_SPECIFIER.test(specifier) && specifiedPackage(specifier) !== "")
     return "package";
-  return "unsupported";
-}
-
-function builtinTypePackages(specifier) {
-  if (specifier.startsWith("node:")) return ["@types/node"];
-  const name = specifier.split("/")[0];
-  return ["@types/node", name, typesCounterpart(name)];
-}
-
-function packageTarget(state, path, specifier) {
-  const self = selfSubpath(state, specifier);
-  if (self !== null) return { resolved: selfArtifact(state, path, self) };
-  const name = specifiedPackage(specifier);
-  const types = TYPE_EXTENSIONS.has(extname(path))
-    ? [typesCounterpart(name)]
-    : [];
-  return { resolved: "", packages: [name, ...types] };
-}
-
-function moduleTarget(state, path, specifier) {
-  const kind = specifierKind(specifier);
-  if (kind === "relative")
-    return { resolved: localArtifact(state, path, specifier, false) };
-  if (kind === "builtin")
-    return {
-      resolved: "",
-      packages: TYPE_EXTENSIONS.has(extname(path))
-        ? ["", ...builtinTypePackages(specifier)]
-        : [""],
-    };
-  if (kind === "package") return packageTarget(state, path, specifier);
   throw new Error(
     `published import ${JSON.stringify(specifier)} is not a relative path, Node built-in, or package name`,
   );
 }
 
-function typeReferenceTarget(specifier) {
-  const name =
-    specifiedPackage(specifier) ||
-    (isBuiltin(specifier) ? specifier.split("/")[0] : "");
-  if (name !== specifier || URL_SPECIFIER.test(specifier))
-    throw new Error(
-      `type reference ${JSON.stringify(specifier)} must name a type package`,
-    );
-  return { resolved: "", packages: [name, typesCounterpart(name)] };
+function builtinTypePackages(specifier) {
+  if (specifier.startsWith("node:")) return ["", "@types/node"];
+  const name = specifier.split("/")[0];
+  return ["", "@types/node", name, typesCounterpart(name)];
 }
 
-function fileTarget(state, path, specifier) {
-  if (specifier.startsWith("/") || URL_SPECIFIER.test(specifier))
-    throw new Error(
-      `reference path ${JSON.stringify(specifier)} must name a relative file`,
-    );
-  const relative = RELATIVE_SPECIFIER.test(specifier)
-    ? specifier
-    : `./${specifier}`;
-  return { resolved: localArtifact(state, path, relative, true) };
-}
-
-function referenceTarget(state, path, reference) {
-  if (reference.category === "type")
-    return typeReferenceTarget(reference.specifier);
-  if (reference.category === "file")
-    return fileTarget(state, path, reference.specifier);
-  return moduleTarget(state, path, reference.specifier);
-}
-
-function artifactReference(state, source, reference, position, kind) {
-  const { specifier } = reference;
-  const path = source.fileName;
+function recordFacts(state, source, position, reference) {
   const location = source.getLineAndCharacterOfPosition(position);
-  rejectLoaderModule(path, specifier, kind);
-  const { resolved, packages = [""] } = referenceTarget(state, path, reference);
-  for (const identity of new Set(packages))
+  for (const identity of new Set(reference.packages ?? [""]))
     state.imports.push({
-      path,
+      path: reference.path,
       line: location.line + 1,
       column: location.character + 1,
-      specifier,
-      resolved,
+      specifier: reference.specifier,
+      resolved: reference.resolved ?? "",
       package: identity,
-      kind,
+      kind: reference.kind,
     });
   if (state.imports.length > MAXIMUM_IMPORTS)
     throw new Error(`published imports exceed ${MAXIMUM_IMPORTS} facts`);
 }
 
-function parsedArtifact(path, text) {
+function runtimeTarget(state, path, specifier) {
+  const kind = specifierKind(specifier);
+  if (NODE_LOADER_MODULES.has(specifier))
+    throw new Error(
+      "published artifact imports the Node module loader API; its loaded packages cannot be verified",
+    );
+  if (kind === "relative")
+    return { resolved: runtimeArtifact(state, path, specifier) };
+  if (kind === "builtin") return {};
+  const self = selfSubpath(state, specifier);
+  if (self !== null) return { resolved: selfArtifact(state, path, self) };
+  return { packages: [specifiedPackage(specifier)] };
+}
+
+function runtimeSource(path, text) {
   const extension = extname(path);
-  if (extension !== "" && !CODE_EXTENSIONS.has(extension))
+  if (TYPE_EXTENSIONS.has(extension))
+    throw new Error("TypeScript source cannot run from a published package");
+  if (!RUNTIME_EXTENSIONS.has(extension))
     throw new Error(
       "published artifact is not JavaScript, TypeScript, JSON, or CSS",
     );
@@ -442,16 +265,27 @@ function parsedArtifact(path, text) {
     text,
     typescript.ScriptTarget.Latest,
     true,
-    extension === "" ? typescript.ScriptKind.JS : undefined,
+    typescript.ScriptKind.JS,
   );
   if (source.parseDiagnostics.length > 0)
-    throw new Error(
-      "published artifact has invalid JavaScript or TypeScript syntax",
-    );
+    throw new Error("published artifact has invalid JavaScript syntax");
   return source;
 }
 
-function readArtifact(state, path) {
+function runtimeReferences(path, text, source) {
+  const { specifiers, computed } = sourceSpecifiers(source);
+  if (computed.length > 0)
+    throw new Error("published artifact has a computed dynamic import");
+  const references = new Map();
+  for (const { node, kind } of specifiers)
+    references.set(node.getStart(source), { text: node.text, kind });
+  for (const loaded of loaderSpecifiers(path, text))
+    if (!references.has(loaded.position))
+      references.set(loaded.position, loaded);
+  return references;
+}
+
+function readRuntimeArtifact(state, path) {
   const text = readTargetFile(
     join(state.request.root, path),
     path,
@@ -462,36 +296,125 @@ function readArtifact(state, path) {
     state.analyzed.push(path);
     return;
   }
-  const source = parsedArtifact(path, text);
+  const source = runtimeSource(path, text);
+  const references = runtimeReferences(path, text, source);
+  state.analyzed.push(path);
+  for (const [position, { text: specifier, kind }] of references)
+    recordFacts(state, source, position, {
+      path,
+      specifier,
+      kind,
+      ...runtimeTarget(state, path, specifier),
+    });
+}
+
+function typeImportTarget(state, specifier, targets) {
+  const kind = specifierKind(specifier);
+  if (targets !== undefined)
+    return { resolved: packageArtifact(state, [...targets][0]) };
+  if (kind === "relative") throw new Error("has no contained artifact");
+  if (kind === "builtin") return { packages: builtinTypePackages(specifier) };
+  const name = specifiedPackage(specifier);
+  return { packages: [name, typesCounterpart(name)] };
+}
+
+function typeReferencePackages(specifier) {
+  const name =
+    specifiedPackage(specifier) ||
+    (isBuiltin(specifier) ? specifier.split("/")[0] : "");
+  if (name !== specifier || URL_SPECIFIER.test(specifier))
+    throw new Error(
+      `type reference ${JSON.stringify(specifier)} must name a type package`,
+    );
+  return [name, typesCounterpart(name)];
+}
+
+function referencedFile(state, path, specifier) {
+  if (specifier.startsWith("/") || URL_SPECIFIER.test(specifier))
+    throw new Error(
+      `reference path ${JSON.stringify(specifier)} must name a relative file`,
+    );
+  const candidate = localCandidate(path, specifier);
+  const file = [
+    candidate,
+    `${candidate}.ts`,
+    `${candidate}.tsx`,
+    `${candidate}.d.ts`,
+  ].find((option) => {
+    const info = optionalArtifactInfo(state.request.root, option);
+    return info && !info.isDirectory();
+  });
+  if (!file) throw missingArtifact(path, specifier);
+  return file;
+}
+
+function typeDirectives(state, path, source) {
+  for (const directive of source.referencedFiles)
+    recordFacts(state, source, directive.pos, {
+      path,
+      specifier: directive.fileName,
+      kind: "type-only",
+      resolved: referencedFile(state, path, directive.fileName),
+    });
+  for (const directive of source.typeReferenceDirectives)
+    recordFacts(state, source, directive.pos, {
+      path,
+      specifier: directive.fileName,
+      kind: "type-only",
+      packages: typeReferencePackages(directive.fileName),
+    });
+}
+
+function readTypeArtifact(state, path, { source, resolutions }) {
+  if (
+    readTargetFile(join(state.request.root, path), path, state.unsupported) ===
+    null
+  )
+    return;
+  if (source.parseDiagnostics.length > 0)
+    throw new Error("published artifact has invalid TypeScript syntax");
   const { specifiers, computed } = sourceSpecifiers(source);
   if (computed.length > 0)
     throw new Error("published artifact has a computed dynamic import");
-  specifiers.push(...loaderSpecifiers(source));
   state.analyzed.push(path);
-  for (const { node, kind } of specifiers)
-    artifactReference(
-      state,
-      source,
-      { category: "module", specifier: node.text },
-      node.getStart(source),
-      kind,
-    );
-  for (const [category, directives] of [
-    ["file", source.referencedFiles],
-    ["type", source.typeReferenceDirectives],
-  ])
-    for (const directive of directives)
-      artifactReference(
-        state,
-        source,
-        { category, specifier: directive.fileName },
-        directive.pos,
-        "type-only",
+  for (const { node, kind } of specifiers) {
+    const position = node.getStart(source);
+    let target;
+    try {
+      target = typeImportTarget(state, node.text, resolutions.get(position));
+    } catch (error) {
+      throw new Error(
+        `published import ${JSON.stringify(node.text)} from ${path} ${error.message}`,
       );
+    }
+    recordFacts(state, source, position, {
+      path,
+      specifier: node.text,
+      kind,
+      ...target,
+    });
+  }
+  typeDirectives(state, path, source);
 }
 
-function packagePath(state, entry) {
-  return normalize(join(state.directory, entry).split("\\").join("/"));
+function readTypeArtifacts(state, roots, entries) {
+  const files = typeClosure(
+    state.packageRoot,
+    state.manifest.name,
+    roots.map((path) => realpathSync(join(state.request.root, path))),
+    entries,
+  );
+  if (files.size + state.pending.size > MAXIMUM_FILES)
+    throw new Error(`published artifact graph exceeds ${MAXIMUM_FILES} files`);
+  for (const [fileName, record] of files) {
+    const path = packageArtifact(state, fileName);
+    try {
+      containedArtifact(state, path);
+      readTypeArtifact(state, path, record);
+    } catch (error) {
+      state.unsupported.push(unsupported(path, error.message));
+    }
+  }
 }
 
 function enqueueEntry(state, entry) {
@@ -511,177 +434,19 @@ function enqueueRuntimeDirectory(state, manifest) {
   enqueue(state, packageArtifact(state, target));
 }
 
-function enqueuePackageEntries(state, manifest) {
+function packageRoots(state, manifest) {
   const { entries, executables } = packageEntries(manifest);
-  for (const entry of [...entries, ...executables]) enqueueEntry(state, entry);
+  const typed = (entry) => TYPE_EXTENSIONS.has(extname(entry));
+  for (const entry of [
+    ...entries.filter((entry) => !typed(entry)),
+    ...executables,
+  ])
+    enqueueEntry(state, entry);
   enqueueRuntimeDirectory(state, manifest);
-  for (const entry of [...entries, "./"])
-    for (const path of typeResolutions(state, state.manifestPath, entry))
-      enqueue(state, path);
-}
-
-function unwrapped(node) {
-  let outer = node;
-  while (
-    EXPRESSION_WRAPPERS.has(outer.parent.kind) &&
-    outer.parent.expression === outer
-  )
-    outer = outer.parent;
-  return outer;
-}
-
-function calledBy(node) {
-  const outer = unwrapped(node);
-  const parent = outer.parent;
-  return typescript.isCallExpression(parent) && parent.expression === outer
-    ? parent
-    : null;
-}
-
-function memberKeyRole(parent, key) {
-  if (
-    (typescript.isPropertyAccessExpression(parent) && parent.name === key) ||
-    (typescript.isElementAccessExpression(parent) &&
-      parent.argumentExpression === key)
-  )
-    return calledBy(parent) ?? UNSUPPORTED;
-  return null;
-}
-
-function specifierKeyRole(parent, key) {
-  if (typescript.isExportSpecifier(parent)) return UNSUPPORTED;
-  if (typescript.isImportSpecifier(parent))
-    return parent.propertyName === key ? UNSUPPORTED : ORDINARY;
-  if (typescript.isBindingElement(parent)) {
-    if (parent.propertyName === key) return UNSUPPORTED;
-    return parent.name === key ? ORDINARY : null;
-  }
-  return null;
-}
-
-function objectKeyRole(parent, key) {
-  if (typescript.isShorthandPropertyAssignment(parent) && parent.name === key)
-    return typescript.isAssignmentTarget(parent.parent)
-      ? ORDINARY
-      : UNSUPPORTED;
-  if (typescript.isPropertyAssignment(parent) && parent.name === key)
-    return typescript.isAssignmentTarget(parent.parent)
-      ? UNSUPPORTED
-      : ORDINARY;
-  return null;
-}
-
-function declarationKeyRole(parent, key) {
-  if (NAME_DECLARATIONS.has(parent.kind) && parent.name === key)
-    return ORDINARY;
-  if (LABEL_STATEMENTS.has(parent.kind) && parent.label === key)
-    return ORDINARY;
-  return null;
-}
-
-function keyRole(key) {
-  const parent = key.parent;
-  return (
-    memberKeyRole(parent, key) ??
-    specifierKeyRole(parent, key) ??
-    objectKeyRole(parent, key) ??
-    declarationKeyRole(parent, key)
-  );
-}
-
-function valueRole(identifier) {
-  const call = calledBy(identifier);
-  if (call) return call;
-  const outer = unwrapped(identifier);
-  const parent = outer.parent;
-  if (typescript.isTypeOfExpression(parent)) return ORDINARY;
-  if (
-    identifier.text !== "require" ||
-    !typescript.isPropertyAccessExpression(parent) ||
-    parent.expression !== outer
-  )
-    return UNSUPPORTED;
-  if (REQUIRE_PROPERTIES.has(parent.name.text)) return ORDINARY;
-  return (parent.name.text === "resolve" && calledBy(parent)) || UNSUPPORTED;
-}
-
-function identifierRole(identifier) {
-  if (typescript.isPartOfTypeNode(identifier)) return ORDINARY;
-  return keyRole(identifier) ?? valueRole(identifier);
-}
-
-function stringRole(literal) {
-  const outer = unwrapped(literal);
-  const key = typescript.isComputedPropertyName(outer.parent)
-    ? outer.parent
-    : outer;
-  return keyRole(key) ?? ORDINARY;
-}
-
-function loaderRole(node) {
-  if (typescript.isIdentifier(node) && LOADER_NAMES.has(node.text))
-    return identifierRole(node);
-  if (typescript.isStringLiteralLike(node) && LOADER_NAMES.has(node.text))
-    return stringRole(node);
-  return ORDINARY;
-}
-
-function unwrappedExpression(node) {
-  let inner = node;
-  while (EXPRESSION_WRAPPERS.has(inner.kind)) inner = inner.expression;
-  return inner;
-}
-
-function memberName(callee) {
-  if (typescript.isPropertyAccessExpression(callee)) return callee.name.text;
-  return unwrappedExpression(callee.argumentExpression).text;
-}
-
-function loaderTarget(callee, specifier) {
-  const name = typescript.isIdentifier(callee)
-    ? callee.text
-    : memberName(callee);
-  const receiver = typescript.isIdentifier(callee)
-    ? null
-    : unwrappedExpression(callee.expression);
-  if (name === "getBuiltinModule" && !isBuiltin(specifier))
-    throw new Error("getBuiltinModule must name a Node built-in");
-  if (
-    name === "require" &&
-    receiver !== null &&
-    !(typescript.isIdentifier(receiver) && receiver.text === "module")
-  )
-    throw new Error(
-      "a require member call on a receiver other than module has an unknown resolution origin",
-    );
-}
-
-function loaderCall(node, specifiers) {
-  const [argument] = node.arguments;
-  if (!typescript.isStringLiteral(argument ?? node))
-    throw new Error("published artifact has a computed loader call");
-  loaderTarget(unwrappedExpression(node.expression), argument.text);
-  if (
-    !typescript.isIdentifier(node.expression) ||
-    node.expression.text !== "require"
-  )
-    specifiers.push({ node: argument, kind: "runtime" });
-}
-
-function loaderSpecifiers(source) {
-  const specifiers = [];
-  if (DECLARATION_FILE.test(source.fileName)) return specifiers;
-  const visit = (node) => {
-    const role = loaderRole(node);
-    if (role === UNSUPPORTED)
-      throw new Error(
-        "published artifact uses require or getBuiltinModule outside a supported loader call",
-      );
-    if (role !== ORDINARY) loaderCall(role, specifiers);
-    typescript.forEachChild(node, visit);
-  };
-  visit(source);
-  return specifiers;
+  const roots = entries
+    .filter(typed)
+    .map((entry) => containedArtifact(state, packagePath(state, entry)));
+  return { roots, entries };
 }
 
 export function packageImports(request) {
@@ -711,16 +476,17 @@ export function packageImports(request) {
     if (text === null)
       return { analyzed: [], imports: [], unsupported: state.unsupported };
     state.manifest = JSON.parse(text);
-    enqueuePackageEntries(state, state.manifest);
+    const { roots, entries } = packageRoots(state, state.manifest);
     state.analyzed.push(manifestPath);
     for (const path of state.pending) {
       if (path === manifestPath) continue;
       try {
-        readArtifact(state, path);
+        readRuntimeArtifact(state, path);
       } catch (error) {
         state.unsupported.push(unsupported(path, error.message));
       }
     }
+    readTypeArtifacts(state, roots, entries);
   } catch (error) {
     state.unsupported.push(unsupported(manifestPath, error.message));
   }
