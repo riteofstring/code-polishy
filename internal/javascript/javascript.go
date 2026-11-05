@@ -710,7 +710,7 @@ func (bundle Bundle) AuditCommand(root, directory string) (AuditInvocation, erro
 		return AuditInvocation{}, fmt.Errorf("the %s request exceeds the %d byte limit", OperationAudit, maximumRequestBytes)
 	}
 	return AuditInvocation{
-		Argv: []string{node, sealedRunner, "--request-json", string(encoded)}, Cwd: ".",
+		Argv: []string{node, sealedNodeOption, sealedRunner, "--request-json", string(encoded)}, Cwd: ".",
 		SealedEnvironment: true, TimeoutSeconds: int(auditTimeout / time.Second),
 	}, nil
 }

@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -903,12 +904,20 @@ func TestAuditCommandCarriesTheProjectDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(command.Argv) != 4 || command.Argv[2] != "--request-json" || command.Cwd != "." || !command.SealedEnvironment || command.TimeoutSeconds != 900 {
+	last := len(command.Argv) - 1
+	if last < 1 || command.Argv[last-1] != "--request-json" || command.Cwd != "." || !command.SealedEnvironment || command.TimeoutSeconds != 900 {
 		t.Fatalf("audit command = %+v", command)
 	}
 	want := `{"protocolVersion":3,"operation":"audit","root":"/target","directory":"desktop"}`
-	if command.Argv[3] != want {
-		t.Fatalf("unexpected request %q", command.Argv[3])
+	if command.Argv[last] != want {
+		t.Fatalf("unexpected request %q", command.Argv[last])
+	}
+	output, err := exec.CommandContext(t.Context(), command.Argv[0], command.Argv[1:]...).Output()
+	if err != nil {
+		t.Fatalf("audit command did not launch the sealed runner: %v", err)
+	}
+	if _, err := ParseAuditOutput(output); err != nil {
+		t.Fatalf("audit output: %v", err)
 	}
 	if _, err := bundle.AuditCommand("/target", "../elsewhere"); err == nil {
 		t.Fatal("an uncontained project directory was accepted")
