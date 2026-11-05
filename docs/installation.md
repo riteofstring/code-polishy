@@ -619,6 +619,8 @@ Pass the index URL and that digest to `lock` or `upgrade plan`. Releases from
 their tag, so the digest pins the bytes GitHub published, and every later
 download is verified against it. This authenticates acquired bytes; it does not
 attest how each native archive was built.
+GitHub also signs each immutable release; to check that signature
+independently, see GitHub's [release-integrity verification instructions](https://docs.github.com/en/code-security/how-tos/secure-your-supply-chain/secure-your-dependencies/verify-release-integrity).
 
 `lock --index URL --sha256 DIGEST` verifies that the index describes the
 executing installed release and writes this v2 lock without redownloading an

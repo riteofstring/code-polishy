@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.32.2 - 2026-11-05
+
 - Document finding a release index digest by hashing the immutable release's
   index over HTTPS; GitHub CLI is no longer needed to adopt, upgrade or
   release.
