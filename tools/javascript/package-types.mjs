@@ -11,34 +11,38 @@ const BASE_OPTIONS = {
   ignoreDeprecations: "6.0",
 };
 const CONSUMER_MODES = [
-  [
-    {
+  {
+    consumer: "Node10",
+    extension: ".ts",
+    options: {
       module: typescript.ModuleKind.CommonJS,
       moduleResolution: typescript.ModuleResolutionKind.Node10,
     },
-    ".ts",
-  ],
-  [
-    {
+  },
+  {
+    consumer: "NodeNext ESM",
+    extension: ".mts",
+    options: {
       module: typescript.ModuleKind.NodeNext,
       moduleResolution: typescript.ModuleResolutionKind.NodeNext,
     },
-    ".mts",
-  ],
-  [
-    {
+  },
+  {
+    consumer: "NodeNext CommonJS",
+    extension: ".cts",
+    options: {
       module: typescript.ModuleKind.NodeNext,
       moduleResolution: typescript.ModuleResolutionKind.NodeNext,
     },
-    ".cts",
-  ],
-  [
-    {
+  },
+  {
+    consumer: "Bundler",
+    extension: ".ts",
+    options: {
       module: typescript.ModuleKind.ESNext,
       moduleResolution: typescript.ModuleResolutionKind.Bundler,
     },
-    ".ts",
-  ],
+  },
 ];
 
 function publishedPath(packageRoot, path) {
@@ -88,11 +92,15 @@ function typePrograms(packageRoot, entries) {
   const imports = [...entries, "./"]
     .map((entry) => `import type {} from ${JSON.stringify(entry)};\n`)
     .join("");
-  return CONSUMER_MODES.map(([mode, extension]) => {
+  return CONSUMER_MODES.map(({ consumer, extension, options: mode }) => {
     const options = { ...BASE_OPTIONS, ...mode };
     const entry = `${packageRoot}/__published_entries__${extension}`;
     const host = packageHost(options, packageRoot, new Map([[entry, imports]]));
-    return { entry, program: typescript.createProgram([entry], options, host) };
+    return {
+      consumer,
+      entry,
+      program: typescript.createProgram([entry], options, host),
+    };
   });
 }
 
@@ -106,11 +114,11 @@ function resolvedFile(program, file, node) {
   );
 }
 
-function recordResolutions(program, file, resolutions) {
+function recordResolutions(consumer, program, file, resolutions) {
   for (const { node } of sourceSpecifiers(file).specifiers) {
     const position = node.getStart(file);
     const outcomes = resolutions.get(position) ?? [];
-    outcomes.push(resolvedFile(program, file, node));
+    outcomes.push({ consumer, file: resolvedFile(program, file, node) });
     resolutions.set(position, outcomes);
   }
 }
@@ -124,7 +132,10 @@ function recordEntries(program, file, resolvedEntries) {
 export function typeClosure(packageRoot, entries) {
   const files = new Map();
   const resolvedEntries = new Set();
-  for (const { entry, program } of typePrograms(packageRoot, entries)) {
+  for (const { consumer, entry, program } of typePrograms(
+    packageRoot,
+    entries,
+  )) {
     for (const file of program.getSourceFiles()) {
       if (file.fileName === entry) {
         recordEntries(program, file, resolvedEntries);
@@ -135,7 +146,7 @@ export function typeClosure(packageRoot, entries) {
         resolutions: new Map(),
       };
       files.set(file.fileName, record);
-      recordResolutions(program, file, record.resolutions);
+      recordResolutions(consumer, program, file, record.resolutions);
     }
   }
   return { files, resolvedEntries };

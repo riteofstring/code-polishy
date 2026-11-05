@@ -365,8 +365,11 @@ malformed archives, archives for another package, links or escaping paths in
 archives, missing entries, unresolved local imports, URL, absolute-path, and `#`
 import specifiers, type references that do not name a package, artifacts other
 than JavaScript, TypeScript, JSON, or CSS, and unreadable output are
-`architecture.importCoverage` findings on the archive. Export patterns,
-`browser`, `typesVersions`, and `directories.bin` are not supported.
+`architecture.importCoverage` findings on the archive, one per packed file.
+An unresolved relative declaration import names the consumer configurations
+that fail, such as NodeNext ESM, and the explicit extension to write when the
+target file is packed. Export patterns, `browser`, `typesVersions`, and
+`directories.bin` are not supported.
 Unreachable private declarations are not checked.
 
 Validate shipped behavior in the package's own suite: install the packed

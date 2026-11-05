@@ -95,7 +95,11 @@ file it loads, and outcomes are combined only afterward, so success in one
 configuration never cancels another configuration's requirement or failure: a
 local result is traversed, an unresolved package import names that external
 package and its `@types` counterpart, an unresolved built-in names
-`@types/node`, and an unresolved relative import fails verification.
+`@types/node`, and an unresolved relative import fails verification. Each
+declaration file with unresolved relative imports yields one failure that names
+the consumer configurations that could not resolve the first of them, counts the
+rest, and, when a packed declaration matches the extensionless specifier, gives
+the explicit runtime extension that NodeNext requires.
 Private declaration files outside that closure do not impose consumer needs.
 Extensionless files are parsed as JavaScript because Node executes them; only
 JSON and CSS remain opaque. A remaining import of a declared bundled name is a
@@ -135,8 +139,10 @@ archives, archives for another package, links or escaping paths in archives,
 missing entries, unresolved local imports, artifacts other than JavaScript,
 TypeScript, JSON, or CSS, invalid syntax, and the unsupported entry mappings
 export patterns, `browser`, `typesVersions`, and `directories.bin`. File,
-import, byte, and process limits bound analysis. The reader does not execute
-repository code, build artifacts, or install packages.
+import, byte, and process limits bound analysis. Each failing packed file is a
+separate finding, identified by its `packedFile` field, so failures in several
+files are not merged into one. The reader does not execute repository code,
+build artifacts, or install packages.
 
 ## Packed-consumer contract
 

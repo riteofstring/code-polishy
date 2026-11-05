@@ -17,6 +17,7 @@ const RUNTIME_EXTENSIONS = new Set(["", ".js", ".mjs", ".cjs"]);
 const OPAQUE_EXTENSIONS = new Set([".json", ".css"]);
 const TYPE_EXTENSIONS = new Set([".ts", ".mts", ".cts", ".tsx"]);
 const RELATIVE_SPECIFIER = /^\.\.?(?:\/|$)/;
+const DIRECTORY_SPECIFIER = /(?:^|\/)\.{0,2}\/?$/;
 const URL_SPECIFIER = /^[A-Za-z][A-Za-z0-9+.-]*:/;
 const REQUIRE_CALLEES = new Set([
   "require",
@@ -24,6 +25,15 @@ const REQUIRE_CALLEES = new Set([
   "require.resolve",
 ]);
 const NOT_FOUND = new Set(["MODULE_NOT_FOUND", "ERR_MODULE_NOT_FOUND"]);
+const DECLARATION_RUNTIME_EXTENSIONS = [
+  [".d.ts", ".js"],
+  [".ts", ".js"],
+  [".tsx", ".js"],
+  [".d.mts", ".mjs"],
+  [".mts", ".mjs"],
+  [".d.cts", ".cjs"],
+  [".cts", ".cjs"],
+];
 
 function typeCondition(condition) {
   return condition === "types" || condition.startsWith("types@");
@@ -128,9 +138,9 @@ function localCandidate(from, specifier) {
   return normalize(join(dirname(from), specifier).split("\\").join("/"));
 }
 
-function missingArtifact(from, specifier) {
+function missingReference(from, specifier) {
   return new Error(
-    `published import ${JSON.stringify(specifier)} from ${from} has no contained artifact`,
+    `reference path ${JSON.stringify(specifier)} from ${from} names no packed file`,
   );
 }
 
@@ -345,9 +355,8 @@ function readRuntimeArtifact(state, path) {
     });
 }
 
-function typeImportTarget(state, specifier, kind, outcome) {
-  if (outcome !== null) return { resolved: packageArtifact(state, outcome) };
-  if (kind === "relative") throw new Error("has no contained artifact");
+function typeImportTarget(state, specifier, kind, file) {
+  if (file !== null) return { resolved: packageArtifact(state, file) };
   if (kind === "builtin") return { packages: builtinTypePackages(specifier) };
   const name = specifiedPackage(specifier);
   return { packages: [name, typesCounterpart(name)] };
@@ -355,8 +364,62 @@ function typeImportTarget(state, specifier, kind, outcome) {
 
 function typeImportTargets(state, specifier, outcomes) {
   const kind = specifierKind(specifier);
-  return [...new Set(outcomes ?? [null])].map((outcome) =>
-    typeImportTarget(state, specifier, kind, outcome),
+  const results = outcomes ?? [{ consumer: "any", file: null }];
+  const unresolved =
+    kind === "relative"
+      ? results
+          .filter(({ file }) => file === null)
+          .map(({ consumer }) => consumer)
+      : [];
+  const files = new Set(
+    results
+      .map(({ file }) => file)
+      .filter((file) => kind !== "relative" || file !== null),
+  );
+  return {
+    unresolved,
+    targets: [...files].map((file) =>
+      typeImportTarget(state, specifier, kind, file),
+    ),
+  };
+}
+
+function consumerList(consumers) {
+  const names = [...new Set(consumers)];
+  if (names.length <= 2) return names.join(" and ");
+  return `${names.slice(0, -1).join(", ")}, and ${names.at(-1)}`;
+}
+
+function extensionHint(state, path, specifier) {
+  const candidate = localCandidate(path, specifier).replace(/\/$/, "");
+  if (
+    extname(specifier) !== "" ||
+    candidate === ".." ||
+    candidate.startsWith("../")
+  )
+    return "";
+  const base = specifier.replace(/\/$/, "");
+  const directories = DIRECTORY_SPECIFIER.test(specifier)
+    ? ["/index"]
+    : ["", "/index"];
+  for (const directory of directories)
+    for (const [declaration, runtime] of DECLARATION_RUNTIME_EXTENSIONS) {
+      const file = `${candidate}${directory}${declaration}`;
+      const info = optionalArtifactInfo(state.request.root, file);
+      if (info?.isFile())
+        return `; write ${JSON.stringify(`${base}${directory}${runtime}`)} for packed ${file}`;
+    }
+  return "";
+}
+
+function unresolvedRelativeImports(state, path, unresolved) {
+  const [{ specifier, consumers }] = unresolved;
+  const subject =
+    unresolved.length === 1
+      ? `relative import ${JSON.stringify(specifier)} does`
+      : `relative imports ${JSON.stringify(specifier)} and ${unresolved.length - 1} more do`;
+  return new Error(
+    `${subject} not resolve for ${consumerList(consumers)} consumers${extensionHint(state, path, specifier)}`,
   );
 }
 
@@ -386,7 +449,7 @@ function referencedFile(state, path, specifier) {
     const info = optionalArtifactInfo(state.request.root, option);
     return info && !info.isDirectory();
   });
-  if (!file) throw missingArtifact(path, specifier);
+  if (!file) throw missingReference(path, specifier);
   return file;
 }
 
@@ -416,17 +479,20 @@ function readTypeArtifact(state, path, { source, resolutions }) {
   if (source.parseDiagnostics.length > 0)
     throw new Error("published artifact has invalid TypeScript syntax");
   state.analyzed.push(path);
+  const unresolved = [];
   for (const { node, kind } of sourceSpecifiers(source).specifiers) {
     const position = node.getStart(source);
-    let targets;
+    let result;
     try {
-      targets = typeImportTargets(state, node.text, resolutions.get(position));
+      result = typeImportTargets(state, node.text, resolutions.get(position));
     } catch (error) {
       throw new Error(
         `published import ${JSON.stringify(node.text)} from ${path} ${error.message}`,
       );
     }
-    for (const target of targets)
+    if (result.unresolved.length > 0)
+      unresolved.push({ specifier: node.text, consumers: result.unresolved });
+    for (const target of result.targets)
       recordFacts(state, source, position, {
         path,
         specifier: node.text,
@@ -435,6 +501,8 @@ function readTypeArtifact(state, path, { source, resolutions }) {
       });
   }
   typeDirectives(state, path, source);
+  if (unresolved.length > 0)
+    throw unresolvedRelativeImports(state, path, unresolved);
 }
 
 function readTypeArtifacts(state, entries) {

@@ -5,8 +5,10 @@ import (
 	"compress/gzip"
 	"errors"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -62,6 +64,22 @@ func TestBundledDependenciesRejectRuntimeAndPublicTypeLeaks(t *testing.T) {
 				t.Fatalf("leaked dependency = %+v", findings)
 			}
 		})
+	}
+}
+
+func TestBundledArtifactReportsEveryUnverifiablePackedFile(t *testing.T) {
+	repo := bundledPackageRepository(t)
+	writeArchitectureFile(t, repo.Root, "dist/index.js", `export * from "./missing.js";`)
+	writeArchitectureFile(t, repo.Root, "dist/types/index.d.ts", `export * from "./missing.js";`)
+	identities := map[string]string{}
+	for _, finding := range checkPacked(t, repo, []string{"web/app.ts"}) {
+		if finding.Check == "architecture.importCoverage" && finding.Path == bundledArtifact {
+			identities[policy.NormalizeFinding(finding).Fingerprint] = finding.Message
+		}
+	}
+	reported := strings.Join(slices.Sorted(maps.Values(identities)), "\n")
+	if len(identities) != 2 || !strings.Contains(reported, "dist/index.js: ") || !strings.Contains(reported, "dist/types/index.d.ts: ") {
+		t.Fatalf("distinct packed file findings = %v", identities)
 	}
 }
 

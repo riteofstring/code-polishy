@@ -42,19 +42,22 @@ func (packages *nodePackages) verifyBundledDependencies(owner *nodePackage) {
 
 func packedCoverageFinding(artifact, reason string) policy.Finding {
 	finding := importCoverageFinding(artifact, "cannot verify bundled dependencies against the packed package: "+reason)
-	finding.Remediation.Summary = "Build and pack the package with its package manager at the declared artifact path, then rerun architecture. Fix unreadable packed files, unresolved local imports, or unsupported entry mappings."
+	finding.Remediation.Summary = "Fix the reported cause, such as a missing build, an unreadable packed file, an unresolved relative import, or an unsupported entry mapping; then rebuild and pack the package at the declared artifact path and rerun architecture."
 	return finding
 }
 
 func bundledArtifactFindings(artifact string, result javascript.ImportResult, admitted map[string]bool) []policy.Finding {
 	findings := []policy.Finding{}
 	for _, item := range result.Unsupported {
-		findings = append(findings, packedCoverageFinding(artifact, item.Path+": "+item.Reason))
+		finding := packedCoverageFinding(artifact, item.Path+": "+item.Reason)
+		finding.Fields = map[string]string{"packedFile": item.Path}
+		findings = append(findings, finding)
 	}
 	for _, fact := range result.Imports {
 		if admitted[fact.Package] {
 			findings = append(findings, policy.Finding{
 				Check: "architecture.packageDependency", Path: artifact, Subject: fact.Package,
+				Fields:  map[string]string{"packedFile": fact.Path},
 				Message: fmt.Sprintf("packed file %s:%d:%d imports bundled development dependency %q; consumers still need this package", fact.Path, fact.Line, fact.Column, fact.Package),
 			})
 		}

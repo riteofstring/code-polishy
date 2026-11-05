@@ -7,6 +7,12 @@
 - Document finding a release index digest by hashing the immutable release's
   index over HTTPS; GitHub CLI is no longer needed to adopt, upgrade or
   release.
+- Report every packed file that fails bundled-dependency verification as its
+  own `architecture.importCoverage` finding; failures in several files were
+  merged into one. An unresolved relative declaration import now names the
+  consumer configurations that cannot resolve it, counts the other unresolved
+  imports in that file, and suggests the explicit extension NodeNext requires
+  when the target is packed, instead of reporting it as a missing artifact.
 
 ## 0.32.1 - 2026-11-04
 

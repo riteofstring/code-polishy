@@ -66,6 +66,38 @@ func TestInstalledPackageImportsCheckImplicitTypesAndReferences(t *testing.T) {
 	}
 }
 
+func TestInstalledPackageImportsExplainUnresolvedRelativeDeclarations(t *testing.T) {
+	root := t.TempDir()
+	writeScript(t, filepath.Join(root, "package.json"), `{"name":"pkg","type":"module","exports":{".":{"types":"./dist/types/index.d.ts","import":"./dist/index.js"},"./browser":{"types":"./dist/types/browser/index.d.ts","import":"./dist/browser.js"}}}`)
+	writeScript(t, filepath.Join(root, "dist/index.js"), "export {};\n")
+	writeScript(t, filepath.Join(root, "dist/browser.js"), "export {};\n")
+	writeScript(t, filepath.Join(root, "dist/types/index.d.ts"), "export * from \"./a\";\nexport * from \"./b\";\nexport * from \"./nested/\";\nexport * from \"./ok.js\";\n")
+	writeScript(t, filepath.Join(root, "dist/types/browser/index.d.ts"), "export * from \"./client\";\n")
+	for _, path := range []string{"a.d.ts", "b.d.ts", "nested/index.d.ts", "ok.d.ts", "browser/client.d.ts"} {
+		writeScript(t, filepath.Join(root, "dist/types", path), "export declare const value: string;\n")
+	}
+	result, err := packedDirectoryImports(t, installedPackageImportBundle(t), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reasons := map[string]string{}
+	for _, item := range result.Unsupported {
+		reasons[item.Path] = item.Reason
+	}
+	want := map[string]string{
+		"dist/types/index.d.ts":         `relative imports "./a" and 2 more do not resolve for NodeNext ESM and NodeNext CommonJS consumers; write "./a.js" for packed dist/types/a.d.ts`,
+		"dist/types/browser/index.d.ts": `relative import "./client" does not resolve for NodeNext ESM and NodeNext CommonJS consumers; write "./client.js" for packed dist/types/browser/client.d.ts`,
+	}
+	if len(reasons) != len(want) {
+		t.Fatalf("unsupported = %+v", result.Unsupported)
+	}
+	for path, reason := range want {
+		if reasons[path] != reason {
+			t.Errorf("%s reason = %q, want %q", path, reasons[path], reason)
+		}
+	}
+}
+
 func importedPackages(result ImportResult) []string {
 	packages := []string{}
 	for _, fact := range result.Imports {
