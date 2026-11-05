@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Document finding a release index digest by hashing the immutable release's
+  index over HTTPS; GitHub CLI is no longer needed to adopt, upgrade or
+  release.
+
 ## 0.32.1 - 2026-11-04
 
 - Fix `merge-gate` aborting during artifact-security scanner self-scanning by

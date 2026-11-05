@@ -24,16 +24,12 @@ independently authenticated compatible provenance at its build boundary.
 
 ## Starting point
 
-Future GitHub publications use the repository's immutable-release service.
-Publishing the completed draft locks its tag and assets and automatically
-produces a GitHub-signed release attestation. Consumers can authenticate the
-index digest with `gh release verify` and a local download with
-`gh release verify-asset`, as documented in [Installation](../installation.md#find-a-release-index-and-digest).
-This uses GitHub's hosted publication boundary without adding an executable
-attestation action or verifier dependency to Code Polishy. Releases through
-`v0.31.9` predate the setting and remain unattested.
+GitHub publications from `v0.31.10` onward use the repository's
+immutable-release service. Publishing the completed draft locks its tag and
+assets, so consumers pin the index by hashing it over HTTPS, as documented in
+[Installation](../installation.md#find-a-release-index-and-digest).
 
-That record proves which bytes GitHub published. It does not establish the
+Immutability proves which bytes GitHub published. It does not establish the
 native builder identities or archive-to-SBOM provenance required by this plan.
 The dependency admission requirements and blocked implementation below still
 govern those stronger claims.

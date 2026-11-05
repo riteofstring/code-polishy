@@ -597,42 +597,28 @@ not authenticated builder provenance.
 
 ### Find a release index and digest
 
-List published versions with `gh release list --repo riteofstring/code-polishy`
-or on the [releases page](https://github.com/riteofstring/code-polishy/releases).
-For a release marked **Immutable**, obtain the index digest from GitHub's
-cryptographically verified release attestation:
+Pick an exact version from the
+[releases page](https://github.com/riteofstring/code-polishy/releases), then
+download its index over HTTPS and hash it:
 
 ```sh
 version=<exact-version>
-base="https://github.com/riteofstring/code-polishy/releases/download/v${version}"
-gh release verify "v${version}" --repo riteofstring/code-polishy --format json \
-  --jq '.verificationResult.statement.subject[] | select(.name == "code-polishy-release-index.json") | .digest.sha256'
+index_url="https://github.com/riteofstring/code-polishy/releases/download/v${version}/code-polishy-release-index.json"
+curl -fsSL "${index_url}" | shasum -a 256
 ```
 
-Require successful verification and one nonempty SHA-256. Pass
-`${base}/code-polishy-release-index.json` and that verified digest to `lock`
-or `upgrade plan`; these commands verify the downloaded index against it.
-Use a trusted installation of GitHub CLI with `release verify` support.
+On Windows PowerShell:
 
-GitHub signs the release's repository identity, tag, source commit and asset
-digests when the completed draft becomes public. Its immutable-release service
-also prevents changing the published assets or moving their tag. This proves
-which bytes GitHub published for that release; it does not attest how each
-native archive was built. Release notes remain editable and are not the
-authentication source.
-
-To verify a local download directly, use:
-
-```sh
-gh release verify-asset "v${version}" ./code-polishy-release-index.json \
-  --repo riteofstring/code-polishy
+```powershell
+Invoke-WebRequest $indexUrl -OutFile code-polishy-release-index.json
+(Get-FileHash code-polishy-release-index.json -Algorithm SHA256).Hash.ToLower()
 ```
 
-The setting applies only to future publications. `v0.31.9` and earlier do not
-have these release attestations. Their `.sha256` assets and release-note digests
-detect corruption but do not independently authenticate the index. Do not
-describe an unattested release as having passed signature verification.
-See GitHub's [release-integrity verification instructions](https://docs.github.com/en/code-security/how-tos/secure-your-supply-chain/secure-your-dependencies/verify-release-integrity).
+Pass the index URL and that digest to `lock` or `upgrade plan`. Releases from
+`v0.31.10` onward are immutable: GitHub prevents changing their assets or moving
+their tag, so the digest pins the bytes GitHub published, and every later
+download is verified against it. This authenticates acquired bytes; it does not
+attest how each native archive was built.
 
 `lock --index URL --sha256 DIGEST` verifies that the index describes the
 executing installed release and writes this v2 lock without redownloading an
