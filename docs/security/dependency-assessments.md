@@ -4,7 +4,8 @@ Brace expansion and URI processing resolved with aged fixes on 2026-10-15; other
 reviewed on 2026-10-08; Go toolchain admission reviewed on 2026-10-21.
 The withdrawn glob advisory, Zod configuration validation, and the aged TOML fix
 reviewed on 2026-10-23 UTC.
-Minimatch globparts amplification reviewed on 2026-10-31 UTC.
+Minimatch globparts amplification reviewed on 2026-10-31 UTC; its revised
+affected range rechecked on 2026-11-05 UTC.
 Assessment owner: Codex.
 
 The vulnerability assessments cover `tools/javascript/pnpm-lock.yaml` and
@@ -145,10 +146,10 @@ entries, then `secondPhasePreProcess` compares the expanded set pairwise.
 Repository-selected patterns could exhaust CPU and memory if they reached
 those operations with that option enabled.
 
-Both JavaScript locks resolve minimatch 3.1.5. Its registry-integrity-verified
-source contains neither preprocessing method nor `optimizationLevel`; the
-advisory's broad `<11.0.1` range includes code without the described mechanism.
-Record exact `false-positive` assessments for those two lock scopes.
+Both JavaScript locks also resolve minimatch 3.1.5, which contains neither
+preprocessing method nor `optimizationLevel`. The advisory was revised on
+2026-11-04 to begin its affected range at 7.0.0, so scanners no longer report
+3.1.5 and it needs no assessment.
 
 The native bundle also resolves 10.2.5 and the provider resolves 10.2.6.
 Both verified archives default `optimizationLevel` to 1 and enter the affected
@@ -170,7 +171,7 @@ The first fixed release, 11.0.1, was
 there is no aged fix or compatible 3.x/10.x backport. Forcing a fresh major
 outside the callers' supported ranges would add admission and compatibility
 risk without removing a reachable path. Retain the aged versions with these
-four assessments, owned by Codex and expiring on 2026-11-14. Recheck upstream
+two assessments, owned by Codex and expiring on 2026-11-14. Recheck upstream
 ranges and supported backports by expiry; evaluate a compatible fixed upgrade
 when available. Reassess immediately if the caller graph, parser authority,
 or minimatch options change. Do not extend this conclusion to other glob
