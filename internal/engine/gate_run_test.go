@@ -14,6 +14,7 @@ import (
 
 	"github.com/riteofstring/code-polishy/internal/gaterun"
 	"github.com/riteofstring/code-polishy/internal/policy"
+	"github.com/riteofstring/code-polishy/internal/release"
 	"github.com/riteofstring/code-polishy/internal/runner"
 	"github.com/riteofstring/code-polishy/internal/testartifact"
 )
@@ -390,4 +391,46 @@ func (double *intermittentGateRunner) Execute(ctx context.Context, invocation ru
 
 func (double artifactWritingEngineRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
 	return runner.Result{}, runner.Output{}, double.runPlain(ctx, invocation.Root, invocation.Command)
+}
+
+func TestScannerAssessmentChangesInvalidateGateEvidenceWithoutChangingToolRelease(t *testing.T) {
+	root := contentRepository(t, nil)
+	policyEngine, err := Open(root, root, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	locked, present, err := release.ReadLock(enginePolicyRoot(t))
+	if err != nil || !present {
+		t.Fatalf("release fixture %v", err)
+	}
+	locked.Scanner = &release.SignedScanner{Payload: []byte(`{"assessment":"first"}`), Signature: []byte("identity fixture")}
+	if err := release.WriteLock(root, locked); err != nil {
+		t.Fatal(err)
+	}
+	first, err := gateRunIdentity(policyEngine, gaterun.MergeGate, "main", strings.Repeat("a", 40), strings.Repeat("b", 40), "recommended", nil, testGateRunBehaviorReview(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	locked.Scanner.Payload = []byte(`{"assessment":"second"}`)
+	if err := release.WriteLock(root, locked); err != nil {
+		t.Fatal(err)
+	}
+	second, err := gateRunIdentity(policyEngine, gaterun.MergeGate, "main", strings.Repeat("a", 40), strings.Repeat("b", 40), "recommended", nil, testGateRunBehaviorReview(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstDigest, err := first.Digest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondDigest, err := second.Digest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if firstDigest == secondDigest {
+		t.Fatal("assessment change reused gate evidence")
+	}
+	if first.Release != second.Release {
+		t.Fatal("assessment change replaced tool release identity")
+	}
 }

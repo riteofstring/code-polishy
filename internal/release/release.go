@@ -47,11 +47,12 @@ var LauncherBinaryPath = func() string {
 }()
 
 var (
-	digestPattern   = regexp.MustCompile(`^[0-9a-f]{64}$`)
-	revisionPattern = regexp.MustCompile(`^[0-9a-f]{40}$`)
-	versionPattern  = regexp.MustCompile(`^[0-9A-Za-z][0-9A-Za-z._+-]*$`)
-	featurePattern  = regexp.MustCompile(`^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`)
-	hostPattern     = regexp.MustCompile(`^[a-z0-9]+-[a-z0-9]+$`)
+	digestPattern          = regexp.MustCompile(`^[0-9a-f]{64}$`)
+	revisionPattern        = regexp.MustCompile(`^[0-9a-f]{40}$`)
+	scannerContractPattern = regexp.MustCompile(`^code-polishy-trivy/v[1-9][0-9]*$`)
+	versionPattern         = regexp.MustCompile(`^[0-9A-Za-z][0-9A-Za-z._+-]*$`)
+	featurePattern         = regexp.MustCompile(`^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$`)
+	hostPattern            = regexp.MustCompile(`^[a-z0-9]+-[a-z0-9]+$`)
 )
 
 var supportedReleaseHosts = []string{
@@ -63,6 +64,7 @@ var supportedReleaseHosts = []string{
 }
 
 type Lock struct {
+	Scanner            *SignedScanner   `json:"scanner,omitempty"`
 	LockVersion        int              `json:"lockVersion"`
 	CodePolishyVersion string           `json:"codePolishyVersion"`
 	ReleaseDigest      string           `json:"releaseDigest"`
@@ -230,19 +232,22 @@ func RenderLock(lock Lock) []byte {
 	fmt.Fprintf(rendered, "{\n  \"lockVersion\": %d,\n", lock.LockVersion)
 	fmt.Fprintf(rendered, "  \"codePolishyVersion\": %q,\n", lock.CodePolishyVersion)
 	fmt.Fprintf(rendered, "  \"releaseDigest\": %q,\n", lock.ReleaseDigest)
+	if lock.Scanner != nil {
+		fmt.Fprintf(rendered, "  \"scanner\": %s,\n", jsonValue(lock.Scanner))
+	}
 	if lock.Publication == nil {
 		fmt.Fprintf(rendered, "  \"features\": [%s]\n}\n", strings.Join(features, ", "))
 		return []byte(rendered.String())
 	}
 	fmt.Fprintf(rendered, "  \"features\": [%s],\n", strings.Join(features, ", "))
-	fmt.Fprintf(rendered, "  \"publication\": {\n    \"indexUrl\": %s,\n    \"indexSha256\": %q,\n    \"archives\": [\n", jsonString(lock.Publication.IndexURL), lock.Publication.IndexSHA256)
+	fmt.Fprintf(rendered, "  \"publication\": {\n    \"indexUrl\": %s,\n    \"indexSha256\": %q,\n    \"archives\": [\n", jsonValue(lock.Publication.IndexURL), lock.Publication.IndexSHA256)
 	for index, archive := range lock.Publication.Archives {
 		separator := ","
 		if index == len(lock.Publication.Archives)-1 {
 			separator = ""
 		}
 		fmt.Fprintf(rendered, "      {\n        \"host\": %q,\n", archive.Host)
-		fmt.Fprintf(rendered, "        \"url\": %s,\n", jsonString(archive.URL))
+		fmt.Fprintf(rendered, "        \"url\": %s,\n", jsonValue(archive.URL))
 		fmt.Fprintf(rendered, "        \"sha256\": %q,\n", archive.SHA256)
 		fmt.Fprintf(rendered, "        \"size\": %d\n      }%s\n", archive.Size, separator)
 	}
@@ -250,7 +255,7 @@ func RenderLock(lock Lock) []byte {
 	return []byte(rendered.String())
 }
 
-func jsonString(value string) string {
+func jsonValue(value any) string {
 	var rendered bytes.Buffer
 	encoder := json.NewEncoder(&rendered)
 	encoder.SetEscapeHTML(false)

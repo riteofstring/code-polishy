@@ -305,3 +305,46 @@ func readTestFile(t *testing.T, path string) string {
 	}
 	return string(contents)
 }
+
+func TestBootstrapWrappersAndGoReaderAgreeOnEmbeddedScannerLockBounds(t *testing.T) {
+	root := wrapperTargetFixture(t, repositoryPolicyRoot(t))
+	lock, _, err := release.ReadLock(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lock.Scanner = &release.SignedScanner{Payload: make([]byte, release.MaximumScannerPayloadBytes), Signature: make([]byte, 64)}
+	encoded := release.RenderLock(lock)
+	data := append(encoded, []byte(strings.Repeat(" ", release.MaximumLockBytes-len(encoded)))...)
+	run := func() (string, error) {
+		if runtime.GOOS == "windows" {
+			template, err := os.ReadFile(filepath.Join(repositoryPolicyRoot(t), "templates/code-polishyw.ps1"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(root, "code-polishyw.ps1")
+			writeFile(t, path, template, 0600)
+			command := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-File", path, "version")
+			output, err := command.CombinedOutput()
+			return string(output), err
+		}
+		_, stderr, err := runPOSIXWrapper(root, t.TempDir(), filepath.Join(t.TempDir(), "wrapper.log"), os.Getenv("PATH"), "version")
+		return stderr, err
+	}
+	t.Setenv("LOCALAPPDATA", t.TempDir())
+	writeFile(t, filepath.Join(root, release.LockFilename), data, 0600)
+	if _, _, err := release.ReadLock(root); err != nil {
+		t.Fatalf("Go rejected bounded embedded scanner: %v", err)
+	}
+	output, err := run()
+	if err == nil || !strings.Contains(output, "not installed") {
+		t.Fatalf("wrapper rejected bounded scanner lock: %s %v", output, err)
+	}
+	writeFile(t, filepath.Join(root, release.LockFilename), append(data, ' '), 0600)
+	if _, _, err := release.ReadLock(root); err == nil {
+		t.Fatal("Go accepted oversized lock")
+	}
+	output, err = run()
+	if err == nil || (!strings.Contains(output, "input limit") && !strings.Contains(output, "wrapper input limit")) {
+		t.Fatalf("wrapper accepted oversized lock: %s %v", output, err)
+	}
+}

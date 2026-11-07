@@ -57,7 +57,7 @@ func writeCapabilityUpgrade(repoRoot, incomingRoot string, root *os.Root, incomi
 	if err != nil || !result.Changed {
 		return result, err
 	}
-	if err := WriteLock(repoRoot, incoming); err != nil {
+	if err := WriteLock(repoRoot, result.Lock); err != nil {
 		return LockUpgradeResult{}, err
 	}
 	return result, nil
@@ -68,6 +68,13 @@ func prepareCapabilityUpgrade(repoRoot, incomingRoot string, root *os.Root, inco
 	if err != nil {
 		return LockUpgradeResult{}, err
 	}
+	incoming.Scanner = outgoing.Scanner
+	if incoming.Scanner != nil {
+		if _, err := VerifyScanner(incomingRoot, incoming.Scanner); err != nil {
+			return LockUpgradeResult{}, err
+		}
+	}
+
 	if present && sameCapabilityLock(outgoing, incoming) {
 		return LockUpgradeResult{Lock: incoming, Delta: ReadCapabilityUpgrade(repoRoot, incoming)}, nil
 	}
@@ -121,7 +128,7 @@ func storeCapabilityUpgrade(root *os.Root, record capabilityUpgradeRecord) error
 		return err
 	}
 	defer directory.Close()
-	if err := publishCapabilityUpgradeData(directory, data); err != nil {
+	if err := publishUpgradeData(directory, "delta.json", data); err != nil {
 		return err
 	}
 	published, err := readCapabilityFile(root, relative, MaximumCapabilityUpgradeBytes)
@@ -171,23 +178,23 @@ func NormalizeCapabilityUpgradeRecord(repoRoot string, expected CapabilityDelta)
 	return storeCapabilityUpgrade(root, record)
 }
 
-func publishCapabilityUpgradeData(directory *os.Root, data []byte) error {
-	if info, err := directory.Lstat("delta.json"); err == nil && !info.Mode().IsRegular() || err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("capability upgrade record must be a regular file")
+func publishUpgradeData(directory *os.Root, name string, data []byte) error {
+	if info, err := directory.Lstat(name); err == nil && !info.Mode().IsRegular() || err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("upgrade record must be a regular file")
 	}
-	temporary := ".delta-" + rand.Text() + ".tmp"
+	temporary := "." + name + "-" + rand.Text() + ".tmp"
 	file, err := directory.OpenFile(temporary, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
-		return fmt.Errorf("stage capability upgrade record: %w", err)
+		return fmt.Errorf("stage upgrade record: %w", err)
 	}
 	defer directory.Remove(temporary)
 	_, writeErr := file.Write(data)
 	syncErr := file.Sync()
 	if err := errors.Join(writeErr, syncErr, file.Close()); err != nil {
-		return fmt.Errorf("write capability upgrade record: %w", err)
+		return fmt.Errorf("write upgrade record: %w", err)
 	}
-	if err := directory.Rename(temporary, "delta.json"); err != nil {
-		return fmt.Errorf("publish capability upgrade record: %w", err)
+	if err := directory.Rename(temporary, name); err != nil {
+		return fmt.Errorf("publish upgrade record: %w", err)
 	}
 	return nil
 }

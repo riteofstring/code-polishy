@@ -6,17 +6,18 @@ OpenVEX, SBOM, report, or hardening scripts.
 
 ## Execution contract
 
-The policy release pins an official Trivy image by digest and verifies that
-digest, the expected Trivy version, the minimal scanner Dockerfile hash, and the
-scanner runtime's OpenVEX hash before use. It copies only the Trivy binary and
-CA bundle into a non-root scratch image.
+The repository lock embeds an independently signed scanner manifest. Code Polishy
+verifies the approved publisher, exact official image digest, binary version,
+execution contract and assessment deadline before using it. The verified Code
+Polishy release owns the minimal runtime builder and security policy. It copies
+only the upstream Trivy binary and CA bundle into a non-root scratch image.
 
 The scanner image disables Go's HTTP/2 client. Its database download uses
-HTTPS over HTTP/1.1; target scanning remains offline. The release-owned
-[scanner assessments](design/trivy-scanner-assessments.md) document the exact
-remaining findings and their applicability. Ordinary Ubuntu CI and Linux release
-builds use the same verification script to exercise the installed scanner against
-a minimal scratch image with a fresh database before tagging and publication.
+HTTPS over HTTP/1.1; target scanning remains offline. The signed manifest embeds
+OpenVEX decisions backed by [scanner assessments](design/trivy-scanner-assessments.md).
+The [manifest contract](design/scanner-manifests.md) binds their execution
+assumptions. Native Linux amd64 and arm64 publication checks exercise the installed
+scanner and a scratch image against fresh advisory data before publication.
 
 Each run:
 
@@ -45,12 +46,12 @@ version, and its pinned source image. They point to `.code-polishy.lock.json`,
 because the locked Code Polishy release owns that runtime. Application findings
 retain their declared artifact scope and remediation. Both remain blocking.
 
-Repair a scanner finding by upgrading to a verified Code Polishy release carrying
-a patched scanner; rebuilding an application image cannot repair it. The scan
-does not establish the availability of a fixed Code Polishy/scanner release and
-reports that explicitly. A component's fixed version in Trivy output alone does
-not prove that a verified scanner release contains it. The self-check and its
-release-owned OpenVEX policy remain required.
+Repair scanner findings by previewing and adopting an authenticated scanner
+manifest revision with `scanner-update`. Assessment-only revisions can retain the
+same Code Polishy release and scanner binary. Rebuilding an application image
+cannot repair the scanner, and a dependency's fixed version does not establish
+an available fixed scanner package. Project OpenVEX and scanner waivers cannot
+override the signed scanner assessment.
 
 Built images are saved by immutable Docker identity. Trivy reports must match
 the configuration digest from that exact saved archive; see
@@ -201,12 +202,19 @@ the finding block it again.
 ## Commands and prerequisites
 
 ```sh
+code-polishy scanner-update --manifest HTTPS_URL --sha256 ENVELOPE_SHA256
+code-polishy scanner-update --manifest HTTPS_URL --sha256 ENVELOPE_SHA256 --apply
 code-polishy artifact-security
 code-polishy supply-chain
 code-polishy gate
 ```
 
-The focused command runs configured artifact targets only. The online
+The update command previews by default and changes selection only with `--apply`.
+It remains usable when old assessments have expired. The first supporting Code
+Polishy release must be adopted before selecting an independent scanner package.
+See [Publisher setup](scanner-publisher-setup.md) for signing and publication.
+
+The focused artifact command runs configured artifact targets only. The online
 supply-chain profile and gate include the same module. A Docker CLI and server
 are required only when artifact targets exist; Trivy itself is policy-owned and
 does not become a target manifest dependency.

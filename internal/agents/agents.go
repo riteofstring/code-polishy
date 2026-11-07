@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"github.com/riteofstring/code-polishy/internal/release"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -84,6 +85,11 @@ func Sync(repoRoot, policyRoot string) (string, error) {
 }
 
 func SyncWithLock(repoRoot, policyRoot string, expectedLock, incomingLock []byte) (string, error) {
+	unlock, err := release.LockRepository(repoRoot)
+	if err != nil {
+		return "", err
+	}
+	defer unlock()
 	return syncWithLock(repoRoot, policyRoot, expectedLock, incomingLock, os.Rename)
 }
 

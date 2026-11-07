@@ -51,6 +51,10 @@ func parseOpenVEX(path string, now time.Time) (map[string]openVEXAssessment, err
 	if err != nil {
 		return nil, err
 	}
+	return parseOpenVEXBytes(payload, now)
+}
+
+func parseOpenVEXBytes(payload []byte, now time.Time) (map[string]openVEXAssessment, error) {
 	document, err := decodeOpenVEX(payload)
 	if err != nil {
 		return nil, err

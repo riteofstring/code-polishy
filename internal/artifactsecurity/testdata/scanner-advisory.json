@@ -1,0 +1,10 @@
+[
+  {
+    "VulnerabilityID": "CVE-2026-1000",
+    "PkgName": "example.org/scannerdep",
+    "PkgIdentifier": { "PURL": "pkg:golang/example.org/scannerdep@v1.0.0" },
+    "InstalledVersion": "v1.0.0",
+    "Severity": "HIGH",
+    "Title": "Fixed synthetic scanner advisory fixture"
+  }
+]

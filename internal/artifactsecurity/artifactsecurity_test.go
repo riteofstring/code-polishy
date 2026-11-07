@@ -313,10 +313,7 @@ func requireMarkdownArtifactIdentity(t *testing.T, directory, reference, imageID
 
 func TestRunPublishesEvidenceThroughTheScannerBoundary(t *testing.T) {
 	root := t.TempDir()
-	policyRoot, err := filepath.Abs(filepath.Join("..", ".."))
-	if err != nil {
-		t.Fatal(err)
-	}
+	policyRoot := scannerFixture(t, root)
 	archive := filepath.Join(root, "agent.tar")
 	if err := os.WriteFile(archive, []byte("target image"), 0o600); err != nil {
 		t.Fatal(err)
@@ -368,10 +365,7 @@ func TestRunPublishesEvidenceThroughTheScannerBoundary(t *testing.T) {
 
 func TestScannerFindingsIdentifyReleaseOwnership(t *testing.T) {
 	root := t.TempDir()
-	policyRoot, err := filepath.Abs(filepath.Join("..", ".."))
-	if err != nil {
-		t.Fatal(err)
-	}
+	policyRoot := scannerFixture(t, root)
 	if err := os.WriteFile(filepath.Join(root, "application.tar"), []byte("application image"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -414,7 +408,7 @@ func requireScannerFindingOwnership(t *testing.T, scanner policy.Finding, versio
 		!strings.Contains(scanner.Message, "docker.io/aquasec/trivy@sha256:") {
 		t.Fatalf("scanner vulnerability did not identify its release owner and exact scanner: %+v", scanner)
 	}
-	for _, phrase := range []string{"verified Code Polishy release", "No fixed Code Polishy/scanner release has been established", "Rebuilding application artifacts cannot repair"} {
+	for _, phrase := range []string{"authenticated scanner assessment", "No fixed scanner package revision has been established", "Rebuilding application artifacts cannot repair"} {
 		if !strings.Contains(scanner.Remediation.Summary, phrase) {
 			t.Errorf("scanner remediation omitted %q: %s", phrase, scanner.Remediation.Summary)
 		}
@@ -446,10 +440,7 @@ func TestArtifactSecurityCoverageAndToolsFailClosed(t *testing.T) {
 
 func TestRunFailsClosedBeforeArtifactMutation(t *testing.T) {
 	root := t.TempDir()
-	policyRoot, err := filepath.Abs(filepath.Join("..", ".."))
-	if err != nil {
-		t.Fatal(err)
-	}
+	policyRoot := scannerFixture(t, root)
 	repo := repository.Repository{
 		Root: root, PolicyRoot: policyRoot,
 		Config: policy.Config{SupplyChain: policy.SupplyChain{ArtifactSecurity: policy.ArtifactSecurity{
@@ -497,6 +488,7 @@ func TestPlannedArtifactAuthorizationIsExactAtTheSecurityBoundary(t *testing.T) 
 }
 
 type scannerBoundary struct {
+	architecture     string
 	endpoint         string
 	rootless         bool
 	databaseError    error
@@ -521,14 +513,20 @@ func (unavailableScannerBoundary) runOutput(context.Context, string, policy.Comm
 
 func newScannerBoundary(t *testing.T, policyRoot string) *scannerBoundary {
 	t.Helper()
-	version, err := os.ReadFile(filepath.Join(policyRoot, "tools", "trivy-version.txt"))
+	var manifest struct {
+		TrivyVersion string          `json:"version"`
+		OpenVEX      json.RawMessage `json:"openVex"`
+	}
+	data, err := os.ReadFile("../../artifact-security/scanner-manifest.json")
 	if err != nil {
 		t.Fatal(err)
 	}
-	payload, err := os.ReadFile(filepath.Join(policyRoot, "artifact-security", "scanner.openvex.json"))
-	if err != nil {
+	if err := json.Unmarshal(data, &manifest); err != nil {
 		t.Fatal(err)
 	}
+	version := []byte(manifest.TrivyVersion)
+	payload := manifest.OpenVEX
+
 	var document struct {
 		Statements []struct {
 			Vulnerability struct {
@@ -601,7 +599,11 @@ func (boundary *scannerBoundary) runOutput(_ context.Context, _ string, command 
 	case "context":
 		output.Stdout = []byte(boundary.dockerEndpoint() + "\n")
 	case "info":
-		output.Stdout = []byte("amd64 " + boundary.securityOptions() + "\n")
+		architecture := boundary.architecture
+		if architecture == "" {
+			architecture = "amd64"
+		}
+		output.Stdout = []byte(architecture + " " + boundary.securityOptions() + "\n")
 	case "image":
 		var err error
 		output, err = boundary.imageCommand(arguments[2:])

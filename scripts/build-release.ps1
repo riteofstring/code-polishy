@@ -125,7 +125,7 @@ try {
     'tools/pnpm-version.txt','tools/python-version.txt','tools/python_runtime_checksums.txt','tools/ruff-version.txt',
     'tools/shellcheck-version.txt','tools/staticcheck-version.txt','tools/deadcode-version.txt','tools/ty-version.txt','tools/ty.toml',
     'tools/vulture-version.txt','tools/vulture_wheel_checksums.txt',
-    'tools/trivy-version.txt','tools/javascript_bundle_inventory.txt','tools/javascript_runtime_binaries.txt',
+    'tools/javascript_bundle_inventory.txt','tools/javascript_runtime_binaries.txt',
     'tools/javascript_runtime_checksums.txt','tools/windows_tool_checksums.txt',
     '.tools/go/windows-amd64','.tools/shellcheck/windows-x86_64','.tools/javascript/windows-x64','.tools/python/windows-x64',
     '.tools/rust/windows-x64'

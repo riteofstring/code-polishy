@@ -52,7 +52,7 @@ func Run(ctx context.Context, repo repository.Repository, commandRunner runner.R
 	if len(targets) == 0 {
 		return Result{}
 	}
-	configured, err := loadScannerPolicy(repo.PolicyRoot)
+	configured, err := loadScannerPolicy(repo.Root, repo.PolicyRoot)
 	if err != nil {
 		return operationalResult(operationContext{}, "scanner-policy", err)
 	}
@@ -119,6 +119,10 @@ func recordDatabaseImmutability(state *scannerRuntime, before databaseEvidence, 
 	if combined := errors.Join(err, databaseChangedError(before, after)); combined != nil {
 		result.Findings = append(result.Findings, artifactOperationalFinding(state.operationContext(), "scanner", "database-immutability", combined))
 	}
+	if !state.policy.ReassessBy.After(time.Now().UTC()) {
+		result.Findings = append(result.Findings, artifactOperationalFinding(state.operationContext(), "scanner", "scanner-policy", errors.New("scanner assessment expired during artifact verification")))
+	}
+
 }
 
 func scanScannerRuntime(ctx context.Context, repo repository.Repository, state *scannerRuntime, database databaseEvidence, result *Result) error {
@@ -133,11 +137,10 @@ func scanScannerRuntime(ctx context.Context, repo repository.Repository, state *
 		return err
 	}
 	openVEX := filepath.Join(directory, "assessment.openvex.json")
-	if err := copyBoundedRegularFile(
-		filepath.Join(repo.PolicyRoot, "artifact-security", "scanner.openvex.json"), openVEX, 64*1024,
-	); err != nil {
+	if err := os.WriteFile(openVEX, state.policy.OpenVEX, 0o600); err != nil {
 		return err
 	}
+
 	target := policy.ArtifactTarget{Name: "code-polishy-scanner", Mode: "command"}
 	prepared := preparedArtifact{
 		name: "code-polishy-scanner", mode: "scanner", reference: state.image,
@@ -220,7 +223,7 @@ func (state *scannerRuntime) buildAndVerify(ctx context.Context, policyRoot stri
 	contextRoot := filepath.Dir(dockerfile)
 	_, err := state.client.run(ctx, governedDockerCommandPrefix+"build-scanner",
 		"image", "build", "--network", "none", "--pull=false", "--provenance=false",
-		"--platform", state.daemon.platform, "--file", dockerfile,
+		"--platform", state.daemon.platform, "--build-arg", "SCANNER_IMAGE="+state.policy.SourceImage, "--file", dockerfile,
 		"--label", "com.code-polishy.security.role=scanner", "--tag", state.image, contextRoot,
 	)
 	if err != nil {

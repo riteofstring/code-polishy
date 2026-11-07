@@ -3,6 +3,7 @@ package agents
 import (
 	"bytes"
 	"errors"
+	"github.com/riteofstring/code-polishy/internal/release"
 	"os"
 	"path/filepath"
 	"strings"
@@ -629,4 +630,23 @@ func assertCanonicalWrappers(t *testing.T, repoRoot, policyRoot string) {
 	for _, template := range templates {
 		assertFile(t, filepath.Join(repoRoot, template.path), template.contents, template.mode)
 	}
+}
+
+func TestToolAndScannerCutoversShareTheRepositoryWriteLock(t *testing.T) {
+	repoRoot := t.TempDir()
+	policyRoot := policyFixture(t, canonicalAgentsText)
+	expected := []byte("outgoing lock\n")
+	writeFile(t, filepath.Join(repoRoot, ".code-polishy.lock.json"), expected, 0600)
+	unlock, err := release.LockRepository(repoRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unlock()
+	if _, err := SyncWithLock(repoRoot, policyRoot, expected, []byte("incoming lock\n")); err == nil {
+		t.Fatal("tool cutover ignored scanner update lock")
+	}
+	if err := release.WriteScannerLock(repoRoot, policyRoot, release.Lock{}, nil); err == nil {
+		t.Fatal("scanner cutover ignored tool update lock")
+	}
+	assertFile(t, filepath.Join(repoRoot, ".code-polishy.lock.json"), expected, 0600)
 }

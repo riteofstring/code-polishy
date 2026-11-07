@@ -64,3 +64,10 @@ Upstream contracts:
 - [npm package-lock package records](https://docs.npmjs.com/cli/v10/configuring-npm/package-lock-json#packages)
 - [Node release schedule](https://github.com/nodejs/Release/blob/main/schedule.json)
 - [setup-node inputs](https://github.com/actions/setup-node#usage)
+
+Standalone artifact version files may also be bounded JSON objects with a
+single top-level `version` string. This lets the scanner manifest remain the
+authority for its binary version while `packageVersion` tracks assessment
+revisions independently. The existing upstream release-age lookup and exact
+security-fix assessment remain unchanged; duplicate fields and non-exact versions
+fail admission. See [Scanner manifests](scanner-manifests.md).

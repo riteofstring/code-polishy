@@ -4,7 +4,9 @@ import (
 	"strings"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
+	"github.com/riteofstring/code-polishy/internal/release"
 	"github.com/riteofstring/code-polishy/internal/repository"
+	"github.com/riteofstring/code-polishy/internal/strictjson"
 )
 
 const governedDockerCommandPrefix = "artifact-security-docker-"
@@ -29,7 +31,9 @@ func PlannedCommands(repo repository.Repository) []policy.Command {
 		plannedDockerCommand("scanner-save"),
 	)
 	commands = appendScannerCommands(commands, "scanner-self-observed")
-	commands = appendScannerCommands(commands, "scanner-self-enforced")
+	if scannerHasOpenVEX(repo) {
+		commands = appendScannerCommands(commands, "scanner-self-enforced")
+	}
 	commands = appendScannerCommands(commands, "scanner-self-sbom")
 	for _, target := range targets {
 		prefix := "target-" + target.Name + "-"
@@ -50,7 +54,7 @@ func PlannedCommands(repo repository.Repository) []policy.Command {
 			})
 		}
 		commands = appendScannerCommands(commands, prefix+"observed")
-		if target.OpenVEX != "" {
+		if target.OpenVEX != "" && targetHasOpenVEX(repo, target.OpenVEX) {
 			commands = appendScannerCommands(commands, prefix+"enforced")
 		}
 		commands = appendScannerCommands(commands, prefix+"sbom")
@@ -130,4 +134,30 @@ func sameStrings(left, right []string) bool {
 		}
 	}
 	return true
+}
+
+func scannerHasOpenVEX(repo repository.Repository) bool {
+	locked, _, err := release.ReadLock(repo.Root)
+	if err != nil || locked.Scanner == nil {
+		return false
+	}
+	var manifest release.ScannerManifest
+	if err := strictjson.Decode(locked.Scanner.Payload, &manifest); err != nil {
+		return false
+	}
+	return openVEXHasStatements(manifest.OpenVEX)
+}
+
+func targetHasOpenVEX(repo repository.Repository, path string) bool {
+	resolved, err := containedRepositoryPath(repo, path)
+	if err != nil {
+		return false
+	}
+	payload, err := readBoundedRegularFile(resolved, 64*1024)
+	return err == nil && openVEXHasStatements(payload)
+}
+
+func openVEXHasStatements(payload []byte) bool {
+	document, err := decodeOpenVEX(payload)
+	return err == nil && len(document.Statements) > 0
 }

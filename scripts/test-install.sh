@@ -220,7 +220,6 @@ EOF
   printf '2.16\n' >"${source_root}/tools/vulture-version.txt"
   printf '%s\n' 'vulture-2.16-py3-none-any.whl 6e0f1c312cef1c87856957e5c2ca9608834a7c794c2180477f30bf0e4cc58eee' \
     >"${source_root}/tools/vulture_wheel_checksums.txt"
-  printf '0.72.0\n' >"${source_root}/tools/trivy-version.txt"
   write_file "${source_root}/tools/ty.toml" <<'EOF'
 [rules]
 EOF
@@ -249,7 +248,7 @@ EOF
   write_file "${source_root}/skills/unpackaged-fixture/SKILL.md" <<'EOF'
 # Unpackaged fixture
 EOF
-  write_file "${source_root}/artifact-security/scanner-policy.json" <<'EOF'
+  write_file "${source_root}/artifact-security/scanner-manifest.json" <<'EOF'
 { "scanner": "disposable" }
 EOF
   write_file "${source_root}/tools/shellcheck.sh" <<'EOF'
@@ -554,7 +553,7 @@ for required in bin/code-polishy bin/code-polishy-launcher VERSION LICENSE READM
   schema/code-polishy-report.schema.json schema/sarif-schema-2.1.0.json \
   templates/AGENTS.md templates/behavior-review.md \
   templates/code-polishyw templates/code-polishyw.ps1 \
-  artifact-security/scanner-policy.json \
+  artifact-security/scanner-manifest.json \
   scripts/go_version.txt tools/shellcheck.sh \
   tools/shellcheck-version.txt tools/node-version.txt tools/pnpm-version.txt \
   tools/staticcheck-version.txt tools/deadcode-version.txt tools/govulncheck-version.txt \
@@ -566,7 +565,7 @@ for required in bin/code-polishy bin/code-polishy-launcher VERSION LICENSE READM
   tools/rustfmt.toml tools/clippy.toml \
   tools/packaging-version.txt tools/packaging_wheel_checksums.txt \
   tools/ruff-version.txt tools/ty-version.txt tools/ty.toml tools/vulture-version.txt tools/vulture_wheel_checksums.txt \
-  tools/trivy-version.txt tools/javascript_bundle_inventory.txt \
+  tools/javascript_bundle_inventory.txt \
   ".tools/javascript/${platform_tag}/node/bin/node" \
   ".tools/javascript/${platform_tag}/pnpm/bin/pnpm.cjs" \
   ".tools/python/${platform_tag}/python" \

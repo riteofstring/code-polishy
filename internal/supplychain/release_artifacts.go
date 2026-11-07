@@ -16,6 +16,8 @@ import (
 
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
+	"github.com/riteofstring/code-polishy/internal/strictjson"
+	policyschema "github.com/riteofstring/code-polishy/schema"
 )
 
 const (
@@ -133,6 +135,11 @@ func readReleaseArtifactVersion(repo repository.Repository, artifact policy.Rele
 	if err != nil {
 		return "", err
 	}
+	data, err = releaseArtifactVersionBytes(data)
+	if err != nil {
+		return "", err
+	}
+
 	if len(data) == 0 || len(data) > 256 {
 		return "", fmt.Errorf("version pin must contain one bounded exact version")
 	}
@@ -482,4 +489,26 @@ func goProxyEscapeSegment(value string) string {
 		escaped.WriteRune(character)
 	}
 	return url.PathEscape(escaped.String())
+}
+
+func releaseArtifactVersionBytes(data []byte) ([]byte, error) {
+	if !strings.HasPrefix(strings.TrimSpace(string(data)), "{") {
+		return data, nil
+	}
+	if err := policyschema.ValidateUniqueJSON(data, 16); err != nil {
+		return nil, err
+	}
+	var fields map[string]json.RawMessage
+	var version string
+	if len(data) > 8<<10 {
+		return nil, fmt.Errorf("JSON version pin exceeds its byte bound")
+	}
+	if err := strictjson.Decode(data, &fields); err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(fields["version"], &version); err != nil {
+		return nil, err
+	}
+	return []byte(version), nil
+
 }

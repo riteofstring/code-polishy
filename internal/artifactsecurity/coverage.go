@@ -38,7 +38,7 @@ func ToolFindings(repo repository.Repository) []policy.Finding {
 			Message: "artifact security requires the Docker CLI and a reachable Docker server",
 		})
 	}
-	if _, err := loadScannerPolicy(repo.PolicyRoot); err != nil {
+	if _, err := loadScannerPolicy(repo.Root, repo.PolicyRoot); err != nil {
 		findings = append(findings, policy.Finding{
 			Check: "policy.tool", Path: "repository", Subject: "trivy",
 			Message: "policy-owned Trivy scanner inputs are invalid: " + boundedText(err.Error(), 1024),

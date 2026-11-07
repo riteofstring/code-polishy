@@ -111,6 +111,9 @@ func (state *scannerRuntime) scan(
 	if err := state.validateArchiveUnchanged(artifact.archive, archiveHash); err != nil {
 		return scanOutput{}, err
 	}
+	if artifact.mode == "scanner" && !state.policy.ReassessBy.After(time.Now().UTC()) {
+		return scanOutput{}, errors.New("scanner assessment expired during scanning")
+	}
 	return buildScanOutput(state, target, artifact, started, database, archiveHash, sbom, blocking, accepted), nil
 }
 
@@ -211,8 +214,9 @@ func buildScanOutput(
 	return scanOutput{
 		report: artifactReport{
 			Version: 1, Target: target.Name, Mode: artifact.mode, Reference: artifact.reference, ImageID: artifact.imageID,
-			ScannerVersion: state.policy.TrivyVersion,
-			SourceImage:    state.policy.SourceImage, DatabaseSHA256: database.SHA256,
+			Platform:       state.daemon.platform,
+			ScannerVersion: state.policy.TrivyVersion, ScannerPackageSHA256: state.policy.PackageSHA256,
+			SourceImage: state.policy.SourceImage, DatabaseSHA256: database.SHA256,
 			ArchiveSHA256: archiveHash, SBOMSHA256: bytesSHA256(sbom),
 			StartedAt: started, CompletedAt: time.Now().UTC(), Findings: blocking, AcceptedFindings: accepted,
 		},
@@ -421,8 +425,8 @@ func (state *scannerRuntime) policyFinding(target policy.ArtifactTarget, artifac
 	if artifact.mode == "scanner" {
 		result.Path = policy.LockFilename
 		result.Message = fmt.Sprintf("Code Polishy's scanner (Trivy %s, %s): %s", state.policy.TrivyVersion, state.policy.SourceImage, result.Message)
-		result.Remediation.Summary = "Upgrade the locked tool to a verified Code Polishy release carrying a scanner that resolves this finding, then rerun artifact-security. " +
-			"No fixed Code Polishy/scanner release has been established by this scan. Rebuilding application artifacts cannot repair Code Polishy's scanner."
+		result.Remediation.Summary = "Use scanner-update to preview and adopt an authenticated scanner assessment or image revision, then rerun artifact-security. " +
+			"No fixed scanner package revision has been established by this scan. Rebuilding application artifacts cannot repair Code Polishy's scanner."
 	}
 	if finding.Kind == "vulnerability" {
 		packageID := finding.Package

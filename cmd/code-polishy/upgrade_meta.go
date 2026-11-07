@@ -166,6 +166,7 @@ func prepareUpgradePlan(invocation invocation, options upgradePlanOptions) (upgr
 	if err != nil {
 		return upgradePlanningResult{}, err
 	}
+	incoming.Scanner = outgoing.Scanner
 	if bytes.Equal(release.RenderLock(outgoing), release.RenderLock(incoming)) {
 		return upgradePlanningResult{}, errors.New("the upgrade candidate resolves to the repository's current release")
 	}
@@ -596,6 +597,11 @@ func verifyUpgradeRelease(root string, locked release.Lock, outgoing bool) error
 	}
 	if err := manifest.Verify(root); err != nil {
 		return err
+	}
+	if !outgoing && locked.Scanner != nil {
+		if _, err := release.VerifyScanner(root, locked.Scanner); err != nil {
+			return err
+		}
 	}
 	return manifest.Satisfies(locked)
 }

@@ -56,10 +56,11 @@ version before staging a release.
   release, while the online supply-chain gate resolves their release age from
   fixed upstream metadata services; neither comes from a target environment.
 - Trivy is copied from an exact official image digest into the minimal scanner
-  image. `artifact-security/scanner-policy.json` records that external source
-  and its runtime configuration; the release manifest covers the repository-owned
-  Dockerfile and `artifact-security/scanner.openvex.json`, which records reviewed
-  vulnerability applicability.
+  image. The authenticated scanner manifest in the consumer lock records that
+  source and reviewed vulnerability applicability. Code Polishy's release owns
+  the execution contract, Dockerfile, fixed security policy and publisher public
+  key. The independently signed package carries no executable or runtime builder;
+  see [Scanner manifests](design/scanner-manifests.md).
 - Portable Linux releases use one digest-pinned Ubuntu base only for the OCI
   transport. The image installs Git and CA certificates, copies an already
   verified native release tree, runs as non-root, and does not replace the

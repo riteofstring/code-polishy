@@ -5,27 +5,23 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
+	"github.com/riteofstring/code-polishy/internal/release"
 	"github.com/riteofstring/code-polishy/internal/repository"
 	"github.com/riteofstring/code-polishy/internal/runner"
-	"github.com/riteofstring/code-polishy/internal/strictjson"
 )
 
 const (
-	scannerPolicyRelativePath     = "artifact-security/scanner-policy.json"
 	scannerDockerfilePath         = "artifact-security/scanner.Dockerfile"
-	scannerPolicyMaximumBytes     = 32 * 1024
 	metadataMaximumBytes          = 64 * 1024
 	artifactCommandTimeoutSeconds = 15 * 60
 	artifactCleanupTimeoutSeconds = 30
@@ -39,15 +35,17 @@ type Result struct {
 }
 
 type scannerPolicy struct {
-	Version                 int      `json:"version"`
-	TrivyVersion            string   `json:"trivyVersion"`
-	SourceImage             string   `json:"sourceImage"`
-	DatabaseRepository      string   `json:"databaseRepository"`
-	DatabaseSchemaVersion   int      `json:"databaseSchemaVersion"`
-	DatabaseMaximumAgeHours int      `json:"databaseMaximumAgeHours"`
-	FailSeverities          []string `json:"failSeverities"`
-	MaximumArchiveBytes     int64    `json:"maximumArchiveBytes"`
-	MaximumReportBytes      int64    `json:"maximumReportBytes"`
+	ReassessBy              time.Time
+	OpenVEX                 []byte
+	PackageSHA256           string
+	TrivyVersion            string
+	SourceImage             string
+	DatabaseRepository      string
+	DatabaseSchemaVersion   int
+	DatabaseMaximumAgeHours int
+	FailSeverities          []string
+	MaximumArchiveBytes     int64
+	MaximumReportBytes      int64
 }
 
 type normalizedFinding struct {
@@ -71,20 +69,22 @@ type acceptedFinding struct {
 }
 
 type artifactReport struct {
-	Version          int                 `json:"version"`
-	Target           string              `json:"target"`
-	Mode             string              `json:"mode"`
-	Reference        string              `json:"reference"`
-	ImageID          string              `json:"imageId"`
-	ScannerVersion   string              `json:"scannerVersion"`
-	SourceImage      string              `json:"sourceImage"`
-	DatabaseSHA256   string              `json:"databaseSha256"`
-	ArchiveSHA256    string              `json:"archiveSha256"`
-	SBOMSHA256       string              `json:"sbomSha256"`
-	StartedAt        time.Time           `json:"startedAt"`
-	CompletedAt      time.Time           `json:"completedAt"`
-	Findings         []normalizedFinding `json:"findings"`
-	AcceptedFindings []acceptedFinding   `json:"acceptedFindings"`
+	Platform             string              `json:"platform"`
+	ScannerPackageSHA256 string              `json:"scannerPackageSha256"`
+	Version              int                 `json:"version"`
+	Target               string              `json:"target"`
+	Mode                 string              `json:"mode"`
+	Reference            string              `json:"reference"`
+	ImageID              string              `json:"imageId"`
+	ScannerVersion       string              `json:"scannerVersion"`
+	SourceImage          string              `json:"sourceImage"`
+	DatabaseSHA256       string              `json:"databaseSha256"`
+	ArchiveSHA256        string              `json:"archiveSha256"`
+	SBOMSHA256           string              `json:"sbomSha256"`
+	StartedAt            time.Time           `json:"startedAt"`
+	CompletedAt          time.Time           `json:"completedAt"`
+	Findings             []normalizedFinding `json:"findings"`
+	AcceptedFindings     []acceptedFinding   `json:"acceptedFindings"`
 }
 
 type scanOutput struct {
@@ -93,87 +93,32 @@ type scanOutput struct {
 	findings []policy.Finding
 }
 
-type scannerPolicyEvidence struct {
-	versionText string
-}
-
-func loadScannerPolicy(policyRoot string) (scannerPolicy, error) {
-	path := filepath.Join(policyRoot, filepath.FromSlash(scannerPolicyRelativePath))
-	payload, err := readBoundedRegularFile(path, scannerPolicyMaximumBytes)
+func loadScannerPolicy(repoRoot, policyRoot string) (scannerPolicy, error) {
+	lock, _, err := release.ReadLock(repoRoot)
 	if err != nil {
-		return scannerPolicy{}, fmt.Errorf("read artifact scanner policy: %w", err)
-	}
-	var configured scannerPolicy
-	if err := strictjson.Decode(payload, &configured); err != nil {
-		return scannerPolicy{}, fmt.Errorf("decode artifact scanner policy: %w", err)
-	}
-	if err := configured.validate(policyRoot); err != nil {
 		return scannerPolicy{}, err
 	}
-	return configured, nil
-}
-
-func (configured scannerPolicy) validate(policyRoot string) error {
-	evidence, err := loadScannerPolicyEvidence(policyRoot)
+	manifest, err := release.VerifyScanner(policyRoot, lock.Scanner)
 	if err != nil {
-		return err
+		return scannerPolicy{}, err
 	}
-	if _, err := parseOpenVEX(filepath.Join(policyRoot, "artifact-security", "scanner.openvex.json"), time.Now().UTC()); err != nil {
-		return fmt.Errorf("validate scanner OpenVEX: %w", err)
+	if err := ValidateScannerManifest(manifest); err != nil {
+		return scannerPolicy{}, err
 	}
-	return configured.validateFields(evidence)
+	if _, err := readBoundedRegularFile(filepath.Join(policyRoot, filepath.FromSlash(scannerDockerfilePath)), 64*1024); err != nil {
+		return scannerPolicy{}, err
+	}
+
+	return scannerPolicy{TrivyVersion: manifest.TrivyVersion, SourceImage: manifest.SourceImage,
+		DatabaseRepository: "ghcr.io/aquasecurity/trivy-db:2", DatabaseSchemaVersion: 2,
+		DatabaseMaximumAgeHours: 24, FailSeverities: []string{"HIGH", "CRITICAL"},
+		MaximumArchiveBytes: 2147483648, MaximumReportBytes: 67108864,
+		ReassessBy: manifest.ReassessBy, OpenVEX: manifest.OpenVEX, PackageSHA256: bytesSHA256(lock.Scanner.Payload)}, nil
 }
 
-func loadScannerPolicyEvidence(policyRoot string) (scannerPolicyEvidence, error) {
-	versionBytes, err := readBoundedRegularFile(filepath.Join(policyRoot, "tools", "trivy-version.txt"), 64)
-	if err != nil {
-		return scannerPolicyEvidence{}, err
-	}
-	dockerfile := filepath.Join(policyRoot, filepath.FromSlash(scannerDockerfilePath))
-	if _, err := readBoundedRegularFile(dockerfile, 64*1024); err != nil {
-		return scannerPolicyEvidence{}, err
-	}
-	return scannerPolicyEvidence{versionText: strings.TrimSpace(string(versionBytes))}, nil
-}
-
-func (configured scannerPolicy) validateFields(evidence scannerPolicyEvidence) error {
-	if err := configured.validateProvenanceFields(evidence); err != nil {
-		return err
-	}
-	return configured.validateLimitFields()
-}
-
-func (configured scannerPolicy) validateProvenanceFields(evidence scannerPolicyEvidence) error {
-	if configured.Version != 2 {
-		return errors.New("artifact scanner policy version must be 2")
-	}
-	if evidence.versionText != configured.TrivyVersion {
-		return errors.New("artifact scanner policy and version pin do not agree")
-	}
-	const imagePrefix = "docker.io/aquasec/trivy@sha256:"
-	if !strings.HasPrefix(configured.SourceImage, imagePrefix) {
-		return errors.New("artifact scanner source image must use the exact official Trivy digest")
-	}
-	if !exactDigest.MatchString(strings.TrimPrefix(configured.SourceImage, imagePrefix)) {
-		return errors.New("artifact scanner source image digest must contain 64 lowercase hexadecimal characters")
-	}
-	if configured.DatabaseRepository != fmt.Sprintf("ghcr.io/aquasecurity/trivy-db:%d", configured.DatabaseSchemaVersion) {
-		return errors.New("artifact scanner database policy is invalid")
-	}
-	return nil
-}
-
-func (configured scannerPolicy) validateLimitFields() error {
-	if configured.DatabaseMaximumAgeHours < 1 || configured.DatabaseMaximumAgeHours > 72 {
-		return errors.New("artifact scanner database maximum age must be between 1 and 72 hours")
-	}
-	if !slices.Equal(configured.FailSeverities, []string{"HIGH", "CRITICAL"}) {
-		return errors.New("artifact scanner finding or size policy is invalid")
-	}
-	if configured.MaximumArchiveBytes < 1 || configured.MaximumReportBytes < 1 {
-		return errors.New("artifact scanner size limits must be positive")
-	}
-	return nil
+func ValidateScannerManifest(manifest release.ScannerManifest) error {
+	_, err := parseOpenVEXBytes(manifest.OpenVEX, time.Now().UTC())
+	return err
 }
 
 func readBoundedRegularFile(path string, maximum int64) ([]byte, error) {

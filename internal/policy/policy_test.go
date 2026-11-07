@@ -1486,7 +1486,7 @@ func TestCheckedInToolVersionPinsHaveReleaseAgeCoverage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pinMatches = append(pinMatches, filepath.Join(repositoryRoot, "scripts", "go_version.txt"))
+	pinMatches = append(pinMatches, filepath.Join(repositoryRoot, "scripts", "go_version.txt"), filepath.Join(repositoryRoot, "artifact-security", "scanner-manifest.json"))
 	pins := map[string]bool{}
 	for _, path := range pinMatches {
 		relative, err := filepath.Rel(repositoryRoot, path)

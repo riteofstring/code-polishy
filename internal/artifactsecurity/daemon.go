@@ -115,7 +115,7 @@ func (operation operationContext) remedy(phase string, err error) string {
 	case errors.Is(err, errRemoteDockerEndpoint):
 		return "Select a Docker daemon on this machine with DOCKER_HOST or DOCKER_CONTEXT; a remote daemon cannot read the scanner's private bind mounts."
 	case phase == "scanner-policy":
-		return "Reinstall the exact locked Code Polishy release so its scanner policy, Dockerfile, and OpenVEX statements are intact; repository configuration cannot repair them."
+		return "Use scanner-update to adopt an authenticated, compatible scanner manifest. Restore the locked release if its publisher key or runtime builder is damaged."
 	case phase == "docker-daemon":
 		return "Start the selected Docker daemon, or grant this user access to it, or select a reachable local daemon with DOCKER_HOST or DOCKER_CONTEXT. Confirm that docker version reports a server, then rerun artifact-security."
 	case err != nil && strings.Contains(err.Error(), "permission denied"):
@@ -123,7 +123,7 @@ func (operation operationContext) remedy(phase string, err error) string {
 	case phase == "vulnerability-database":
 		return "Confirm that containers on the selected Docker daemon can reach the scanner's database registry over HTTPS, then rerun artifact-security; do not reuse a stale database."
 	case phase == "scanner-runtime" || phase == "self-scan" || phase == "database-immutability" || phase == "cleanup":
-		return "Resolve the reported Docker or scanner failure on the selected daemon, then rerun artifact-security; the locked release owns the scanner image, its limits, and its OpenVEX statements."
+		return "Resolve the reported Docker or scanner failure on the selected daemon, then rerun artifact-security; the locked release owns scanner execution and limits; the authenticated manifest selects its image and assessments."
 	}
 	return ""
 }

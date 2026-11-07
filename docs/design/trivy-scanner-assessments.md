@@ -134,11 +134,15 @@ environment input requires reassessment before use.
 
 ## Scanner finding enforcement
 
-The release-owned OpenVEX document contains the one exact statement above.
+The signed scanner manifest embeds the OpenVEX statement above. Its publisher
+signature, exact image, execution contract, and assessment deadline are verified
+before the statement can authorize a suppression. See
+[Scanner manifests](scanner-manifests.md) and
+[Publisher setup](../scanner-publisher-setup.md).
 Every statement must match an observed advisory and package PURL. New or
 unmatched findings, changed findings, and unused statements remain blocking.
 Target OpenVEX and generic dependency assessments cannot override these
-release-owned decisions.
+publisher-authenticated decisions.
 
 An explicit empty `statements` array accepts no findings and avoids a second
 enforcement scan. Missing or null arrays remain malformed policy.
@@ -151,16 +155,16 @@ evidence for its recorded advisory snapshot, not a waiver of later findings.
 
 ## Finding ownership
 
-The scanner runtime is owned by the locked Code Polishy release. Its blocking
+The scanner runtime and execution contract are owned by the locked Code Polishy
+release. Scanner image and assessment selection belong to the authenticated
+manifest in the repository lock. Its blocking
 findings use the lockfile as their scope and identify the Trivy version and pinned
 source image. Ownership comes from the internal scanner artifact mode, not a
 repository-declared target name. Application findings keep their artifact scope,
 so the same advisory in both artifacts produces distinct findings.
 
-Scanner remediation requires a verified Code Polishy release carrying a repaired
-scanner. The scan has no authenticated inventory of newer release contents, so
-it explicitly establishes no fixed Code Polishy/scanner release. A component's
-reported fixed version is not evidence of an available scanner release. Ownership
-changes neither blocking severity nor OpenVEX reconciliation, and does not suggest
-repairing the application, suppressing the finding, or substituting an unverified
-scanner.
+Scanner remediation uses an explicit `scanner-update` preview and adoption of an
+authenticated manifest revision. An assessment-only update can retain the same
+Code Polishy release and scanner binary. The scan establishes no fixed package
+revision from a dependency's reported fixed version. Scanner findings cannot be
+repaired by rebuilding an application or by supplying project waivers.

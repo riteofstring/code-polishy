@@ -128,6 +128,8 @@ func renderMarkdown(report artifactReport) string {
 	builder := &strings.Builder{}
 	fmt.Fprintf(builder, "# Artifact security: %s\n\n", markdownText(report.Target))
 	fmt.Fprintf(builder, "- Completed: %s\n", report.CompletedAt.UTC().Format(time.RFC3339))
+	fmt.Fprintf(builder, "- Scanner platform: %s\n", markdownText(report.Platform))
+	fmt.Fprintf(builder, "- Scanner package: %s\n", markdownText(report.ScannerPackageSHA256))
 	fmt.Fprintf(builder, "- Scanner: Trivy %s\n", markdownText(report.ScannerVersion))
 	fmt.Fprintf(builder, "- Artifact reference: `%s`\n", markdownText(report.Reference))
 	if report.ImageID != "" {

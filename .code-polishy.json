@@ -108,6 +108,14 @@
         ]
       },
       {
+        "path": "docs/design/scanner-manifests.md",
+        "sourcePaths": [
+          "internal/release/scanner.go",
+          "internal/release/scanner_test.go",
+          "cmd/code-polishy/scanner_meta.go"
+        ]
+      },
+      {
         "path": "docs/design/trivy-scanner-assessments.md",
         "module": "artifactsecurity"
       },
@@ -673,6 +681,7 @@
     },
     {
       "name": "agents",
+      "dependsOn": ["release"],
       "paths": [
         "AGENTS.md",
         "code-polishyw",
@@ -753,8 +762,8 @@
     },
     {
       "name": "artifactsecurity",
-      "paths": ["internal/artifactsecurity/**"],
-      "dependsOn": ["policy", "repository", "runner", "strictjson"]
+      "paths": ["internal/artifactsecurity/**", "artifact-security/**"],
+      "dependsOn": ["policy", "repository", "runner", "release", "strictjson"]
     },
     {
       "name": "policymodule",
@@ -805,6 +814,7 @@
       "paths": ["cmd/code-polishy/**"],
       "dependsOn": [
         "agents",
+        "artifactsecurity",
         "documentation",
         "engine",
         "finalstate",
@@ -824,6 +834,7 @@
     {
       "name": "tooling",
       "paths": [
+        ".github/workflows/scanner-release.yml",
         "bin/**",
         "release/**",
         "scripts/**",
@@ -2070,7 +2081,7 @@
       },
       {
         "name": "trivy",
-        "versionFile": "tools/trivy-version.txt",
+        "versionFile": "artifact-security/scanner-manifest.json",
         "source": "github-release",
         "locator": "aquasecurity/trivy",
         "tagPrefix": "v"
@@ -2082,7 +2093,7 @@
         "ecosystem": "artifact",
         "package": "trivy",
         "version": "0.76.1",
-        "scope": "tools/trivy-version.txt",
+        "scope": "artifact-security/scanner-manifest.json",
         "category": "security-fix",
         "evidence": "https://github.com/riteofstring/code-polishy/blob/main/docs/design/trivy-scanner-assessments.md",
         "reason": "CVE-2026-111943 affects the scanner's HTTPS database download: compromised certificate intermediates can authenticate forged advisory data. No aged official scanner release contains the fix. Trivy 0.76.1 supplies the upstream Go 1.27.3 correction and updated CA bundle; retaining the vulnerable downloader or disabling fresh advisory checks is riskier than the reviewed official update before its ordinary admission on 2026-11-20.",

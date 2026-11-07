@@ -2,13 +2,11 @@ package release
 
 import (
 	"bytes"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"path"
 	"path/filepath"
 	"slices"
@@ -77,7 +75,7 @@ func WriteUpgradePlan(repoRoot string, plan UpgradePlan) (string, error) {
 		return "", err
 	}
 	defer directory.Close()
-	if err := publishUpgradePlanData(directory, data); err != nil {
+	if err := publishUpgradeData(directory, "plan.json", data); err != nil {
 		return "", err
 	}
 	published, err := readCapabilityFile(root, relative, MaximumUpgradePlanBytes)
@@ -215,25 +213,4 @@ func compareUpgradeDiagnostic(left, right UpgradeDiagnostic) int {
 
 func upgradePlanRelativePath(incoming Lock) string {
 	return incoming.ReleaseDigest + "/plan.json"
-}
-
-func publishUpgradePlanData(directory *os.Root, data []byte) error {
-	if info, err := directory.Lstat("plan.json"); err == nil && !info.Mode().IsRegular() || err != nil && !errors.Is(err, os.ErrNotExist) {
-		return errors.New("upgrade plan must be a regular file")
-	}
-	temporary := ".plan-" + rand.Text() + ".tmp"
-	file, err := directory.OpenFile(temporary, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-	if err != nil {
-		return fmt.Errorf("stage upgrade plan: %w", err)
-	}
-	defer directory.Remove(temporary)
-	_, writeErr := file.Write(data)
-	syncErr := file.Sync()
-	if err := errors.Join(writeErr, syncErr, file.Close()); err != nil {
-		return fmt.Errorf("write upgrade plan: %w", err)
-	}
-	if err := directory.Rename(temporary, "plan.json"); err != nil {
-		return fmt.Errorf("publish upgrade plan: %w", err)
-	}
-	return nil
 }

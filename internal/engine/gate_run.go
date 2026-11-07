@@ -263,16 +263,20 @@ func gateRunIdentity(engine *Engine, gate gaterun.GateKind, requestedBase, exact
 	if err != nil {
 		return gaterun.Identity{}, err
 	}
-	configuration, err := json.Marshal(engine.Repository.Config)
+	lock, found, err := release.ReadLock(engine.Repository.Root)
+	if err != nil {
+		return gaterun.Identity{}, err
+	}
+	configuration, err := json.Marshal(struct {
+		Configuration policy.Config
+		Scanner       *release.SignedScanner
+	}{engine.Repository.Config, lock.Scanner})
 	if err != nil {
 		return gaterun.Identity{}, fmt.Errorf("encode loaded policy configuration: %w", err)
 	}
 	configurationDigest := gaterun.ContentSHA256(configuration)
 	releaseIdentity := gaterun.ReleaseIdentity{Version: "development", Digest: configurationDigest}
-	lock, found, err := release.ReadLock(engine.Repository.Root)
-	if err != nil {
-		return gaterun.Identity{}, err
-	}
+
 	if found {
 		releaseIdentity = gaterun.ReleaseIdentity{Version: lock.CodePolishyVersion, Digest: lock.ReleaseDigest}
 	}

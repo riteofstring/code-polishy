@@ -364,6 +364,26 @@
       "modules": [],
       "enforcement": ["explicit"],
       "workflows": ["docs/installation.md"]
+    },
+    {
+      "name": "scanner-sign",
+      "kind": "command",
+      "description": "Sign a reviewed scanner manifest with the approved publisher key.",
+      "aliases": ["scanner signing"],
+      "paths": [],
+      "modules": [],
+      "enforcement": ["explicit"],
+      "workflows": ["docs/scanner-publisher-setup.md"]
+    },
+    {
+      "name": "scanner-update",
+      "kind": "command",
+      "description": "Preview or adopt an exact authenticated scanner image and assessment package.",
+      "aliases": ["scanner assessments", "scanner adoption"],
+      "paths": [],
+      "modules": [],
+      "enforcement": ["explicit"],
+      "workflows": ["docs/scanner-publisher-setup.md"]
     }
   ]
 }

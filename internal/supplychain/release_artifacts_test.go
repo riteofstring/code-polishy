@@ -273,3 +273,21 @@ func (function artifactClientFunc) Do(request *http.Request) (*http.Response, er
 func artifactResponse(status int, body string) *http.Response {
 	return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader(body)), Header: http.Header{}}
 }
+
+func TestManifestArtifactAdmissionUsesBinaryVersionAcrossAssessmentRevisions(t *testing.T) {
+	repo := supplyRepository(t)
+	artifact := policy.ReleaseArtifact{Name: "trivy", VersionFile: "scanner.json", Source: "github-release", Locator: "aquasecurity/trivy", TagPrefix: "v"}
+	for _, revision := range []string{"1.0.0", "1.0.1"} {
+		writeSupplyFile(t, repo.Root, artifact.VersionFile, fmt.Sprintf(`{"packageVersion":%q,"version":"0.76.1","openVex":{"statements":[]}}`, revision))
+		version, err := readReleaseArtifactVersion(repo, artifact)
+		if err != nil || version != "0.76.1" {
+			t.Fatalf("binary age input changed: %q %v", version, err)
+		}
+	}
+	for _, payload := range []string{`{"version":"0.76.1","version":"0.76.2"}`, `{"packageVersion":"1.0.0"}`, `{"version":"latest"}`} {
+		writeSupplyFile(t, repo.Root, artifact.VersionFile, payload)
+		if _, err := readReleaseArtifactVersion(repo, artifact); err == nil {
+			t.Fatal("ambiguous or non-exact manifest version accepted")
+		}
+	}
+}

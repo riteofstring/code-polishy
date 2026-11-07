@@ -34,10 +34,7 @@ func daemonTestRepository(t *testing.T) repository.Repository {
 	if err := os.WriteFile(filepath.Join(root, "agent.tar"), []byte("target image"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	policyRoot, err := filepath.Abs(filepath.Join("..", ".."))
-	if err != nil {
-		t.Fatal(err)
-	}
+	policyRoot := scannerFixture(t, root)
 	return repository.Repository{
 		Root: root, PolicyRoot: policyRoot,
 		Config: policy.Config{SupplyChain: policy.SupplyChain{ArtifactSecurity: policy.ArtifactSecurity{

@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ "$#" -ne 2 || "$1" != /* || "$2" != /* ]]; then
-  echo "usage: verify-installed-artifact-security.sh ABSOLUTE_INSTALLATION ABSOLUTE_FIXTURE" >&2
+if [[ "$#" -lt 2 || "$#" -gt 3 || "$1" != /* || "$2" != /* || ( -n "${3:-}" && "${3:-}" != /* ) ]]; then
+  echo "usage: verify-installed-artifact-security.sh ABSOLUTE_INSTALLATION ABSOLUTE_FIXTURE [ABSOLUTE_SIGNED_MANIFEST]" >&2
   exit 2
 fi
 
-python3 - "$1" "$2" <<'PY'
+python3 - "$1" "$2" "${3:-}" <<'PY'
 import json
 import sys
 import pathlib
+import platform
 import subprocess
 
 installation = pathlib.Path(sys.argv[1])
@@ -43,6 +44,7 @@ lock = {
     "codePolishyVersion": manifest["codePolishyVersion"],
     "releaseDigest": manifest["releaseDigest"],
     "features": manifest["features"],
+    "scanner": json.loads(pathlib.Path(sys.argv[3] or release / "artifact-security/scanner.json").read_text(encoding="utf-8")),
     "publication": {
         "indexUrl": "https://example.invalid/release-index.json", "indexSha256": "a" * 64,
         "archives": [{"host": host, "url": f"https://example.invalid/{host}.zip", "sha256": "b" * 64, "size": 1} for host in hosts],
@@ -51,13 +53,16 @@ lock = {
 (root / ".code-polishy.lock.json").write_text(json.dumps(lock) + "\n", encoding="utf-8")
 subprocess.run(["git", "-C", str(root), "init", "--quiet"], check=True)
 subprocess.run([str(installation / "bin/code-polishy"), "--repo-root", str(root), "artifact-security"], check=True, timeout=1200)
-version = (release / "tools/trivy-version.txt").read_text(encoding="utf-8").strip()
+import base64
+version = json.loads(base64.b64decode(lock["scanner"]["payload"]))["version"]
+expected_platform = {"x86_64": "linux/amd64", "aarch64": "linux/arm64", "arm64": "linux/arm64"}[platform.machine().lower()]
 reports = root / ".code-polishy-reports/artifact-security"
 for target in ("code-polishy-scanner", "minimal"):
     paths = list((reports / target).glob("*/report.json"))
     assert len(paths) == 1, paths
     report = json.loads(paths[0].read_text(encoding="utf-8"))
     assert report["target"] == target and report["scannerVersion"] == version, report
+    assert report["platform"] == expected_platform, report
     assert not report["findings"], report
     if target == "minimal":
         assert not report["acceptedFindings"], report

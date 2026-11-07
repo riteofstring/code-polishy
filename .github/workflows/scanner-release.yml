@@ -1,0 +1,157 @@
+name: Publish scanner manifest
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing annotated scanner-vMAJOR.MINOR.PATCH tag
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scanner-publication
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    outputs:
+      commit: ${{ steps.source.outputs.commit }}
+      sha256: ${{ steps.package.outputs.sha256 }}
+    environment: scanner-publication
+    permissions:
+      contents: write
+    steps:
+      - name: Check out approved scanner tag
+        id: source
+        shell: bash
+        env:
+          REQUESTED_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          [[ "${REQUESTED_TAG}" =~ ^scanner-v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          git init .
+          git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+          git fetch --depth=1 origin "refs/tags/${REQUESTED_TAG}:refs/tags/${REQUESTED_TAG}"
+          [[ "$(git cat-file -t "refs/tags/${REQUESTED_TAG}")" == tag ]]
+          git checkout --detach "${REQUESTED_TAG}^{commit}"
+          printf 'commit=%s\n' "$(git rev-parse HEAD)" >>"${GITHUB_OUTPUT}"
+          python3 - "${REQUESTED_TAG}" <<'PY'
+          import json, sys
+          with open("artifact-security/scanner-manifest.json", encoding="utf-8") as source:
+              manifest = json.load(source)
+          assert sys.argv[1] == "scanner-v" + manifest["packageVersion"]
+          PY
+      - name: Install admitted policy tools
+        run: ./tools/install-policy-tools.sh
+      - name: Build signer and run scanner boundary tests
+        run: |
+          ./scripts/build.sh
+          ./scripts/go.sh test ./internal/release ./internal/artifactsecurity
+          PATH="${GITHUB_WORKSPACE}/.tools/bin:${PATH}" ./.tools/bin/code-polishy supply-chain
+      - name: Sign with protected publisher key
+        shell: bash
+        env:
+          SCANNER_SIGNING_KEY: ${{ secrets.SCANNER_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          key_path="$(mktemp "${RUNNER_TEMP}/scanner-key.XXXXXX")"
+          trap 'rm -f "${key_path}"' EXIT
+          printf '%s\n' "${SCANNER_SIGNING_KEY}" >"${key_path}"
+          unset SCANNER_SIGNING_KEY
+          ./.tools/bin/code-polishy --policy-root "${GITHUB_WORKSPACE}" scanner-sign \
+            --input artifact-security/scanner-manifest.json --key "${key_path}" \
+            --output "${RUNNER_TEMP}/scanner.json"
+      - name: Stage signed scanner package
+        id: package
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          cd "${RUNNER_TEMP}"
+          sha256sum scanner.json >scanner.sha256
+          printf 'sha256=%s\n' "$(cut -d ' ' -f 1 scanner.sha256)" >>"${GITHUB_OUTPUT}"
+          gh release create "${REQUESTED_TAG}" --repo "${GITHUB_REPOSITORY}" \
+            --verify-tag --draft --title "${REQUESTED_TAG}" \
+            --notes 'Signed scanner manifest; execution and security policy remain owned by Code Polishy.'
+          gh release upload "${REQUESTED_TAG}" scanner.json scanner.sha256 --repo "${GITHUB_REPOSITORY}"
+
+  verify:
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            architecture: amd64
+          - runner: ubuntu-24.04-arm
+            architecture: arm64
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: write
+    steps:
+      - name: Check out approved scanner tag
+        shell: bash
+        env:
+          APPROVED_COMMIT: ${{ needs.prepare.outputs.commit }}
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+          git fetch --depth=1 --no-tags origin "${APPROVED_COMMIT}"
+          git checkout --detach "${APPROVED_COMMIT}"
+      - name: Install admitted policy tools
+        run: ./tools/install-policy-tools.sh
+      - name: Verify installed scanner and retain advisory evidence
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_TAG: ${{ inputs.tag }}
+          APPROVED_SCANNER_SHA256: ${{ needs.prepare.outputs.sha256 }}
+        run: |
+          set -euo pipefail
+          gh release download "${REQUESTED_TAG}" --pattern scanner.json \
+            --dir "${RUNNER_TEMP}/candidate" --repo "${GITHUB_REPOSITORY}"
+          printf '%s  %s\n' "${APPROVED_SCANNER_SHA256}" "${RUNNER_TEMP}/candidate/scanner.json" | sha256sum --check
+          ./scripts/install.sh --prefix "${RUNNER_TEMP}/scanner-installation"
+          ./scripts/verify-installed-artifact-security.sh \
+            "${RUNNER_TEMP}/scanner-installation" "${RUNNER_TEMP}/scanner-fixture" "${RUNNER_TEMP}/candidate/scanner.json"
+      - name: Retain native scanner evidence
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_TAG: ${{ inputs.tag }}
+          SCANNER_ARCH: ${{ matrix.architecture }}
+        run: |
+          set -euo pipefail
+          if [[ -d "${RUNNER_TEMP}/scanner-fixture/.code-polishy-reports/artifact-security" ]]; then
+            tar -czf "${RUNNER_TEMP}/scanner-evidence-${SCANNER_ARCH}.tar.gz" \
+              -C "${RUNNER_TEMP}/scanner-fixture" .code-polishy-reports/artifact-security
+            gh release upload "${REQUESTED_TAG}" "${RUNNER_TEMP}/scanner-evidence-${SCANNER_ARCH}.tar.gz" \
+              --repo "${GITHUB_REPOSITORY}"
+          fi
+
+  publish:
+    needs: [prepare, verify]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Publish verified immutable scanner package
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_TAG: ${{ inputs.tag }}
+          APPROVED_SCANNER_SHA256: ${{ needs.prepare.outputs.sha256 }}
+        run: |
+          set -euo pipefail
+          gh release download "${REQUESTED_TAG}" --pattern scanner.json --dir "${RUNNER_TEMP}/final" --repo "${GITHUB_REPOSITORY}"
+          printf '%s  %s\n' "${APPROVED_SCANNER_SHA256}" "${RUNNER_TEMP}/final/scanner.json" | sha256sum --check
+          gh release edit "${REQUESTED_TAG}" --draft=false --latest=false --repo "${GITHUB_REPOSITORY}"

@@ -549,6 +549,22 @@
       "summary": "Validate contained runner-label declarations through shared workflow facts.",
       "aliases": [],
       "public": true
+    },
+    {
+      "id": "scanner-manifests",
+      "path": "docs/design/scanner-manifests.md",
+      "title": "Authenticated Scanner Manifests",
+      "summary": "Understand publisher authentication, execution compatibility, lock selection, bounds and scanner evidence.",
+      "aliases": ["scanner-packages"],
+      "public": true
+    },
+    {
+      "id": "scanner-publisher-setup",
+      "path": "docs/scanner-publisher-setup.md",
+      "title": "Scanner Publisher Setup and Signing",
+      "summary": "Enroll a protected publisher key, sign manifests and verify both native Linux scanner architectures before publication.",
+      "aliases": ["scanner-signing"],
+      "public": true
     }
   ]
 }

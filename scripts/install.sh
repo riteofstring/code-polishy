@@ -296,7 +296,6 @@ release_contents=(
   "tools/ruff-version.txt"
   "tools/ty-version.txt"
   "tools/ty.toml"
-  "tools/trivy-version.txt"
   "tools/vulture-version.txt"
   "tools/vulture_wheel_checksums.txt"
   "tools/javascript_bundle_inventory.txt"
