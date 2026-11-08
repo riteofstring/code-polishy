@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.33.1 - 2026-11-08
+
+- Validate MkDocs documentation links using default Python-Markdown heading
+  anchors and explicit IDs when `attr_list` is enabled. Preserve GitHub heading
+  anchors, including leading and trailing hyphens, outside MkDocs documentation
+  directories.
+- Run the same documentation link validation in local checks and gates,
+  including incoming links from unchanged files and MkDocs configuration
+  changes. Keep generated Markdown exempt from cosmetic checks.
+
 ## 0.33.0 - 2026-11-08
 
 - Update the Trivy scanner and its security assessments independently of Code
