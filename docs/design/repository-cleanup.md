@@ -76,8 +76,10 @@ then sorted owned resources, releasing in reverse. Shared use waits with progres
 and cancellation for at most five minutes. The lease lasts through command and
 process-tree completion. Lock acquisition failure prevents spawning.
 
-Persistent locks live at `.tools/code-polishy-cleanup/KEY/live.lock` and
-`maintenance.lock`. Neither is removed. A replaceable temporary lock pathname
+Persistent locks live at `.tools/code-polishy-cleanup/KEY/live-use` and
+`maintenance`. Neither is removed. Extensionless names keep lease creation from
+changing dependency-lock inventory during verification. A replaceable temporary
+lock pathname
 could identify a new inode while an old holder still has its original lock.
 Cleanup tries maintenance without waiting; pending deletion needs only that lock.
 Immediately before detachment it tries exclusive live use, rechecks the root,

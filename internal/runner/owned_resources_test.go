@@ -57,10 +57,10 @@ func TestOwnedResourceRejectsLinkedControlPathsAndLockFiles(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix symlink fixture")
 	}
-	for _, path := range []string{".tools", ".tools/code-polishy-cleanup", ".tools/code-polishy-cleanup/cache", ".tools/code-polishy-cleanup/cache/live.lock"} {
+	for _, path := range []string{".tools", ".tools/code-polishy-cleanup", ".tools/code-polishy-cleanup/cache", ".tools/code-polishy-cleanup/cache/live-use"} {
 		t.Run(path, func(t *testing.T) {
 			root, outside := t.TempDir(), t.TempDir()
-			if strings.HasSuffix(path, ".lock") {
+			if filepath.Base(path) == "live-use" {
 				outside = filepath.Join(outside, "sentinel")
 				if err := os.WriteFile(outside, []byte("keep"), 0o600); err != nil {
 					t.Fatal(err)

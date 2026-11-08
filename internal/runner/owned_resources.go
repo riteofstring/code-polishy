@@ -82,9 +82,9 @@ func AcquireOwnedResource(ctx context.Context, resource policy.OwnedResource, mo
 		return nil, err
 	}
 	defer directory.Close()
-	name := "live.lock"
+	name := "live-use"
 	if mode == ResourceMaintenance {
-		name = "maintenance.lock"
+		name = "maintenance"
 	}
 	file, err := openOwnedResourceLock(directory, name)
 	if err != nil {
