@@ -103,7 +103,11 @@ repository's immutable-release setting freezes the completed publication.
 
 `artifact-security/scanner.json` is a public signed bootstrap fixture for ordinary
 Code Polishy installed-release checks. It is prepared during publisher setup and
-refreshed explicitly when needed. Runtime gates still require the envelope in
+refreshed explicitly when needed. Its unit test authenticates the checked-in
+bytes and contract and validates OpenVEX at its recorded timestamp, independently
+of current expiry. Virtual-time tests retain successful renewal after bootstrap
+expiry and rejection of expired publication candidates. Signing and native
+candidate checks still enforce the current assessment deadline. Runtime gates still require the envelope in
 the consumer lock; the fixture is not an implicit selection or fallback.
 
 Disposable keys exist only in temporary test directories. No test key is shipped

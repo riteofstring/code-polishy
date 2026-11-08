@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
@@ -315,11 +316,38 @@ func TestBundledScannerBootstrapHasTheEnrolledPublisherAndCompatiblePolicy(t *te
 	if err := json.Unmarshal(data, &signed); err != nil {
 		t.Fatal(err)
 	}
-	manifest, err := release.VerifyScanner(root, &signed)
-	if err != nil {
+	var payload release.ScannerManifest
+	if err := json.Unmarshal(signed.Payload, &payload); err != nil {
 		t.Fatal(err)
 	}
-	if err := ValidateScannerManifest(manifest); err != nil {
-		t.Fatal(err)
-	}
+	synctest.Test(t, func(t *testing.T) {
+		time.Sleep(time.Until(payload.ReassessBy.Add(time.Second)))
+		encoded, err := os.ReadFile(filepath.Join(root, "artifact-security/publisher.pem"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		block, rest := pem.Decode(encoded)
+		if block == nil || len(rest) != 0 {
+			t.Fatal("invalid bundled publisher public key")
+		}
+		parsed, err := x509.ParsePKIXPublicKey(block.Bytes)
+		public, ok := parsed.(ed25519.PublicKey)
+		if err != nil || !ok || !ed25519.Verify(public, append([]byte("code-polishy-scanner-manifest/v1\x00"), signed.Payload...), signed.Signature) {
+			t.Fatal("bootstrap has no enrolled publisher signature")
+		}
+		contract, err := os.ReadFile(filepath.Join(root, "artifact-security/scanner-contract.txt"))
+		if err != nil || payload.Contract != strings.TrimSpace(string(contract)) {
+			t.Fatalf("bootstrap contract does not match the release: %v", err)
+		}
+		var document openVEXDocument
+		if err := json.Unmarshal(payload.OpenVEX, &document); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := parseOpenVEXBytes(payload.OpenVEX, document.Timestamp); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := release.VerifyScanner(root, &signed); err == nil {
+			t.Fatal("expired bootstrap still authorizes scanner assessments")
+		}
+	})
 }
