@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+## 0.33.0 - 2026-11-08
+
+- Update the Trivy scanner and its security assessments independently of Code
+  Polishy through publisher-signed scanner packages. `scanner-update` previews
+  an exact HTTPS package and `--apply` records its complete signed manifest in
+  the repository lock. Scanner images, assessments, evidence and reassessment
+  deadlines are authenticated by the publisher key carried in the release.
+- Preserve compatible scanner selections across Code Polishy upgrades. Reject
+  incompatible publishers or execution contracts, and prevent a scanner update
+  from overwriting a concurrent release or scanner selection. Expired
+  assessments block security acceptance while update and recovery remain
+  available.
+- Publish scanner packages through the protected scanner publication workflow,
+  with installed scanner checks on Linux amd64 and arm64 before publication.
+  Reports and reusable gate evidence identify the selected scanner manifest.
+- Migration: after upgrading to this release, explicitly preview and apply a
+  published scanner package with `scanner-update --manifest URL --sha256 DIGEST`
+  and then the same command with `--apply`. Artifact-security checks require
+  this selection; the bundled bootstrap fixture is not a default selection.
+
 ## 0.32.2 - 2026-11-05
 
 - Document finding a release index digest by hashing the immutable release's

@@ -2262,8 +2262,8 @@
         "impact": "Repository-controlled arrays of invalid elements cannot reach Zod's issue-accumulating array validator through the sealed native analyzer.",
         "evidence": "https://github.com/riteofstring/code-polishy/blob/main/docs/security/dependency-assessments.md",
         "owner": "Codex",
-        "reviewed": "2026-10-23",
-        "expires": "2026-11-06"
+        "reviewed": "2026-11-08",
+        "expires": "2026-11-22"
       },
       {
         "id": "provider-zod-configuration-unreachable",
@@ -2279,8 +2279,8 @@
         "impact": "Repository-controlled arrays of invalid elements cannot reach Zod's issue-accumulating array validator through the provider's configuration boundary.",
         "evidence": "https://github.com/riteofstring/code-polishy/blob/main/docs/security/dependency-assessments.md",
         "owner": "Codex",
-        "reviewed": "2026-10-23",
-        "expires": "2026-11-06"
+        "reviewed": "2026-11-08",
+        "expires": "2026-11-22"
       }
     ]
   }

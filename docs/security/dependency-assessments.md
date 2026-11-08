@@ -4,6 +4,7 @@ Brace expansion and URI processing resolved with aged fixes on 2026-10-15; other
 reviewed on 2026-10-08; Go toolchain admission reviewed on 2026-10-21.
 The withdrawn glob advisory, Zod configuration validation, and the aged TOML fix
 reviewed on 2026-10-23 UTC.
+Zod configuration boundaries and available fixes rechecked on 2026-11-08 UTC.
 Minimatch globparts amplification reviewed on 2026-10-31 UTC; its revised
 affected range rechecked on 2026-11-05 UTC.
 Assessment owner: Codex.
@@ -369,15 +370,25 @@ in both target configuration sources; analysis still reported the expected
 unused source file with complete coverage. Existing native and provider
 boundary suites exercise actual dead-code analysis with the resolved packages.
 
+Reinspection on 2026-11-08 UTC confirmed that the upstream advisory still has
+its 2026-10-23 affected range and identifies 4.6.6 as the first fixed release.
+Both installed graphs still resolve Knip 5.55.1 with Zod 3.25.76. The generated
+configuration builders, native path validation and provider initialization
+replacement are unchanged since the earlier review. Inspection of the resolved
+Knip configuration loader and plugin schemas confirms that only the generated
+string arrays and fixed flags reach the affected parser. The npm registry lists
+no fixed Zod 3 release compatible with Knip's declared dependency.
+
 Retain the aged 3.25.76 under exact high-severity `not-affected/unreachable`
-assessments owned by Codex, reviewed on 2026-10-23 and expiring on 2026-11-06.
+assessments owned by Codex, reviewed on 2026-11-08 and expiring on 2026-11-22.
 The [npm registry](https://registry.npmjs.org/zod) dates the fixed 4.6.6 to
 2026-10-11 at 16:18:23.878 UTC; it reaches the conservative 30-day admission
 boundary on 2026-11-11 UTC. Knip currently requires Zod `^3.22.4`, so forcing
 Zod 4 into this graph would also cross its declared compatibility boundary.
 Neither fresh-code admission nor a major-version override is justified by an
-unreachable prerequisite. Check for a compatible official fix by 2026-11-06
-and adopt an aged compatible dependency graph when available. Reassess before
+unreachable prerequisite. Recheck official Knip support after the fixed Zod
+release reaches its admission boundary, and adopt an aged compatible dependency
+graph when available. Check again no later than 2026-11-22. Reassess before
 expiry or immediately if a Zod consumer, generated configuration, input
 validation, or Knip configuration-loading path changes. Known exploitation
 and unknown severity remain blocking.
