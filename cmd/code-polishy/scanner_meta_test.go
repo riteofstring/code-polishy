@@ -21,7 +21,7 @@ import (
 
 func scannerCLIFixture(t *testing.T) (invocation, []byte, release.Lock) {
 	t.Helper()
-	root, repo := t.TempDir(), t.TempDir()
+	root, repo := installedRelease(t, strings.Repeat("a", 40)), t.TempDir()
 	public, private, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
@@ -57,10 +57,11 @@ func scannerCLIFixture(t *testing.T) (invocation, []byte, release.Lock) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	lock := release.Lock{LockVersion: release.LockVersion, CodePolishyVersion: "test", ReleaseDigest: strings.Repeat("a", 64), Features: []string{"javascript-bundle"}, Publication: &release.LockPublication{IndexURL: "https://example.test/index", IndexSHA256: strings.Repeat("a", 64)}}
-	for _, host := range []string{"darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64", "windows-x64"} {
-		lock.Publication.Archives = append(lock.Publication.Archives, release.LockedArchive{Host: host, URL: "https://example.test/" + host, SHA256: strings.Repeat("a", 64), Size: 1})
+	policyManifest, _, err := release.ReadManifest(root)
+	if err != nil {
+		t.Fatal(err)
 	}
+	lock := publishedTestLock(policyManifest)
 	if err := release.WriteLock(repo, lock); err != nil {
 		t.Fatal(err)
 	}
@@ -111,5 +112,40 @@ func TestScannerUpdatePreviewsWithoutMutationAndAppliesExactAuthenticatedCandida
 	}
 	if string(before) != string(release.RenderLock(after)) {
 		t.Fatal("failed adoption changed lock")
+	}
+}
+
+func TestScannerUpdateRejectsAReleaseCutoverDuringAcquisition(t *testing.T) {
+	invocation, envelope, original := scannerCLIFixture(t)
+	concurrent := original
+	concurrent.CodePolishyVersion = "9.9.10"
+	concurrent.ReleaseDigest = strings.Repeat("b", 64)
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		unlock, err := release.LockRepository(invocation.repoRoot)
+		if err != nil {
+			t.Error(err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		defer unlock()
+		if err := release.WriteLock(invocation.repoRoot, concurrent); err != nil {
+			t.Error(err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		_, _ = w.Write(envelope)
+	}))
+	defer server.Close()
+	transport := http.DefaultTransport
+	http.DefaultTransport = server.Client().Transport
+	defer func() { http.DefaultTransport = transport }()
+	sum := sha256.Sum256(envelope)
+	invocation.arguments = []string{"--manifest", server.URL, "--sha256", hex.EncodeToString(sum[:]), "--apply"}
+	if status := handleScannerUpdate(invocation); status == 0 {
+		t.Fatal("scanner adoption crossed a concurrent release cutover")
+	}
+	current, present, err := release.ReadLock(invocation.repoRoot)
+	if err != nil || !present || string(release.RenderLock(current)) != string(release.RenderLock(concurrent)) {
+		t.Fatalf("scanner adoption changed the concurrent release lock: %+v %v", current, err)
 	}
 }

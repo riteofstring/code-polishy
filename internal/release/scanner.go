@@ -145,6 +145,13 @@ func WriteScannerLock(repoRoot, policyRoot string, incoming Lock, selected *Sign
 	if !present || !sameCapabilityLock(current, incoming) {
 		return errors.New("release lock changed during scanner update")
 	}
+	manifest, err := installedManifestForLock(policyRoot)
+	if err != nil {
+		return err
+	}
+	if err := manifest.Satisfies(incoming); err != nil {
+		return err
+	}
 	incoming.Scanner = selected
 	if _, err := VerifyScanner(policyRoot, selected); err != nil {
 		return err

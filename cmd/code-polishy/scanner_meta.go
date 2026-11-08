@@ -22,19 +22,19 @@ func handleScannerUpdate(invocation invocation) int {
 	if err := flags.Parse(invocation.arguments); err != nil || flags.NArg() != 0 || *source == "" || *digest == "" {
 		return commandUsageError("scanner-update", "requires --manifest URL --sha256 DIGEST [--apply]")
 	}
-	signed, manifest, err := release.AcquireScanner(context.Background(), invocation.policyRoot, *source, *digest)
-	if err == nil {
-		err = artifactsecurity.ValidateScannerManifest(manifest)
-	}
-	if err != nil {
-		return operationalError(err)
-	}
 	lock, present, err := release.ReadLock(invocation.repoRoot)
 	if err != nil {
 		return operationalError(err)
 	}
 	if !present {
 		return operationalError(errors.New("scanner-update requires an installed release lock"))
+	}
+	signed, manifest, err := release.AcquireScanner(context.Background(), invocation.policyRoot, *source, *digest)
+	if err == nil {
+		err = artifactsecurity.ValidateScannerManifest(manifest)
+	}
+	if err != nil {
+		return operationalError(err)
 	}
 	fmt.Printf("SCANNER %s Trivy %s %s contract %s\nMANIFEST %s\n", manifest.Version, manifest.TrivyVersion, manifest.SourceImage, manifest.Contract, signed.Payload)
 	if *apply {

@@ -16,7 +16,7 @@ import (
 
 func scannerSigningFixture(t *testing.T) (string, []byte, ScannerManifest) {
 	t.Helper()
-	root := t.TempDir()
+	root, _ := installedRelease(t, map[string]string{BinaryPath: "scanner fixture engine"}, nil)
 	public, private, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
@@ -82,7 +82,7 @@ func TestScannerPublisherAndContractAreIndependentOfConsumerPin(t *testing.T) {
 func TestScannerUpdatePreservesReleaseAndRejectsStaleOrInterruptedCutover(t *testing.T) {
 	root, key, manifest := scannerSigningFixture(t)
 	repo := t.TempDir()
-	old := indexedLockFixture("9.9.9", exampleDigest)
+	old := scannerReleaseLockFixture(t, root)
 	if err := WriteLock(repo, old); err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +148,7 @@ func TestExpiredScannerCanBeReplacedWithoutAuthorizingItsAssessments(t *testing.
 	root, key, manifest := scannerSigningFixture(t)
 	expired := manifest
 	expired.ReassessBy = time.Now().Add(-time.Second)
-	selected := indexedLockFixture("9.9.9", exampleDigest)
+	selected := scannerReleaseLockFixture(t, root)
 	selected.Scanner = signScannerFixture(t, key, expired)
 	repo := t.TempDir()
 	if err := WriteLock(repo, selected); err != nil {
@@ -268,5 +268,52 @@ func TestScannerSignatureUsesThePublishedDomainAndCannotAddPolicyOverrides(t *te
 		if _, err := VerifyScanner(root, &signed); err == nil {
 			t.Fatalf("publisher package overrode Code Polishy policy through %s", name)
 		}
+	}
+}
+
+func scannerReleaseLockFixture(t *testing.T, root string) Lock {
+	t.Helper()
+	manifest, _, err := ReadManifest(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return indexedManifestLock(manifest)
+}
+
+func TestScannerAdoptionRequiresTheExecutingReleaseEvenWithAFreshExpectedLock(t *testing.T) {
+	root, key, manifest := scannerSigningFixture(t)
+	for _, mode := range []string{"different-release", "source-checkout"} {
+		t.Run(mode, func(t *testing.T) {
+			selected := scannerReleaseLockFixture(t, root)
+			policyRoot := root
+			if mode == "different-release" {
+				selected.ReleaseDigest = strings.Repeat("b", 64)
+			} else {
+				path := filepath.Join(root, ManifestFilename)
+				data, err := os.ReadFile(path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Remove(path); err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() {
+					if err := os.WriteFile(path, data, 0600); err != nil {
+						t.Error(err)
+					}
+				})
+			}
+			repo := t.TempDir()
+			if err := WriteLock(repo, selected); err != nil {
+				t.Fatal(err)
+			}
+			if err := WriteScannerLock(repo, policyRoot, selected, signScannerFixture(t, key, manifest)); err == nil {
+				t.Fatal("scanner adoption accepted a different executing release")
+			}
+			current, _, err := ReadLock(repo)
+			if err != nil || !sameCapabilityLock(current, selected) {
+				t.Fatalf("rejected adoption changed lock: %+v %v", current, err)
+			}
+		})
 	}
 }

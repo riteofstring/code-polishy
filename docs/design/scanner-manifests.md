@@ -60,7 +60,9 @@ source manifest. Setup needs no scanner download beyond the existing upstream
 image acquisition. Restoring the checkout's lock restores the package selection.
 
 Scanner adoption and Code Polishy authority cutover share the repository write
-lock. Each checks its expected outgoing state while holding that lock. A stale
+lock. Scanner update captures the expected lock before network acquisition and
+checks that state and the executing installed release identity while holding the
+write lock. A stale
 operation cannot replace the other's selection. Abandoned preparation files do
 not become authority. Ordinary Code Polishy upgrades preserve the scanner and
 verify its publisher and contract against the incoming release. Incompatible

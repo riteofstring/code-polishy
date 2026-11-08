@@ -18,16 +18,15 @@ and final publication jobs receive no signing secret.
 
 ## Enroll the production key
 
-After authorizing enrollment, run these commands from a private local terminal
-in the repository. They require the GitHub CLI to be signed in with permission
-to manage this environment's secrets. Do not paste the private key into chat.
+GitHub CLI sign-in is not required. After authorizing enrollment, run these
+commands from a private local terminal in the repository. They prepare the key
+and public bootstrap files without contacting GitHub. Do not paste the private
+key into chat.
 
 ```sh
-(
 set -euo pipefail
 umask 077
-scanner_key_dir="$(mktemp -d "${TMPDIR:-/tmp}/scanner-publisher.XXXXXX")"
-trap 'rm -rf "${scanner_key_dir}"' EXIT
+scanner_key_dir="$(mktemp -d /tmp/code-polishy-scanner-publisher.XXXXXX)"
 openssl genpkey -algorithm ED25519 -out "${scanner_key_dir}/private.pem"
 openssl pkey -in "${scanner_key_dir}/private.pem" -pubout \
   -out artifact-security/publisher.pem
@@ -35,9 +34,24 @@ openssl pkey -in "${scanner_key_dir}/private.pem" -pubout \
 ./.tools/bin/code-polishy --policy-root "$PWD" scanner-sign \
   --input artifact-security/scanner-manifest.json \
   --key "${scanner_key_dir}/private.pem" --output artifact-security/scanner.json
-gh secret set SCANNER_SIGNING_KEY --repo riteofstring/code-polishy \
-  --env scanner-publication <"${scanner_key_dir}/private.pem"
-)
+printf 'Private key for direct transfer to GitHub: %s/private.pem\n' "${scanner_key_dir}"
+```
+
+Open the repository's [Actions environments settings](https://github.com/riteofstring/code-polishy/settings/environments)
+in your browser. Create or open `scanner-publication`, configure the required
+maintainer reviewers and protected workflow branch, then choose **Add environment
+secret**. Name it `SCANNER_SIGNING_KEY` and transfer the complete private PEM
+file directly into its value field. Save the secret without posting its value
+in chat, an issue, a workflow input, or a repository file. Browser access needs
+repository permission to manage that environment; it does not use local CLI
+credentials. The signing workflow consumes this environment secret automatically.
+
+After GitHub confirms the secret was saved and any maintainer-controlled encrypted
+backup is complete, remove the local key directory in that same terminal:
+
+```sh
+rm -rf "${scanner_key_dir:?}"
+unset scanner_key_dir
 ```
 
 Commit only `artifact-security/publisher.pem` and the public signed
