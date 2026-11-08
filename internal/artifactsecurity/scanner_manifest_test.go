@@ -73,7 +73,33 @@ func scannerFixture(t *testing.T, repo string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	lock := release.Lock{LockVersion: release.LockVersion, CodePolishyVersion: "test", ReleaseDigest: strings.Repeat("a", 64), Features: []string{"javascript-bundle"}, Scanner: &signed, Publication: &release.LockPublication{IndexURL: "https://example.com/index", IndexSHA256: strings.Repeat("a", 64)}}
+	host, err := release.Host()
+	if err != nil {
+		t.Fatal(err)
+	}
+	installed := release.Manifest{
+		ManifestVersion: release.ManifestVersion, CodePolishyVersion: "1.0.0",
+		SourceRevision: strings.Repeat("a", 40), Host: host, Features: []string{"javascript-bundle"},
+		Tools: release.Tools{
+			Go: "1.0.0", Govulncheck: "1.0.0", Node: "1.0.0", OSVScanner: "1.0.0",
+			PNPM: "1.0.0", Packaging: "1.0.0", Python: "1.0.0", Ruff: "1.0.0",
+			Shellcheck: "1.0.0", Staticcheck: "1.0.0", Deadcode: "1.0.0",
+			Ty: "1.0.0", Vulture: "1.0.0", Rust: "1.0.0", Nextest: "1.0.0",
+		},
+		CapabilityCatalogSHA256: strings.Repeat("a", 64),
+		Entries:                 []release.Entry{{Path: release.BinaryPath, SHA256: strings.Repeat("b", 64)}, {Path: release.CapabilityCatalogPath, SHA256: strings.Repeat("a", 64)}},
+	}
+	installed.ReleaseDigest = installed.Identity()
+	installed.EntryCount = len(installed.Entries)
+	installed.ContentDigest = release.EntriesDigest(installed.Entries)
+	encoded, err := json.Marshal(installed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, release.ManifestFilename), encoded, 0600); err != nil {
+		t.Fatal(err)
+	}
+	lock := release.Lock{LockVersion: release.LockVersion, CodePolishyVersion: installed.CodePolishyVersion, ReleaseDigest: installed.ReleaseDigest, Features: []string{"javascript-bundle"}, Scanner: &signed, Publication: &release.LockPublication{IndexURL: "https://example.com/index", IndexSHA256: strings.Repeat("a", 64)}}
 	for _, host := range []string{"darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64", "windows-x64"} {
 		lock.Publication.Archives = append(lock.Publication.Archives, release.LockedArchive{Host: host, URL: "https://example.com/" + host, SHA256: strings.Repeat("a", 64), Size: 1})
 	}
@@ -275,5 +301,25 @@ func TestGatePlanMatchesScansWithoutScannerOrTargetSuppressions(t *testing.T) {
 		if !MatchesPlannedCommand(planned[index], actual) {
 			t.Fatalf("gate command %d differs: planned %s, actual %s", index, planned[index].Name, actual.Name)
 		}
+	}
+}
+
+func TestBundledScannerBootstrapHasTheEnrolledPublisherAndCompatiblePolicy(t *testing.T) {
+	t.Parallel()
+	root := filepath.Join("..", "..")
+	data, err := os.ReadFile(filepath.Join(root, "artifact-security/scanner.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var signed release.SignedScanner
+	if err := json.Unmarshal(data, &signed); err != nil {
+		t.Fatal(err)
+	}
+	manifest, err := release.VerifyScanner(root, &signed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateScannerManifest(manifest); err != nil {
+		t.Fatal(err)
 	}
 }

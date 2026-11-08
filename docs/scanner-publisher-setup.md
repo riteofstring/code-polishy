@@ -18,23 +18,21 @@ and final publication jobs receive no signing secret.
 
 ## Enroll the production key
 
-GitHub CLI sign-in is not required. After authorizing enrollment, run these
-commands from a private local terminal in the repository. They prepare the key
-and public bootstrap files without contacting GitHub. Do not paste the private
-key into chat.
+GitHub CLI sign-in is not required. Reuse the maintainer-controlled production
+key pair when one already exists; generating another pair would change the
+publisher identity. Keep the key directory outside the checkout and private.
+After authorizing enrollment, run these commands from a private local terminal
+in the repository, replacing the key-directory placeholder with its local path.
+They prepare public bootstrap files without contacting GitHub.
 
 ```sh
 set -euo pipefail
-umask 077
-scanner_key_dir="$(mktemp -d /tmp/code-polishy-scanner-publisher.XXXXXX)"
-openssl genpkey -algorithm ED25519 -out "${scanner_key_dir}/private.pem"
-openssl pkey -in "${scanner_key_dir}/private.pem" -pubout \
-  -out artifact-security/publisher.pem
+scanner_key_dir="/absolute/path/to/maintainer-owned-publisher-key"
+install -m 644 "${scanner_key_dir}/public.pem" artifact-security/publisher.pem
 ./scripts/build.sh
 ./.tools/bin/code-polishy --policy-root "$PWD" scanner-sign \
   --input artifact-security/scanner-manifest.json \
   --key "${scanner_key_dir}/private.pem" --output artifact-security/scanner.json
-printf 'Private key for direct transfer to GitHub: %s/private.pem\n' "${scanner_key_dir}"
 ```
 
 Open the repository's [Actions environments settings](https://github.com/riteofstring/code-polishy/settings/environments)
@@ -46,20 +44,14 @@ in chat, an issue, a workflow input, or a repository file. Browser access needs
 repository permission to manage that environment; it does not use local CLI
 credentials. The signing workflow consumes this environment secret automatically.
 
-After GitHub confirms the secret was saved and any maintainer-controlled encrypted
-backup is complete, remove the local key directory in that same terminal:
-
-```sh
-rm -rf "${scanner_key_dir:?}"
-unset scanner_key_dir
-```
+Keep the existing production key directory intact. Any private-key backup belongs
+in maintainer-controlled encrypted storage. Do not paste the private key into
+chat or copy it into the checkout.
 
 Commit only `artifact-security/publisher.pem` and the public signed
 `artifact-security/scanner.json` bootstrap fixture after reviewing them. The public
 key enters consumers' trust boundary through their verified Code Polishy release.
-Never commit the temporary directory or its private key. GitHub cannot return a
-stored secret; any private-key backup belongs in maintainer-controlled encrypted
-storage. Losing the key requires enrollment of a replacement public key in a new
+Never commit the private key. GitHub cannot return a stored secret. Losing the key requires enrollment of a replacement public key in a new
 Code Polishy release, not acceptance of a candidate-supplied key.
 
 The bootstrap fixture is for installed-release verification. Consumer gates use
@@ -96,7 +88,7 @@ package; it does not require changing the runtime or consumer pins.
 ## Authorization boundary
 
 Publisher enrollment creates the protected GitHub environment,
-generates a fresh publisher key, uploads its private part as that environment's
+enrolls the existing maintainer-controlled key, uploads its private part as that environment's
 secret, and commits its public part and signed bootstrap fixture. This grants the
 approved workflow authority to sign scanner assessments accepted by releases that
 carry the public key. It requires maintainer authorization. Publishing the first
