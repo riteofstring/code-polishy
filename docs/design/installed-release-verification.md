@@ -64,6 +64,14 @@ the harness; they are not independent executable test commands. All fixtures
 use temporary state, and their synthetic review acceptances test the protocol
 without constituting a review of Code Polishy's own candidate.
 
+Vulture and packaging retain separate pinned entrypoints and checksum inventories,
+with one shared pure-Python wheel installer. It verifies the carried runtime,
+checks archive identity, extracts only the selected package and exact distribution
+metadata, and stages replacement with recoverable backups. Failed installed-version
+or marker publication checks restore the previous package, metadata and marker.
+Packaging retains Python's bytecode suppression; Vulture retains its existing
+bytecode behavior. Astroid's source-archive handling remains separate.
+
 Astroid is a separately installed, pinned Python library in the carried runtime.
 Its wheel and corresponding source archive are verified against checked-in
 hashes before installation. The release includes its distribution metadata,

@@ -453,7 +453,11 @@
           "scripts/test-installed-release-contract.sh",
           "scripts/test-installed-release-architecture.sh",
           "scripts/test-installed-release-rust.sh",
-          "scripts/verify-installed-artifact-security.sh"
+          "scripts/verify-installed-artifact-security.sh",
+          "scripts/test-python-wheel-installers.sh",
+          "tools/install-python-wheel.sh",
+          "tools/install-vulture.sh",
+          "tools/install-packaging.sh"
         ]
       },
       {
@@ -1203,6 +1207,26 @@
         "modules": ["tooling"]
       },
       {
+        "name": "python-wheel-installers-contract",
+        "kind": "contract",
+        "scope": "module",
+        "cost": "quick",
+        "paths": [
+          "scripts/test-python-wheel-installers.sh",
+          "tools/install-python-wheel.sh",
+          "tools/install-vulture.sh",
+          "tools/install-packaging.sh",
+          "tools/python-version.txt",
+          "tools/vulture-version.txt",
+          "tools/packaging-version.txt",
+          "tools/*_wheel_checksums.txt",
+          "tools/verify-sha256.sh"
+        ],
+        "argv": ["./scripts/test-python-wheel-installers.sh"],
+        "runOn": ["focused", "recommended", "full"],
+        "modules": ["tooling"]
+      },
+      {
         "name": "rust-runtime-contract",
         "kind": "contract",
         "scope": "module",
@@ -1761,6 +1785,7 @@
       "scripts/test-mutation-wrapper.sh",
       "scripts/test-install.sh",
       "scripts/test-release-preflight.sh",
+      "scripts/test-python-wheel-installers.sh",
       "scripts/test-rust-runtime.sh",
       "scripts/test-javascript-runtime.sh",
       "scripts/test-javascript-bundle.sh",
@@ -1932,6 +1957,11 @@
         "paths": ["scripts/test-release-preflight.sh"],
         "module": "tooling",
         "focusedSuite": "release-preflight-contract"
+      },
+      {
+        "paths": ["scripts/test-python-wheel-installers.sh"],
+        "module": "tooling",
+        "focusedSuite": "python-wheel-installers-contract"
       },
       {
         "paths": ["scripts/test-rust-runtime.sh"],
