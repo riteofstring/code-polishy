@@ -37,6 +37,7 @@
     "lineBudget": { "production": 101000 }
   },
   "documentation": {
+    "productInputs": ["docs/bug-review.md"],
     "design": [
       {
         "path": "docs/design/bundled-javascript-dependencies.md",

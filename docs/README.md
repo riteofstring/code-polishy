@@ -30,6 +30,8 @@ and aliases. Search is local, bounded, and deterministic.
 - [Agent Workflows](agent-workflows.md) is the short mandatory entry point for
   ordinary work, event-selected verification, and conditional procedures.
 - [Agent Reviews](agent-reviews.md) defines boundaries for selected reviews.
+- [Bug Review](bug-review.md) guides requested correctness and security
+  investigations across frontend, backend, and component boundaries.
 - [Machine-readable Reports](reports.md) defines the canonical verdict and
   complete results for automation.
 - [Isolated Task Sessions](task-sessions.md) specifies disposable-worktree

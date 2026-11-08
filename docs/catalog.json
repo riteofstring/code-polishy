@@ -119,6 +119,14 @@
       "public": true
     },
     {
+      "id": "bug-review",
+      "path": "docs/bug-review.md",
+      "title": "Bug Review",
+      "summary": "Investigate correctness and security bugs across frontend, backend, and component boundaries.",
+      "aliases": [],
+      "public": true
+    },
+    {
       "id": "capabilities",
       "path": "docs/capabilities.md",
       "title": "Repository Capability Discovery",

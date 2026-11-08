@@ -28,3 +28,5 @@ For selected behavior and final-state review, follow the
 [review procedure](policies/behavior-review.md#complete-a-selected-review).
 For an explicitly requested architecture review, follow the
 [architecture procedure](policies/architecture.md#architecture-review-workflow).
+For an explicitly requested bug review, read `code-polishy docs read bug-review`
+and follow the [bug-review guide](bug-review.md).
