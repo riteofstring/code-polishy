@@ -26,6 +26,7 @@ func SuiteCommand(repo repository.Repository, suite policy.TestSuite) policy.Com
 		command.Argv[0] = repo.RustTool("cargo")
 	}
 	command.Managed = true
+	command.OwnedResources = native.OwnedResources
 	command.SealedEnvironment = true
 	command.EnvironmentOverrides = append(native.EnvironmentOverrides, "CARGO="+repo.RustTool("cargo"))
 	for _, key := range append(native.Environment, "PATH", "LIB", "INCLUDE", "LIBPATH", "SDKROOT", "DEVELOPER_DIR") {

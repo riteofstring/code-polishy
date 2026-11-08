@@ -26,11 +26,16 @@ func TargetDirectory(repo repository.Repository) string {
 	return filepath.Join(repo.Root, ".tools", "rust-target")
 }
 
+func TargetResource(repo repository.Repository) policy.OwnedResource {
+	return policy.OwnedResource{Root: repo.Root, Key: "rust-target"}
+}
+
 func Command(repo repository.Repository, name, tool string, arguments ...string) policy.Command {
 	return policy.Command{
 		Name: name, Argv: append([]string{repo.RustTool(tool)}, arguments...), Cwd: ".",
 		Managed: true, SealedEnvironment: true, TimeoutSeconds: 300,
-		Environment: []string{"SYSTEMROOT", "WINDIR"},
+		OwnedResources: []policy.OwnedResource{TargetResource(repo)},
+		Environment:    []string{"SYSTEMROOT", "WINDIR"},
 		EnvironmentOverrides: []string{
 			"RUSTC=" + repo.RustTool("rustc"), "RUSTDOC=" + repo.RustTool("rustdoc"),
 			"CARGO_HOME=" + CargoHome(repo), "CARGO_TARGET_DIR=" + TargetDirectory(repo),

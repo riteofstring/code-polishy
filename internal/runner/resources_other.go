@@ -5,6 +5,7 @@ package runner
 import (
 	"context"
 	"errors"
+	"os"
 )
 
 type resourceFiles struct{}
@@ -14,3 +15,7 @@ func acquireResourceFiles(context.Context, []string) (resourceLease, error) {
 }
 
 func (resourceFiles) release() error { return nil }
+
+func lockOwnedResourceFile(context.Context, *os.File, bool, bool) (resourceLease, error) {
+	return nil, errors.New("owned resource locking is unsupported on this host")
+}

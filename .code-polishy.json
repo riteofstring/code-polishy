@@ -34,7 +34,9 @@
   },
   "quality": {
     "allowComments": false,
-    "lineBudget": { "production": 101000 }
+    "lineBudget": {
+      "production": 101000
+    }
   },
   "documentation": {
     "productInputs": ["docs/bug-review.md"],
@@ -96,7 +98,20 @@
           "internal/engine/cleanup_reports.go",
           "internal/engine/cleanup_test.go",
           "internal/testartifact/cleanup.go",
-          "internal/testartifact/cleanup_test.go"
+          "internal/testartifact/cleanup_test.go",
+          "internal/runner/owned_resources.go",
+          "internal/runner/owned_resources_test.go",
+          "internal/engine/cleanup_build_cache.go",
+          "internal/engine/cleanup_build_cache_test.go",
+          "internal/runner/resources.go",
+          "internal/runner/resources_unix.go",
+          "internal/runner/resources_windows.go",
+          "internal/runner/resources_other.go",
+          "internal/ownedoutput/cleanup.go",
+          "internal/ownedoutput/cleanup_test.go",
+          "internal/ownedoutput/mounts_linux.go",
+          "internal/ownedoutput/mounts_linux_test.go",
+          "internal/ownedoutput/mounts_other.go"
         ]
       },
       {
@@ -637,6 +652,11 @@
       ]
     },
     {
+      "name": "ownedoutput",
+      "paths": ["internal/ownedoutput/**"],
+      "dependsOn": ["policy", "runner"]
+    },
+    {
       "name": "runner",
       "paths": ["internal/runner/**"],
       "dependsOn": ["policy"]
@@ -814,13 +834,16 @@
         "testreceipt",
         "testing",
         "durablefile",
-        "strictjson"
+        "strictjson",
+        "ownedoutput",
+        "rustfacts"
       ]
     },
     {
       "name": "cli",
       "paths": ["cmd/code-polishy/**"],
       "dependsOn": [
+        "ownedoutput",
         "agents",
         "artifactsecurity",
         "documentation",
@@ -865,6 +888,7 @@
       "provides": ["build"],
       "argv": ["./scripts/build.sh"],
       "modules": [
+        "ownedoutput",
         "policy",
         "spdx",
         "pythonfacts",
@@ -923,6 +947,15 @@
     "requiredKinds": ["unit", "contract"],
     "requiredSupplementalKinds": ["mutation"],
     "suites": [
+      {
+        "name": "ownedoutput-unit",
+        "kind": "unit",
+        "scope": "module",
+        "cost": "quick",
+        "modules": ["ownedoutput"],
+        "argv": ["go", "test", "-count=1", "./internal/ownedoutput/..."],
+        "paths": ["internal/ownedoutput/**/*_test.go"]
+      },
       {
         "name": "spdx-unit",
         "kind": "unit",
@@ -1802,6 +1835,11 @@
       "scripts/test-javascript-provider.sh"
     ],
     "ownership": [
+      {
+        "paths": ["internal/ownedoutput/**/*_test.go"],
+        "module": "ownedoutput",
+        "focusedSuite": "ownedoutput-unit"
+      },
       {
         "paths": ["internal/spdx/**/*_test.go"],
         "module": "spdx",

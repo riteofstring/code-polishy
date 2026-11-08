@@ -2,7 +2,8 @@
 
 Repository outputs need explicit cleanup because accumulated reports and test
 output can consume substantial local storage. Installed-release cleanup remains
-the default; `--reports` and `--artifacts` select repository outputs instead.
+the default; `--reports`, `--artifacts`, and `--build-cache` select repository
+outputs instead and may be combined.
 The CLI parses scopes and renders one plan. The engine selects and removes
 repository output, while the test artifact boundary retains ownership of its
 completion and lease rules.
@@ -41,3 +42,94 @@ linked or special entries are kept. Sizes describe logical bytes, not filesystem
 allocation. Repository cleanup is run after other commands finish; it does not
 coordinate concurrent report writers. Removal failures are operational errors
 and only completed removals contribute to the result.
+
+## Owned build caches
+
+Build-cache cleanup uses fixed resource registrations, independently of source
+language discovery. It probes each live root and reserved pending directory
+before invoking tools or walking files. Supporting a language does not create
+cleanup work. Output remains discoverable after that language's source is
+removed. Rust's `TargetDirectory` owns the first registration, `.tools/rust-target`.
+The engine composes owners; `ownedoutput` implements whole-tree disposal without
+depending on Cargo or interpreting artifact graphs. A second resource fixture
+exercises the same operation. Catalog tests require disjoint live/control roots.
+
+Cargo home, downloaded dependencies, ordinary `target`, source, and lockfiles
+are preserved. Governed Cargo uses frozen/offline resolution, so downloaded
+dependencies are necessary to rebuild after removal. Ordinary direct Cargo
+output can be cleaned with `cargo clean` by its operator. Delegating managed
+cleanup to that command would require an installed tool and delete the cache in
+place; staged disposal preserves a coherent live root across interrupted removal
+and applies equally to other owners.
+
+Native commands carry internal `OwnedResources` declarations containing the
+resource key and original checkout root. They are excluded from JSON configuration.
+The checkout identity survives execution in a reusable suite's sealed input view.
+Rust constructors and native nextest/doctest adapters declare the same resource;
+generic configured commands are nonparticipants. Compiler build-script output
+paths are retained as metadata, not subsequently opened by report consumers.
+Any future reader must hold a lease for its actual reads.
+
+The existing runner lock backend supports shared consumer leases and exclusive
+cleanup attempts. Commands acquire ordinary sorted exclusive resources first,
+then sorted owned resources, releasing in reverse. Shared use waits with progress
+and cancellation for at most five minutes. The lease lasts through command and
+process-tree completion. Lock acquisition failure prevents spawning.
+
+Persistent locks live at `.tools/code-polishy-cleanup/KEY/live.lock` and
+`maintenance.lock`. Neither is removed. A replaceable temporary lock pathname
+could identify a new inode while an old holder still has its original lock.
+Cleanup tries maintenance without waiting; pending deletion needs only that lock.
+Immediately before detachment it tries exclusive live use, rechecks the root,
+creates an exclusive slot under `removals/`, and renames the live tree to
+`removals/SLOT/cache`. Live use is released before measurement and deletion.
+Maintenance prevents another cleaner retiring a slot before it is populated.
+There is no copy/delete fallback across filesystems.
+
+Reserved staging position owns pending payloads, including after a checkout
+moves. Retrying a pending slot never touches a fresh live root. Empty slots are
+removable. Builds neither inspect nor delete pending storage. A fresh build can
+temporarily overlap the old tree's disk usage. Detached remainders are reported
+with their retry path and the consequence that the live cache must rebuild.
+
+## Filesystem and caller boundary
+
+Every parent and live/control root must be a real directory; contained directory
+opens retain the inspected identity. Before recursive preview measurement or
+pending deletion, Linux reads the current mount namespace's mount table and
+rejects mounted subtrees, including same-device bind mounts and escaped paths.
+The live-root check rejects independently mounted output before renaming. The
+post-detachment check uses the new staging path. An unreadable or incomplete
+mount snapshot retains output with unknown bytes. `os.Root` alone does not stop
+mount traversal.
+
+Only Linux disposal is currently enabled. Other hosts report unsupported and
+preserve caches until native mount/reparse sentinel coverage is established.
+The Linux mount sentinel test runs explicitly in a private mount namespace; its
+absence from an ordinary unprivileged suite is not runtime mount evidence.
+
+After the guard, a no-follow walk measures regular-file logical bytes and treats
+ordinary descendant symlinks as zero-byte leaves. Special entries retain output.
+Contained removal never follows those links. Bytes are credited only after the
+entire removal succeeds; partial failure reports no reclaimed bytes and keeps
+the remainder for retry. Reports and test artifacts retain their existing stricter
+link rules and deletion lifecycle in this delivery.
+
+Explicit cleanup requires callers to stop unmanaged consumers and keep mount
+topology and detached contents stable. Direct Cargo, generic configured commands,
+older releases, running applications, and orphan descendants do not participate
+in these locks. This includes direct Cargo configured to target the governed
+directory. A free lock does not establish universal idleness, and the mount
+snapshot does not protect against a concurrent privileged mount change.
+
+Preview takes no locks and writes nothing. Its sizes are estimates, with unknown
+size on transient enumeration failure; availability is checked during execution.
+Independent selected owners continue after local failures. Operational failures
+exit 2; safe keeps exit 0. Resource lines start with `BUSY`, `SKIPPED`, `ERROR`,
+`REMOVED`, or `WOULD REMOVE`. All-kept summaries use `BUSY` if any lease was busy,
+otherwise `SKIPPED`; they never print `PASS`. Exit zero alone does not mean space
+was reclaimed.
+
+Cleanup remains explicit, independent of commits and verification. Retention,
+tracking, scheduling, unified JSON output, release preview changes, and migration
+of existing owners to the shared disposal guard are separate deliveries.

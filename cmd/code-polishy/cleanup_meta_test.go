@@ -1,14 +1,63 @@
 package main
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/riteofstring/code-polishy/internal/engine"
+	"github.com/riteofstring/code-polishy/internal/ownedoutput"
+	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/release"
+	"github.com/riteofstring/code-polishy/internal/runner"
 )
+
+func TestCleanupPreviewDoesNotReportUnknownSizeAsZero(t *testing.T) {
+	result := engine.RepositoryCleanupResult{BuildCaches: []ownedoutput.Entry{{Key: "cache", Path: ".tools/cache", Action: "would-remove", Reason: "estimate-unavailable"}}}
+	var output bytes.Buffer
+	writeRepositoryCleanupResult(&output, result, engine.CleanupOptions{BuildCache: true, DryRun: true}, true)
+	if !strings.Contains(output.String(), "total logical size is unknown") || strings.Contains(output.String(), "would free") {
+		t.Fatalf("unknown estimate misreported: %s", output.String())
+	}
+}
+
+func TestCleanupBuildCacheCombinesScopesAndReportsBusyWithoutPass(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux disposal")
+	}
+	root := cleanupTestDirectory(t)
+	cache := filepath.Join(root, ".tools/rust-target")
+	if err := os.MkdirAll(cache, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cache, "object"), []byte("compiled"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	args := []string{"--repo-root", root, "cleanup", "--reports", "--artifacts", "--build-cache"}
+	status, stdout, stderr := captureRunOutput(t, append(args, "--dry-run"))
+	if status != 0 || stderr != "" || !strings.Contains(stdout, "WOULD REMOVE rust-target") || !strings.Contains(stdout, "8 B") {
+		t.Fatalf("preview: %d %q %q", status, stdout, stderr)
+	}
+	if _, err := os.Stat(filepath.Join(root, ".tools/code-polishy-cleanup")); !os.IsNotExist(err) {
+		t.Fatalf("preview created controls: %v", err)
+	}
+	lease, err := runner.AcquireOwnedResource(t.Context(), policy.OwnedResource{Root: root, Key: "rust-target"}, runner.SharedResourceUse)
+	if err != nil {
+		t.Fatal(err)
+	}
+	status, stdout, stderr = captureRunOutput(t, args)
+	lease.Release()
+	if status != 0 || stderr != "" || !strings.HasPrefix(stdout, "BUSY rust-target active \".tools/rust-target\"") || strings.Contains(stdout, "PASS") {
+		t.Fatalf("busy: %d %q %q", status, stdout, stderr)
+	}
+	status, stdout, stderr = captureRunOutput(t, args)
+	if status != 0 || stderr != "" || !strings.HasPrefix(stdout, "REMOVED rust-target") || !strings.Contains(stdout, "freed 8 B") {
+		t.Fatalf("removal: %d %q %q", status, stdout, stderr)
+	}
+}
 
 func cleanupTestLock(version, digest string) release.Lock {
 	archives := []release.LockedArchive{}

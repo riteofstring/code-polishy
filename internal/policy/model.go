@@ -330,27 +330,33 @@ type Module struct {
 }
 
 type Command struct {
-	Name                  string         `json:"name"`
-	Provides              []string       `json:"provides,omitempty"`
-	Argv                  []string       `json:"argv"`
-	Cwd                   string         `json:"cwd,omitempty"`
-	Paths                 []string       `json:"paths,omitempty"`
-	Modules               []string       `json:"modules,omitempty"`
-	RunOn                 []string       `json:"runOn,omitempty"`
-	Environment           []string       `json:"environment,omitempty"`
-	ExclusiveResources    []string       `json:"exclusiveResources"`
-	TimeoutSeconds        int            `json:"timeoutSeconds,omitempty"`
-	Managed               bool           `json:"-"`
-	PassFiles             bool           `json:"-"`
-	PassFilePaths         []string       `json:"-"`
-	SealedEnvironment     bool           `json:"-"`
-	Adapter               *PackAdapter   `json:"-"`
-	Stdin                 []byte         `json:"-"`
-	EnvironmentOverrides  []string       `json:"-"`
-	TestArtifacts         []TestArtifact `json:"-"`
-	TestArtifactSuite     string         `json:"-"`
-	TestArtifactDirectory string         `json:"-"`
-	ReportProtocol        string         `json:"-"`
+	Name                  string          `json:"name"`
+	Provides              []string        `json:"provides,omitempty"`
+	Argv                  []string        `json:"argv"`
+	Cwd                   string          `json:"cwd,omitempty"`
+	Paths                 []string        `json:"paths,omitempty"`
+	Modules               []string        `json:"modules,omitempty"`
+	RunOn                 []string        `json:"runOn,omitempty"`
+	Environment           []string        `json:"environment,omitempty"`
+	ExclusiveResources    []string        `json:"exclusiveResources"`
+	OwnedResources        []OwnedResource `json:"-"`
+	TimeoutSeconds        int             `json:"timeoutSeconds,omitempty"`
+	Managed               bool            `json:"-"`
+	PassFiles             bool            `json:"-"`
+	PassFilePaths         []string        `json:"-"`
+	SealedEnvironment     bool            `json:"-"`
+	Adapter               *PackAdapter    `json:"-"`
+	Stdin                 []byte          `json:"-"`
+	EnvironmentOverrides  []string        `json:"-"`
+	TestArtifacts         []TestArtifact  `json:"-"`
+	TestArtifactSuite     string          `json:"-"`
+	TestArtifactDirectory string          `json:"-"`
+	ReportProtocol        string          `json:"-"`
+}
+
+type OwnedResource struct {
+	Root string
+	Key  string
 }
 
 const OSVVulnerabilityReportProtocol = "osv-vulnerability-json/v1"

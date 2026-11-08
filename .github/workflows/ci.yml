@@ -124,6 +124,15 @@ jobs:
         shell: bash
         run: code-polishy merge-gate --base="$CODE_POLISHY_MERGE_BASE"
 
+      - name: Verify cleanup mount boundaries in a private namespace
+        if: github.event_name == 'schedule' || needs.classify.result != 'success' || needs.classify.outputs.documentation != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./scripts/go.sh test -c -o "${RUNNER_TEMP}/ownedoutput.test" ./internal/ownedoutput
+          sudo env CODE_POLISHY_MOUNT_TESTS=1 unshare --mount --propagation private \
+            "${RUNNER_TEMP}/ownedoutput.test" -test.run '^TestCleanup(MountSentinels|CrossDeviceStagingPreservesLiveCache)$' -test.v
+
       - name: Run manually requested full policy gate
         if: github.event_name == 'workflow_dispatch'
         shell: bash

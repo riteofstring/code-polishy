@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add explicit `cleanup --build-cache` for owned disposable output, initially
+  Linux managed Rust caches. Shared consumer leases, staged removal, mount guards,
+  and retryable pending output preserve active builds and downloaded dependencies.
+  Other hosts retain caches with an unsupported reason.
+
 - Add a systematic bug-review guide with shared questions and frontend, backend,
   and cross-component follow-ups. Read it with `docs read bug-review` when a bug
   review is requested.

@@ -73,21 +73,42 @@ func acquireWindowsResource(ctx context.Context, directory, resource string) (*w
 		file.Close()
 		return nil, err
 	}
+	lock, err := lockWindowsResourceFile(ctx, file, false, false)
+	if err != nil {
+		file.Close()
+	}
+	return lock, err
+}
+
+func lockOwnedResourceFile(ctx context.Context, file *os.File, shared, try bool) (resourceLease, error) {
+	lock, err := lockWindowsResourceFile(ctx, file, shared, try)
+	if err != nil {
+		return nil, err
+	}
+	return resourceFiles{lock}, nil
+}
+
+func lockWindowsResourceFile(ctx context.Context, file *os.File, shared, try bool) (*windowsResourceFile, error) {
 	lock := &windowsResourceFile{file: file}
+	flags := uint32(windows.LOCKFILE_FAIL_IMMEDIATELY)
+	if !shared {
+		flags |= windows.LOCKFILE_EXCLUSIVE_LOCK
+	}
 	waitStarted := time.Now()
 	nextProgress := waitStarted.Add(resourceWaitProgressInterval)
 	for {
 		if err := ctx.Err(); err != nil {
-			file.Close()
 			return nil, err
 		}
-		err = windows.LockFileEx(windows.Handle(file.Fd()), windows.LOCKFILE_EXCLUSIVE_LOCK|windows.LOCKFILE_FAIL_IMMEDIATELY, 0, ^uint32(0), ^uint32(0), &lock.overlapped)
+		err := windows.LockFileEx(windows.Handle(file.Fd()), flags, 0, ^uint32(0), ^uint32(0), &lock.overlapped)
 		if err == nil {
 			return lock, nil
 		}
 		if !errors.Is(err, windows.ERROR_LOCK_VIOLATION) {
-			file.Close()
 			return nil, err
+		}
+		if try {
+			return nil, ErrResourceBusy
 		}
 		now := time.Now()
 		if !now.Before(nextProgress) {
@@ -98,7 +119,6 @@ func acquireWindowsResource(ctx context.Context, directory, resource string) (*w
 		select {
 		case <-ctx.Done():
 			timer.Stop()
-			file.Close()
 			return nil, ctx.Err()
 		case <-timer.C:
 		}

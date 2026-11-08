@@ -12,6 +12,7 @@ import (
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
 	"github.com/riteofstring/code-polishy/internal/runner"
+	"github.com/riteofstring/code-polishy/internal/rustfacts"
 )
 
 func TestNativeRustSuiteProducesNonemptyEvidence(t *testing.T) {
@@ -139,6 +140,9 @@ func TestNativeRustCommandAndCopiesRetainGovernedSelection(t *testing.T) {
 	repo, suite := rustSuiteRepository(t, "#[test]\nfn behavior() { assert_eq!(2 + 2, 4); }\n")
 	suite.Rust.Packages = []string{"app"}
 	command := SuiteCommand(repo, suite)
+	if len(command.OwnedResources) != 1 || command.OwnedResources[0] != rustfacts.TargetResource(repo) {
+		t.Fatalf("native test command lost target lifetime: %+v", command.OwnedResources)
+	}
 	if command.Argv[0] != repo.PolicyTool("cargo-nextest") || !command.Managed || !command.SealedEnvironment ||
 		!slices.Contains(command.EnvironmentOverrides, "CARGO="+repo.RustTool("cargo")) || !slices.Contains(command.EnvironmentOverrides, "CARGO_NET_OFFLINE=true") {
 		t.Fatalf("ungoverned test command: %+v", command)

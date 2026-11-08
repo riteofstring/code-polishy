@@ -166,12 +166,17 @@ var commandHelpPages = []commandHelpPage{
 	{
 		name:    "cleanup",
 		summary: "Remove unused installed releases or selected generated repository outputs.",
-		syntax:  []string{"code-polishy cleanup [--reports] [--artifacts] [--dry-run]"},
+		syntax:  []string{"code-polishy cleanup [--reports] [--artifacts] [--build-cache] [--dry-run]"},
 		selectors: []string{
 			"With no scope flags, cleanup rereads each repository lock recorded in the shared prefix and keeps the releases those locks name.",
 			"--reports removes completed managed reports, gate logs, and the test receipt cache. Review evidence, upgrade records, user files outside managed report trees, and incomplete gate runs are retained.",
 			"--artifacts removes completed owned test artifact executions; active, unowned, linked, and special entries are retained. Combine it with --reports to select both repository scopes instead of installed releases.",
 			"--dry-run reports the selected paths and their logical byte sizes without removing them. Run repository cleanup after other Code Polishy commands finish.",
+			"--build-cache selects owned disposable output across languages. Currently Linux supports the native Rust .tools/rust-target cache; other hosts keep it with an unsupported reason. No language scan or compiler invocation is needed.",
+			"Cargo home and downloaded dependencies are preserved for offline rebuilds. Ordinary ./target is unmanaged; use cargo clean for that output. A cleanup preview estimates logical bytes and never reserves availability.",
+			"Stop direct Cargo commands, generic configured suites, older Code Polishy processes, applications and orphan descendants using the cache. Keep mount topology and detached contents stable during cleanup; managed leases cannot detect nonparticipants.",
+			"Cache removal detaches output before deletion. New builds may recreate the cache while pending output is deleted, temporarily using both trees. Retry --build-cache to finish a pending removal; caches rebuild on next use.",
+			"BUSY and SKIPPED are safe keeps with exit 0, not proof of reclaimed storage. Inspect resource lines; all-kept output never prints PASS. Cleanup is explicit and is not tied to commits or verification.",
 			"A repository that has never run a command through an installed release is unknown to cleanup; its next wrapper call reports the missing release, and ./code-polishyw setup reinstalls it.",
 		},
 		sideEffects: []string{"Default cleanup removes unlocked installed releases and forgets repositories without a lock. Repository scopes remove only selected outputs; deleting reports discards cached verification evidence and causes verification to rerun as needed. Artifact-only cleanup retains reports and receipts."},

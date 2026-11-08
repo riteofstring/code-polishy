@@ -210,13 +210,13 @@ func (runner OSRunner) run(parent context.Context, root string, specification po
 	if err != nil {
 		return Result{ExitStatus: -1, FailureCategory: FailureEnvironment}, err
 	}
-	lease, resourceWait, err := AcquireExclusiveResources(parent, specification.ExclusiveResources)
+	lease, resourceWait, err := acquireCommandResources(parent, specification)
 	if err != nil {
 		category := contextFailureCategory(parent)
 		if category == "" {
 			category = FailureResource
 		}
-		return Result{ExitStatus: -1, ResourceWait: resourceWait, FailureCategory: category}, fmt.Errorf("acquire exclusive resources for command %q: %w", specification.Name, err)
+		return Result{ExitStatus: -1, ResourceWait: resourceWait, FailureCategory: category}, fmt.Errorf("acquire resources for command %q: %w", specification.Name, err)
 	}
 	defer lease.Release()
 	return runner.runLeasedCommand(parent, specification, workingDirectory, argv, resourceWait, stdout, stderr)

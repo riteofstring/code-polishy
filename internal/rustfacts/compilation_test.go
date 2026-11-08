@@ -7,14 +7,39 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/riteofstring/code-polishy/internal/ownedoutput"
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
 	"github.com/riteofstring/code-polishy/internal/runner"
 )
+
+func TestRustRebuildsOfflineAfterOwnedTargetCleanup(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux cache disposal")
+	}
+	repo := compilationRepository(t, "pub fn answer() -> u32 { 42 }\n")
+	before := readRustFile(t, repo, "Cargo.lock")
+	command := Command(repo, "offline-rebuild", "cargo", "check", "--frozen", "--manifest-path", "Cargo.toml")
+	for attempt := 0; attempt < 2; attempt++ {
+		if err := runner.RunCommand(t.Context(), runner.OSRunner{}, repo.Root, command); err != nil {
+			t.Fatalf("offline build %d: %v", attempt, err)
+		}
+		if attempt == 0 {
+			entries, err := ownedoutput.Clean(t.Context(), ownedoutput.Resource{Use: TargetResource(repo), Path: ".tools/rust-target"}, false)
+			if err != nil || len(entries) != 1 || entries[0].Action != "removed" {
+				t.Fatalf("cache cleanup: %+v %v", entries, err)
+			}
+		}
+	}
+	if after := readRustFile(t, repo, "Cargo.lock"); !bytes.Equal(before, after) {
+		t.Fatal("offline recovery changed the lockfile")
+	}
+}
 
 func TestRustCompilationChecksRealCrateAndKeepsLockUnchanged(t *testing.T) {
 	t.Parallel()

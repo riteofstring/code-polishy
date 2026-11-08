@@ -71,7 +71,7 @@ func acquireResourceFile(ctx context.Context, directory, resource string) (*os.F
 	if err != nil {
 		return nil, err
 	}
-	if err := waitForResourceLock(ctx, file, resource); err != nil {
+	if err := waitForResourceLock(ctx, file, resource, false, false); err != nil {
 		_ = file.Close()
 		return nil, err
 	}
@@ -94,19 +94,40 @@ func openResourceLock(directory, resource string) (*os.File, error) {
 	return nil, fmt.Errorf("resource lock %q is not a private regular file", resource)
 }
 
-func waitForResourceLock(ctx context.Context, file *os.File, resource string) error {
+func lockOwnedResourceFile(ctx context.Context, file *os.File, shared, try bool) (resourceLease, error) {
+	info, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if err := validatePrivateResourceLock(info, uint32(os.Geteuid())); err != nil {
+		return nil, err
+	}
+	if err := waitForResourceLock(ctx, file, file.Name(), shared, try); err != nil {
+		return nil, err
+	}
+	return resourceFiles{file}, nil
+}
+
+func waitForResourceLock(ctx context.Context, file *os.File, resource string, shared, try bool) error {
 	waitStarted := time.Now()
 	nextProgress := waitStarted.Add(resourceWaitProgressInterval)
+	mode := syscall.LOCK_EX
+	if shared {
+		mode = syscall.LOCK_SH
+	}
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+		err := syscall.Flock(int(file.Fd()), mode|syscall.LOCK_NB)
 		if err == nil {
 			return nil
 		}
 		if resourceLockWaitError(err) != nil {
 			return fmt.Errorf("lock resource %q: %w", resource, err)
+		}
+		if try {
+			return ErrResourceBusy
 		}
 		now := time.Now()
 		if !now.Before(nextProgress) {
