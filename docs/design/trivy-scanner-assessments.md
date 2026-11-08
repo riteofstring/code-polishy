@@ -1,8 +1,9 @@
 # Trivy Scanner Assessments
 
-Reviewed by Codex on October 28, 2026 UTC. Reassess by November 13, 2026, or whenever
-the scanner image, invocation, mounts, environment, transport, or advisory
-evidence changes.
+RSA JWK execution paths reviewed by Codex on October 28, 2026 UTC; HTML parser
+binary evidence reviewed by Codex on November 8, 2026 UTC. Reassess by November
+13, 2026, or whenever the scanner image, invocation, mounts, environment,
+transport, or advisory evidence changes.
 
 ## Runtime and admission
 
@@ -132,9 +133,170 @@ later. Remove the statement when that affected package leaves the scanner.
 Any new scanner command, credential flow, configurable policy, mount or
 environment input requires reassessment before use.
 
+## CVE-2026-78661: HTML text-node coalescing
+
+The November 8 installed scanner check reports `CVE-2026-78661` for
+`pkg:golang/golang.org/x/net@v0.60.0`. The
+[Go advisory GO-2026-6860](https://pkg.go.dev/vuln/GO-2026-6860) identifies
+quadratic string copying in `html` parser text-node coalescing. Its affected
+entry points are `Parse`, `ParseFragment`, `ParseFragmentWithOptions`,
+`ParseWithOptions`, and the parser's `addText`, `fosterParent`, and `parse`
+methods. Attacker-controlled HTML must reach that parser to trigger the issue.
+
+The module is present, but the vulnerable parser code is absent from both
+executables selected by the pinned image index. Inspection used the actual
+upstream Linux binaries, with these immutable identities:
+
+| Architecture | Platform manifest digest                                                  | Executable SHA-256                                                 |
+| ------------ | ------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| amd64        | `sha256:2e6c00d711ab4ae41d8a30c2c1fd3bd3b62704c177bb120f95012e939edfb3df` | `d1dfca6ae10a1ad4540bb94e64f0510077c47008920a9b554986b39dca573d83` |
+| arm64        | `sha256:fc223b6f033406fd0c5efe59b566295e90cff76ccd2af696bd0d66d53ad83a2d` | `b422130ea54e53e142e65c838662e48919ce9c3f23f17d80066b43e70550cb85` |
+
+Both binaries report Go 1.27.3, `golang.org/x/net` v0.60.0, `CGO_ENABLED=0`,
+and source revision `e713f67f7d54decdcd9b3132c9751833dcced698`. Their build
+metadata also reports `vcs.modified=true`, so an upstream source listing alone
+is not the basis for the absence claim. The inspection is bound to the actual
+image manifests and executable bytes above.
+
+The ordinary ELF symbol tables are stripped. `govulncheck` v1.3.0 extract mode
+returns zero package symbols for each binary; its binary scanner then falls
+back to module-level findings. That fallback does not establish parser
+reachability or absence.
+
+Instead, inspection parsed the ELF `.gopclntab` and validated its Go header,
+function count, function-name bounds, and every runtime function's name. The
+Go 1.27.3 linker's
+[`walkFuncs` and `generateFuncnametab`](https://github.com/golang/go/blob/go1.27.3/src/cmd/link/internal/ld/pcln.go)
+include both linked functions and functions in their inline trees in this name
+table. It is not a search over arbitrary binary strings. The amd64 binary has
+207,730 runtime functions and 226,330 distinct function names including inlined
+functions; arm64 has 207,624 and 226,434. Positive controls `main.main`,
+`runtime.main`, and `golang.org/x/net/context.init` are present on both.
+
+The complete HTML-related function-name inventory is identical on both:
+
+```text
+golang.org/x/net/html.init
+golang.org/x/net/html/charset.Lookup
+golang.org/x/net/html/charset.(*htmlEncoding).NewEncoder
+golang.org/x/net/html/charset.NewReaderLabel
+golang.org/x/net/html/charset.htmlEncoding.NewDecoder
+golang.org/x/net/html/charset.(*htmlEncoding).NewDecoder
+```
+
+The parser entry points and coalescing methods are absent, including inline
+metadata. Charset conversion and package initialization do not implement HTML
+parsing. The disposition is therefore `not_affected` with justification
+`vulnerable_code_not_present` for this advisory and PURL only. Resource limits
+and offline execution are not the basis of this assessment.
+
+### Reproduce the binary inspection
+
+Inspect the pinned index with `docker buildx imagetools inspect --raw`, require
+the two Linux platform digests above, and pull each platform manifest by digest.
+Use `docker create --platform linux/ARCH IMAGE version`, then `docker cp` to copy
+`/usr/local/bin/trivy` from the stopped container; remove that container afterward.
+No scanner code needs to execute for this inspection. Check the binary metadata
+with `go version -m` and `govulncheck -mode=extract`.
+
+Save the following inspector outside the checkout and run it with the pinned
+Go 1.26.10 toolchain: `go run inspect-pcln.go /absolute/path/to/trivy-amd64
+/absolute/path/to/trivy-arm64`. Require both recorded executable digests,
+function counts, positive controls and HTML inventories to match. A malformed
+or unsupported metadata table fails inspection rather than proving absence.
+
+```go
+package main
+
+import (
+	"bytes"
+	"crypto/sha256"
+	"debug/elf"
+	"debug/gosym"
+	"encoding/binary"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"os"
+	"strings"
+	"unicode/utf8"
+)
+
+func main() {
+	for _, path := range os.Args[1:] {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			panic(err)
+		}
+		file, err := elf.NewFile(bytes.NewReader(data))
+		if err != nil {
+			panic(err)
+		}
+		pcln, err := file.Section(".gopclntab").Data()
+		if err != nil {
+			panic(err)
+		}
+		if file.Class != elf.ELFCLASS64 || file.Data != elf.ELFDATA2LSB || binary.LittleEndian.Uint32(pcln[:4]) != 0xfffffff1 || pcln[7] != 8 {
+			panic("unsupported ELF or Go pclntab")
+		}
+		nfunc := binary.LittleEndian.Uint64(pcln[8:16])
+		start := binary.LittleEndian.Uint64(pcln[32:40])
+		end := binary.LittleEndian.Uint64(pcln[40:48])
+		if start >= end || end > uint64(len(pcln)) {
+			panic("invalid function-name table bounds")
+		}
+		table, err := gosym.NewTable(nil, gosym.NewLineTable(pcln, file.Section(".text").Addr))
+		if err != nil || uint64(len(table.Funcs)) != nfunc {
+			panic(fmt.Sprintf("incomplete pclntab: %v", err))
+		}
+		names := map[string]bool{}
+		var html, net []string
+		for _, raw := range bytes.Split(pcln[start:end], []byte{0}) {
+			if len(raw) == 0 {
+				continue
+			}
+			if !utf8.Valid(raw) {
+				panic("invalid function name")
+			}
+			name := string(raw)
+			names[name] = true
+			if strings.HasPrefix(name, "golang.org/x/net/html.") || strings.HasPrefix(name, "golang.org/x/net/html/") {
+				html = append(html, name)
+			}
+			if strings.HasPrefix(name, "golang.org/x/net/") {
+				net = append(net, name)
+			}
+		}
+		for _, function := range table.Funcs {
+			if !names[function.Name] {
+				panic("runtime function missing from name table")
+			}
+		}
+		if !names["main.main"] || !names["runtime.main"] || len(net) == 0 {
+			panic("positive controls absent")
+		}
+		sum := sha256.Sum256(data)
+		result := map[string]any{"binary": path, "machine": file.Machine.String(), "sha256": hex.EncodeToString(sum[:]), "runtimeFunctions": len(table.Funcs), "functionNamesIncludingInlined": len(names), "xNetFunctionNames": len(net), "htmlFunctionNames": html, "positiveControls": []string{"main.main", "runtime.main", net[0]}}
+		if err := json.NewEncoder(os.Stdout).Encode(result); err != nil {
+			panic(err)
+		}
+	}
+}
+```
+
+The official [Trivy 0.76.2 release](https://github.com/aquasecurity/trivy/releases/tag/v0.76.2)
+was published November 5, 2026 at 12:50:25 UTC and contains x/net v0.62.0 and
+go-jose v4.1.6. It is younger than the required 30-day admission window and
+includes additional dependency and base-image changes. The absent HTML parser
+and the separately assessed RSA credential path do not justify admitting that
+fresh release early. Retain the exact 0.76.1 image and its existing certificate-fix
+admission. Reassess by November 13 UTC or immediately if either image digest,
+compiler/build settings, scanner execution contract or advisory changes. Do not
+carry this binary-absence claim to a different image.
+
 ## Scanner finding enforcement
 
-The signed scanner manifest embeds the OpenVEX statement above. Its publisher
+The signed scanner manifest embeds the OpenVEX statements above. Its publisher
 signature, exact image, execution contract, and assessment deadline are verified
 before the statement can authorize a suppression. See
 [Scanner manifests](scanner-manifests.md) and
