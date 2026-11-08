@@ -56,7 +56,7 @@ func DocumentationFindings(ctx context.Context, repo repository.Repository, adde
 	formatPaths := []string{}
 	for _, path := range changed {
 		document, exists := corpus.documents[path]
-		if exists {
+		if exists && !repo.IsGenerated(path) {
 			findings = append(findings, markdownTextFindings(document)...)
 			formatPaths = append(formatPaths, path)
 		}
@@ -189,7 +189,11 @@ func readMarkdownDocument(repo repository.Repository, path string) (markdownDocu
 			Message: "Markdown document must be valid UTF-8 text",
 		}}
 	}
-	return parseMarkdownDocument(path, string(data)), nil
+	renderer, err := markdownRendererFor(repo, path)
+	if err != nil {
+		return markdownDocument{}, []policy.Finding{{Check: "quality.documentationRenderer", Path: path, Message: err.Error()}}
+	}
+	return parseMarkdownDocument(path, string(data), renderer), nil
 }
 
 func markdownTextFindings(document markdownDocument) []policy.Finding {
@@ -219,8 +223,23 @@ func markdownTextFindings(document markdownDocument) []policy.Finding {
 	return findings
 }
 
-func (document *markdownDocument) addHeading(content string, line, column int, duplicates map[string]int) {
-	anchor := markdownAnchor(content)
+func (document *markdownDocument) addHeading(content string, line, column int, duplicates map[string]int, renderer markdownRenderer) {
+	anchor := renderer.anchor(content)
+	if renderer.mkdocs {
+		original, base, suffix := anchor, anchor, duplicates[anchor]
+		if match := markdownDuplicateSuffix.FindStringSubmatch(anchor); match != nil {
+			base = match[1]
+			start, _ := strconv.Atoi(match[2])
+			suffix = max(start, suffix)
+		}
+		for _, exists := document.headings[anchor]; exists || anchor == ""; _, exists = document.headings[anchor] {
+			suffix++
+			anchor = base + "_" + strconv.Itoa(suffix)
+		}
+		duplicates[original] = suffix
+		document.headings[anchor] = markdownHeading{line: line, column: column}
+		return
+	}
 	if anchor == "" {
 		document.anchors = append(document.anchors, markdownAnchorIssue{line: line, column: column})
 		return
@@ -284,12 +303,8 @@ func markdownFragmentFindings(corpus markdownCorpus, source, resolved, fragment 
 	if !exists {
 		return []policy.Finding{markdownLinkProblem(source, link, "fragment target cannot provide Markdown headings")}
 	}
-	anchor := markdownAnchor(fragment)
-	if anchor == "" {
-		return []policy.Finding{markdownLinkProblem(source, link, "fragment is not a usable Markdown heading anchor")}
-	}
-	if _, exists := document.headings[anchor]; !exists {
-		return []policy.Finding{markdownLinkProblem(source, link, "Markdown fragment target is missing: #"+anchor)}
+	if _, exists := document.headings[fragment]; !exists {
+		return []policy.Finding{markdownLinkProblem(source, link, "Markdown fragment target is missing: #"+fragment)}
 	}
 	return nil
 }
@@ -393,7 +408,7 @@ func markdownAnchor(value string) string {
 			builder.WriteByte('-')
 		}
 	}
-	return strings.Trim(builder.String(), "-")
+	return builder.String()
 }
 
 func markdownUnescape(value string) string {

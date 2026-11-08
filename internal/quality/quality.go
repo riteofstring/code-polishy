@@ -25,12 +25,31 @@ import (
 func Check(ctx context.Context, repo repository.Repository, selection repository.Selection, commandRunner runner.Runner, profile string) []policy.Finding {
 	repo = repo.WithAnalysisProfile(profile)
 	findings := sourceChecks(repo, selection.Files)
+	markdownFiles, markdownDeleted, formatFiles := []string{}, []string{}, []string{}
+	configurationChanged := false
+	for _, path := range selection.Files {
+		if markdownPath(path) {
+			markdownFiles = append(markdownFiles, path)
+		} else {
+			formatFiles = append(formatFiles, path)
+		}
+		configurationChanged = configurationChanged || markdownConfigurationPath(path)
+	}
+	for _, path := range selection.Candidate.Deleted {
+		if markdownPath(path) {
+			markdownDeleted = append(markdownDeleted, path)
+		}
+		configurationChanged = configurationChanged || markdownConfigurationPath(path)
+	}
+	if configurationChanged || len(markdownFiles)+len(markdownDeleted) > 0 {
+		findings = append(findings, DocumentationFindings(ctx, repo, markdownFiles, markdownDeleted)...)
+	}
 	findings = append(findings, DataSyntaxFindings(ctx, repo, selection.Files)...)
 	findings = append(findings, cargoDiscoveryFindings(ctx, repo, selection.Files, commandRunner)...)
 	findings = append(findings, goToolChecks(ctx, repo, selection.Files, commandRunner)...)
 	findings = append(findings, goReachabilityFindings(ctx, repo, selection, commandRunner, profile)...)
 	findings = append(findings, shellChecks(ctx, repo, selection.Files, commandRunner)...)
-	findings = append(findings, JavaScriptFormatFindings(ctx, repo, selection.Files)...)
+	findings = append(findings, JavaScriptFormatFindings(ctx, repo, formatFiles)...)
 	findings = append(findings, JavaScriptLintFindings(ctx, repo, selection.Files)...)
 	findings = append(findings, JavaScriptTypeCheckFindings(ctx, repo, selection.Files)...)
 	findings = append(findings, JavaScriptDeadCodeFindings(ctx, repo, selection.Files)...)

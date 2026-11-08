@@ -10,7 +10,7 @@ func FuzzMarkdownAndShellSyntaxBoundaries(f *testing.F) {
 		if len(source) > 256*1024 {
 			return
 		}
-		document := parseMarkdownDocument("fuzz.md", source)
+		document := parseMarkdownDocument("fuzz.md", source, markdownRenderer{})
 		if document.path != "fuzz.md" || document.text != source {
 			t.Fatalf("document identity changed")
 		}

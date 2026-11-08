@@ -34,7 +34,7 @@
   },
   "quality": {
     "allowComments": false,
-    "lineBudget": { "production": 100000 }
+    "lineBudget": { "production": 101000 }
   },
   "documentation": {
     "design": [
@@ -283,6 +283,9 @@
           "internal/repository/generated_javascript.go",
           "internal/quality/javascript.go",
           "internal/quality/quality.go",
+          "internal/quality/markdown.go",
+          "internal/quality/markdown_parser.go",
+          "internal/quality/markdown_renderer.go",
           "internal/architecture/providers.go"
         ]
       },

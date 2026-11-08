@@ -40,3 +40,17 @@ The digest identifies the exact path, not file contents or mutable workspace
 state. Command arguments, working directories, and shell diagnostic paths retain
 the original path; planning and execution derive the same identifier regardless
 of selection order.
+
+Markdown checks and documentation gates share corpus link validation, so selecting
+a changed heading also checks incoming links in unchanged documents. Each selected
+document is formatted once. Generated Markdown retains link validation and remains
+exempt from cosmetic checks. Fragment lookup compares the decoded fragment with
+the actual ID rather than slugifying the fragment again.
+
+The MkDocs anchor profile applies within the nearest configuration's `docs_dir`
+(default `docs`). It uses Python-Markdown's default ASCII TOC slugging and underscore
+duplicate suffixes. Enabled `attr_list` heading IDs use Goldmark's existing heading
+attribute parser; explicit heading IDs are reserved before automatic IDs. Documents
+outside that scope retain the existing GitHub-style anchors. This profile covers
+direct MkDocs configuration and default TOC settings; custom slugifiers, inherited
+configuration, and other extension-specific rendering are outside its contract.

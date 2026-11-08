@@ -4,12 +4,109 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
 )
+
+func TestDocumentationMkDocsAnchorsAndLocalParity(t *testing.T) {
+	for name, heading := range map[string]string{
+		"generated": "## Batch capacity: v2.9 → v3.0\n",
+		"explicit":  "## Batch capacity: v2.9 → v3.0 {#batch-capacity-v29-v30}\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			repo := qualityRepository(t)
+			repo.PolicyRoot, _ = fakeFileBundle(t, `{"changed":[],"unsupported":[]}`)
+			writeQualityFile(t, repo.Root, "mkdocs.yml", "site_name: Test\nmarkdown_extensions:\n  - toc:\n      permalink: true\n  - attr_list\n")
+			writeQualityFile(t, repo.Root, "docs/benchmarks/README.md", heading)
+			writeQualityFile(t, repo.Root, "docs/benchmarks/fix/README.md", "# Results\n\n[v3.0.0](../README.md#batch-capacity-v29-v30)\n")
+			writeQualityFile(t, repo.Root, "README.md", "# Batch capacity: v2.9 → v3.0\n\n[Section](#batch-capacity-v29--v30)\n")
+			selection := repository.Selection{Files: []string{"docs/benchmarks/README.md"}}
+			local := Check(t.Context(), repo, selection, &recordingQualityRunner{}, "check")
+			gate := DocumentationFindings(t.Context(), repo, selection.Files, nil)
+			if len(local) != 0 || len(gate) != 0 {
+				t.Fatalf("valid links: local = %+v; gate = %+v", local, gate)
+			}
+			writeQualityFile(t, repo.Root, "docs/benchmarks/README.md", "## Replaced\n")
+			local = Check(t.Context(), repo, selection, &recordingQualityRunner{}, "check")
+			gate = DocumentationFindings(t.Context(), repo, selection.Files, nil)
+			if len(local) != 1 || local[0].Check != "quality.documentationLink" || local[0].Path != "docs/benchmarks/fix/README.md" || !reflect.DeepEqual(local, gate) {
+				t.Fatalf("missing incoming link: local = %+v; gate = %+v", local, gate)
+			}
+		})
+	}
+}
+
+func TestDocumentationPreservesGitHubEdgeHyphens(t *testing.T) {
+	repo := qualityRepository(t)
+	repo.PolicyRoot, _ = fakeFileBundle(t, `{"changed":[],"unsupported":[]}`)
+	writeQualityFile(t, repo.Root, "README.md", "# --help\n\n# Release-\n\n[Help](#--help)\n[Release](#release-)\n")
+	selection := repository.Selection{Files: []string{"README.md"}}
+	local := Check(t.Context(), repo, selection, &recordingQualityRunner{}, "check")
+	gate := DocumentationFindings(t.Context(), repo, selection.Files, nil)
+	if len(local) != 0 || len(gate) != 0 {
+		t.Fatalf("valid GitHub links: local = %+v; gate = %+v", local, gate)
+	}
+}
+
+func TestDocumentationMkDocsScopeAndEnabledIDs(t *testing.T) {
+	for extensions, id := range map[string]string{
+		"[toc, attr_list]":                 "Keep.ID",
+		"{toc: {}, attr_list: {}}":         "Keep.ID",
+		"[toc, markdown.extensions.extra]": "Keep.ID",
+		"[toc]":                            "heading-keepid",
+	} {
+		t.Run(extensions, func(t *testing.T) {
+			repo := qualityRepository(t)
+			var requests string
+			repo.PolicyRoot, requests = fakeFileBundle(t, `{"changed":[],"unsupported":[]}`)
+			writeQualityFile(t, repo.Root, "mkdocs.yaml", "site_name: Test\ndocs_dir: manual\nmarkdown_extensions: "+extensions+"\n")
+			writeQualityFile(t, repo.Root, "manual/guide.md", "# Heading {#Keep.ID}\n\n# Code `{#Literal}`\n\n# Café\n\n# Café\n")
+			writeQualityFile(t, repo.Root, "README.md", "# Links\n\n[ID](manual/guide.md#"+id+")\n[Code](manual/guide.md#code-literal)\n[Duplicate](manual/guide.md#cafe_1)\n")
+			selection := repository.Selection{Files: []string{"manual/guide.md"}}
+			if findings := Check(t.Context(), repo, selection, &recordingQualityRunner{}, "check"); len(findings) != 0 {
+				t.Fatalf("findings = %+v", findings)
+			}
+			if observed := observedRequestLines(t, requests); len(observed) != 1 {
+				t.Fatalf("formatter requests = %v", observed)
+			}
+		})
+	}
+}
+
+func TestDocumentationChecksMkDocsConfigurationChanges(t *testing.T) {
+	repo := qualityRepository(t)
+	repo.PolicyRoot, _ = fakeFileBundle(t, `{"changed":[],"unsupported":[]}`)
+	writeQualityFile(t, repo.Root, "mkdocs.yml", "site_name: Test\ndocs_dir: manual\n")
+	writeQualityFile(t, repo.Root, "docs/guide.md", "# Batch capacity: v2.9 → v3.0\n\n[Section](#batch-capacity-v29--v30)\n")
+	selection := repository.Selection{Files: []string{"mkdocs.yml"}}
+	if findings := Check(t.Context(), repo, selection, &recordingQualityRunner{}, "check"); len(findings) != 0 {
+		t.Fatalf("outside MkDocs scope = %+v", findings)
+	}
+	writeQualityFile(t, repo.Root, "mkdocs.yml", "site_name: Test\ndocs_dir: docs\n")
+	findings := Check(t.Context(), repo, selection, &recordingQualityRunner{}, "check")
+	if len(findings) != 1 || findings[0].Check != "quality.documentationLink" {
+		t.Fatalf("changed renderer findings = %+v", findings)
+	}
+}
+
+func TestDocumentationLocalChecksPreserveGeneratedCosmeticExemptions(t *testing.T) {
+	repo := qualityRepository(t)
+	repo.Config.Scope.Generated = []string{"docs/generated.md"}
+	writeQualityFile(t, repo.Root, "docs/generated.md", "# Generated  ")
+	selection := repository.Selection{Files: []string{"docs/generated.md"}}
+	if findings := Check(t.Context(), repo, selection, &recordingQualityRunner{}, "check"); len(findings) != 0 {
+		t.Fatalf("generated cosmetics = %+v", findings)
+	}
+	writeQualityFile(t, repo.Root, "docs/generated.md", "# Generated  \n\n[Missing](#missing)  ")
+	findings := Check(t.Context(), repo, selection, &recordingQualityRunner{}, "check")
+	if len(findings) != 1 || findings[0].Check != "quality.documentationLink" {
+		t.Fatalf("generated links = %+v", findings)
+	}
+}
 
 func TestDocumentationFindingsFormatsChangedMarkdownAndValidatesTheCorpus(t *testing.T) {
 	t.Parallel()
