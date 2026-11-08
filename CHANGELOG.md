@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add a systematic bug-review guide with shared questions and frontend, backend,
+  and cross-component follow-ups. Read it with `docs read bug-review` when a bug
+  review is requested.
+
 ## 0.33.1 - 2026-11-08
 
 - Validate MkDocs documentation links using default Python-Markdown heading
