@@ -11,6 +11,7 @@
 - Run the same documentation link validation in local checks and gates,
   including incoming links from unchanged files and MkDocs configuration
   changes. Keep generated Markdown exempt from cosmetic checks.
+- Retry failed HTTP downloads when installing pinned Windows policy tools.
 
 ## 0.33.0 - 2026-11-08
 

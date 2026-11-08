@@ -37,7 +37,7 @@ try {
   function Get-Verified([string]$Asset, [string]$Url) {
     if (-not $Checksums.ContainsKey($Asset)) { throw "No checked-in checksum for $Asset" }
     $Destination = Join-Path $Scratch $Asset
-    Invoke-WebRequest -Uri $Url -OutFile $Destination
+    Invoke-WebRequest -Uri $Url -OutFile $Destination -MaximumRetryCount 3 -RetryIntervalSec 5
     $Actual = (Get-FileHash -Algorithm SHA256 $Destination).Hash.ToLowerInvariant()
     if ($Actual -ne $Checksums[$Asset]) { throw "Checksum mismatch for $Asset`: $Actual" }
     return $Destination
