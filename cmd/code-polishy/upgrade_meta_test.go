@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/riteofstring/code-polishy/internal/engine"
 	"github.com/riteofstring/code-polishy/internal/policy"
@@ -297,5 +298,46 @@ func TestUpgradePlanOptionsRequirePublishedCandidate(t *testing.T) {
 		if _, err := parseUpgradePlanOptions(arguments); err == nil {
 			t.Fatalf("arguments %v were accepted", arguments)
 		}
+	}
+}
+
+func TestIncomingUpgradePreservesOnlyCompatibleScannerPinsEvenAfterExpiry(t *testing.T) {
+	for _, mode := range []string{"compatible", "foreign-publisher", "incompatible-contract", "missing-deadline"} {
+		t.Run(mode, func(t *testing.T) {
+			invocation, envelope, locked, private := scannerCLIFixture(t)
+			var selected release.SignedScanner
+			if err := json.Unmarshal(envelope, &selected); err != nil {
+				t.Fatal(err)
+			}
+			var manifest release.ScannerManifest
+			if err := json.Unmarshal(selected.Payload, &manifest); err != nil {
+				t.Fatal(err)
+			}
+			manifest.ReassessBy = time.Now().Add(-time.Hour)
+			switch mode {
+			case "foreign-publisher":
+				_, _, _, private = scannerCLIFixture(t)
+			case "incompatible-contract":
+				manifest.Contract = "code-polishy-trivy/v2"
+			case "missing-deadline":
+				manifest.ReassessBy = time.Time{}
+			}
+			payload, err := json.Marshal(manifest)
+			if err != nil {
+				t.Fatal(err)
+			}
+			signed, err := release.SignScanner(payload, private)
+			if err != nil {
+				t.Fatal(err)
+			}
+			locked.Scanner = &signed
+			err = verifyUpgradeRelease(invocation.policyRoot, locked, false)
+			if (err == nil) != (mode == "compatible") {
+				t.Fatalf("upgrade verification for %s: %v", mode, err)
+			}
+			if _, err := release.VerifyScanner(invocation.policyRoot, locked.Scanner); err == nil {
+				t.Fatal("upgrade compatibility check authorized expired assessments")
+			}
+		})
 	}
 }

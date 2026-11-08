@@ -66,6 +66,9 @@ is the same `capability-delta/v1` object returned as `upgradeDelta` by
 `capabilities --format json`; human capability inspection displays the same
 comparison. Each record captures the catalog bytes and release identity inputs
 needed to verify the comparison even after removing the outgoing installation.
+Adopting a scanner package preserves this comparison: the scanner envelope does
+not change either release catalog. The stored record retains the original
+upgrade inputs; concurrent-write protection still compares the complete lock.
 These local records authenticate catalog content against captured release
 digests; they do not authenticate who performed the upgrade or establish a
 trusted upgrade history independently of the repository's local state.

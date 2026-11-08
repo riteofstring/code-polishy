@@ -599,7 +599,7 @@ func verifyUpgradeRelease(root string, locked release.Lock, outgoing bool) error
 		return err
 	}
 	if !outgoing && locked.Scanner != nil {
-		if _, err := release.VerifyScanner(root, locked.Scanner); err != nil {
+		if _, err := release.VerifyScannerCompatibility(root, locked.Scanner); err != nil {
 			return err
 		}
 	}

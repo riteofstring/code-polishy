@@ -65,8 +65,17 @@ checks that state and the executing installed release identity while holding the
 write lock. A stale
 operation cannot replace the other's selection. Abandoned preparation files do
 not become authority. Ordinary Code Polishy upgrades preserve the scanner and
-verify its publisher and contract against the incoming release. Incompatible
-signers or contracts block the upgrade rather than silently replacing selection.
+verify its publisher, payload shape and contract against the incoming release,
+including during upgrade apply. Retaining an expired pin does not authorize its
+assessments: adoption and scanning still require a current deadline. Incompatible
+signers, malformed payloads or contracts block the upgrade rather than silently
+replacing selection.
+
+Retained capability comparisons match the Code Polishy release independently of
+the scanner envelope. Scanner adoption preserves the original authenticated
+catalog proofs and comparison, even after removal of the outgoing installation.
+All other lock fields must still match. Upgrade plans and write transactions keep
+full-lock comparisons so a changed scanner selection invalidates stale cutovers.
 
 The first supporting Code Polishy upgrade introduces this lock field. Initial
 adoption explicitly runs `scanner-update` afterward; configured artifact gates

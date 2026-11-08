@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"testing/synctest"
@@ -60,6 +61,24 @@ func scannerCLIFixture(t *testing.T) (invocation, []byte, release.Lock, []byte) 
 	}
 	policyManifest, _, err := release.ReadManifest(root)
 	if err != nil {
+		t.Fatal(err)
+	}
+	for _, relative := range []string{"artifact-security/publisher.pem", "artifact-security/scanner-contract.txt"} {
+		data, err := os.ReadFile(filepath.Join(root, relative))
+		if err != nil {
+			t.Fatal(err)
+		}
+		digest := sha256.Sum256(data)
+		policyManifest.Entries = append(policyManifest.Entries, release.Entry{Path: relative, SHA256: hex.EncodeToString(digest[:])})
+	}
+	slices.SortFunc(policyManifest.Entries, func(left, right release.Entry) int { return strings.Compare(left.Path, right.Path) })
+	policyManifest.EntryCount = len(policyManifest.Entries)
+	policyManifest.ContentDigest = release.EntriesDigest(policyManifest.Entries)
+	encoded, err := json.Marshal(policyManifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, release.ManifestFilename), encoded, 0600); err != nil {
 		t.Fatal(err)
 	}
 	lock := publishedTestLock(policyManifest)

@@ -189,45 +189,62 @@ func installScannerPublicKeyFixture(t *testing.T, root, keyRoot, contract string
 }
 
 func TestToolUpgradePreservesOnlyScannerSelectionsTheIncomingReleaseTrusts(t *testing.T) {
-	for _, mode := range []string{"compatible", "foreign-publisher", "incompatible-contract"} {
-		t.Run(mode, func(t *testing.T) {
-			repo, oldRoot, nextRoot, old, next := capabilityUpgradeFixture(t)
-			keyRoot, key, manifest := scannerSigningFixture(t)
-			installScannerPublicKeyFixture(t, oldRoot, keyRoot, "code-polishy-trivy/v1")
-			incomingKeyRoot := keyRoot
-			if mode == "foreign-publisher" {
-				incomingKeyRoot, _, _ = scannerSigningFixture(t)
+	for _, expired := range []bool{false, true} {
+		for _, mode := range []string{"compatible", "foreign-publisher", "incompatible-contract"} {
+			name := mode
+			if expired {
+				name = "expired/" + mode
 			}
-			contract := "code-polishy-trivy/v1"
-			if mode == "incompatible-contract" {
-				contract = "code-polishy-trivy/v2"
-			}
-			installScannerPublicKeyFixture(t, nextRoot, incomingKeyRoot, contract)
-			old.Scanner = signScannerFixture(t, key, manifest)
-			if err := WriteLock(repo, old); err != nil {
-				t.Fatal(err)
-			}
-			result, err := writeReleaseLock(repo, nextRoot, next)
-			if mode != "compatible" {
-				if err == nil {
-					t.Fatal("upgrade retained an untrusted or incompatible scanner")
+			t.Run(name, func(t *testing.T) {
+				repo, oldRoot, nextRoot, old, next := capabilityUpgradeFixture(t)
+				keyRoot, key, manifest := scannerSigningFixture(t)
+				if expired {
+					manifest.ReassessBy = time.Now().Add(-time.Hour)
 				}
-				current, _, readErr := ReadLock(repo)
-				if readErr != nil || !sameCapabilityLock(current, old) {
-					t.Fatal("rejected upgrade changed lock")
+				installScannerPublicKeyFixture(t, oldRoot, keyRoot, "code-polishy-trivy/v1")
+				incomingKeyRoot := keyRoot
+				if mode == "foreign-publisher" {
+					incomingKeyRoot, _, _ = scannerSigningFixture(t)
 				}
-				return
-			}
-			if err != nil {
-				t.Fatal(err)
-			}
-			if result.Lock.Scanner == nil || string(result.Lock.Scanner.Payload) != string(old.Scanner.Payload) {
-				t.Fatal("upgrade replaced scanner selection")
-			}
-			if _, err := VerifyScanner(nextRoot, result.Lock.Scanner); err != nil {
-				t.Fatal(err)
-			}
-		})
+				contract := "code-polishy-trivy/v1"
+				if mode == "incompatible-contract" {
+					contract = "code-polishy-trivy/v2"
+				}
+				installScannerPublicKeyFixture(t, nextRoot, incomingKeyRoot, contract)
+				old.Scanner = signScannerFixture(t, key, manifest)
+				if err := WriteLock(repo, old); err != nil {
+					t.Fatal(err)
+				}
+				result, err := writeReleaseLock(repo, nextRoot, next)
+				if mode != "compatible" {
+					if err == nil {
+						t.Fatal("upgrade retained an untrusted or incompatible scanner")
+					}
+					current, _, readErr := ReadLock(repo)
+					if readErr != nil || !sameCapabilityLock(current, old) {
+						t.Fatal("rejected upgrade changed lock")
+					}
+					return
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				if result.Lock.Scanner == nil || string(result.Lock.Scanner.Payload) != string(old.Scanner.Payload) || string(result.Lock.Scanner.Signature) != string(old.Scanner.Signature) {
+					t.Fatal("upgrade replaced scanner selection")
+				}
+				_, err = VerifyScanner(nextRoot, result.Lock.Scanner)
+				if (err != nil) != expired {
+					t.Fatalf("scanner assessment authorization changed: expired=%v error=%v", expired, err)
+				}
+				if expired {
+					manifest.Version = "1.0.1"
+					manifest.ReassessBy = time.Now().Add(time.Hour)
+					if err := WriteScannerLock(repo, nextRoot, result.Lock, signScannerFixture(t, key, manifest)); err != nil {
+						t.Fatalf("compatible upgrade blocked scanner renewal: %v", err)
+					}
+				}
+			})
+		}
 	}
 }
 

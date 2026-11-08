@@ -390,3 +390,64 @@ func removeCapabilityUpgradeInput(t testing.TB, root, relative string) {
 		t.Fatal(err)
 	}
 }
+
+func TestScannerAdoptionPreservesAuthenticatedCapabilityHistory(t *testing.T) {
+	repo, oldRoot, nextRoot, _, next := capabilityUpgradeFixture(t)
+	keyRoot, key, manifest := scannerSigningFixture(t)
+	installScannerPublicKeyFixture(t, nextRoot, keyRoot, manifest.Contract)
+	upgraded, err := writeReleaseLock(repo, nextRoot, next)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := ReadCapabilityUpgrade(repo, upgraded.Lock)
+	if before.Availability != "available" {
+		t.Fatalf("upgrade comparison unavailable: %+v", before)
+	}
+	stored := readCapabilityUpgradeArtifact(t, repo, before)
+	if err := os.RemoveAll(oldRoot); err != nil {
+		t.Fatal(err)
+	}
+	current := upgraded.Lock
+	for _, version := range []string{"1.0.0", "1.0.1"} {
+		previous := current
+		manifest.Version = version
+		if err := WriteScannerLock(repo, nextRoot, current, signScannerFixture(t, key, manifest)); err != nil {
+			t.Fatal(err)
+		}
+		current, _, err = ReadLock(repo)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := validateCapabilityUpgradeCutover(repo, nextRoot, &previous, current); err == nil {
+			t.Fatal("scanner adoption did not invalidate a stale tool-upgrade cutover")
+		}
+		after := ReadCapabilityUpgrade(repo, current)
+		if !bytes.Equal(render(t, before), render(t, after)) {
+			t.Fatalf("scanner adoption changed retained comparison: %+v", after)
+		}
+		if !bytes.Equal(stored, readCapabilityUpgradeArtifact(t, repo, after)) {
+			t.Fatal("scanner adoption rewrote authenticated catalog evidence")
+		}
+		repeated, err := writeReleaseLock(repo, nextRoot, current)
+		if err != nil || repeated.Changed || !bytes.Equal(render(t, before), render(t, repeated.Delta)) {
+			t.Fatalf("repeated tool lock lost capability history: %+v %v", repeated, err)
+		}
+	}
+	changedRelease := current
+	changedRelease.CodePolishyVersion = "9.9.10"
+	if delta := ReadCapabilityUpgrade(repo, changedRelease); delta.Availability != "unavailable" {
+		t.Fatal("capability history accepted a changed tool release")
+	}
+	var record capabilityUpgradeRecord
+	if err := json.Unmarshal(stored, &record); err != nil {
+		t.Fatal(err)
+	}
+	record.Incoming.Catalog = bytes.ReplaceAll(record.Incoming.Catalog, []byte("source"), []byte("invented"))
+	altered, err := renderCapabilityUpgradeRecord(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := parseCapabilityUpgradeRecord(altered, current); err == nil {
+		t.Fatal("scanner-independent comparison accepted tampered catalog evidence")
+	}
+}

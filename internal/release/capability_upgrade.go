@@ -160,7 +160,7 @@ func parseCapabilityUpgradeRecordAt(data []byte, incoming Lock, artifactPath str
 		return record, fmt.Errorf("capability upgrade record is not a canonical versioned document")
 	}
 	if _, valid := managedCapabilityUpgradeRelativePath(artifactPath, "delta.json"); !valid ||
-		!sameCapabilityLock(record.Delta.Incoming, incoming) || record.Delta.ArtifactPath != artifactPath {
+		!sameCapabilityRelease(record.Delta.Incoming, incoming) || record.Delta.ArtifactPath != artifactPath {
 		return record, fmt.Errorf("capability upgrade record belongs to another lock")
 	}
 	if err := validateCapabilityUpgradeRecord(record); err != nil {

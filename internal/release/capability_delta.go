@@ -130,6 +130,11 @@ func sameCapabilityDefinition(before, after CapabilityDefinition) bool {
 	return bytes.Equal(left, right)
 }
 
+func sameCapabilityRelease(left, right Lock) bool {
+	left.Scanner, right.Scanner = nil, nil
+	return sameCapabilityLock(left, right)
+}
+
 func sameCapabilityLock(left, right Lock) bool {
 	return bytes.Equal(RenderLock(left), RenderLock(right))
 }

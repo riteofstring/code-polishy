@@ -70,7 +70,7 @@ func prepareCapabilityUpgrade(repoRoot, incomingRoot string, root *os.Root, inco
 	}
 	incoming.Scanner = outgoing.Scanner
 	if incoming.Scanner != nil {
-		if _, err := VerifyScanner(incomingRoot, incoming.Scanner); err != nil {
+		if _, err := VerifyScannerCompatibility(incomingRoot, incoming.Scanner); err != nil {
 			return LockUpgradeResult{}, err
 		}
 	}

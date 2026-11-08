@@ -61,6 +61,14 @@ func verifyScannerSignature(root string, signed *SignedScanner) (string, error) 
 }
 
 func VerifyScanner(root string, signed *SignedScanner) (ScannerManifest, error) {
+	manifest, err := VerifyScannerCompatibility(root, signed)
+	if err == nil && !manifest.ReassessBy.After(time.Now().UTC()) {
+		err = errors.New("scanner assessments expired; use scanner-update to adopt a reviewed revision")
+	}
+	return manifest, err
+}
+
+func VerifyScannerCompatibility(root string, signed *SignedScanner) (ScannerManifest, error) {
 	contract, err := verifyScannerSignature(root, signed)
 	if err != nil {
 		return ScannerManifest{}, err
@@ -83,8 +91,8 @@ func (manifest ScannerManifest) validate(contract string) error {
 		return errors.New("scanner package and binary versions must be exact")
 	case !strings.HasPrefix(manifest.SourceImage, "docker.io/aquasec/trivy@sha256:") || !digestPattern.MatchString(strings.TrimPrefix(manifest.SourceImage, "docker.io/aquasec/trivy@sha256:")):
 		return errors.New("scanner image must identify an immutable official Trivy image index")
-	case !manifest.ReassessBy.After(time.Now().UTC()):
-		return errors.New("scanner assessments expired; use scanner-update to adopt a reviewed revision")
+	case manifest.ReassessBy.IsZero():
+		return errors.New("scanner manifest requires an assessment deadline")
 	case len(manifest.Evidence) < 20 || len(manifest.OpenVEX) == 0:
 		return errors.New("scanner manifest requires assessment evidence and explicit OpenVEX")
 	}
