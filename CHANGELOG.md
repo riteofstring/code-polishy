@@ -17,6 +17,9 @@
 - Publish scanner packages through the protected scanner publication workflow,
   with installed scanner checks on Linux amd64 and arm64 before publication.
   Reports and reusable gate evidence identify the selected scanner manifest.
+- Assess CVE-2026-78661 for the exact Trivy 0.76.1 scanner images after inspecting
+  both Linux architectures. The affected HTML parser is absent from both
+  executables; the authenticated assessment retains the finding visibly.
 - Migration: after upgrading to this release, explicitly preview and apply a
   published scanner package with `scanner-update --manifest URL --sha256 DIGEST`
   and then the same command with `--apply`. Artifact-security checks require
