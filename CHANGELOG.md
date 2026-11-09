@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.33.2-beta.1 - 2026-11-09
 
 - Add a systematic bug-review guide with shared questions and frontend, backend,
   and cross-component follow-ups. Read it with `docs read bug-review` when a bug
