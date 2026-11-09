@@ -106,6 +106,13 @@ ignored by agent-guidance status.
    focused on durable behavior rather than complete prose snapshots.
 6. Record a user-visible contract change in the changelog.
 
+The communication rule records the maintainer's collaboration preference. A
+word limit alone bounded length without saying what to leave out, so replies
+still carried process detail the reader did not need. The rule names the reader,
+the default shape, and the selection test: only facts and decisions that concern
+the user, with more detail on request or when action or safety needs it. The
+canonical budget rose by 256 bytes to state it clearly.
+
 The stable-release supplemental retry rule earns canonical space because it
 prevents repeated expensive hardening without weakening evidence. Reuse exact
 receipts and rerun only missing, failed, expired, or invalidated suites. A full
@@ -152,8 +159,8 @@ reminder stays advisory so it does not become more reliability machinery.
 
 ## Size budget
 
-The focused agents test caps the canonical prefix and optional project
-principles at 5 KiB each. The resulting root file is at most 10 KiB. These are
+The focused agents test caps the canonical prefix at 5.25 KiB and optional
+project principles at 5 KiB. The resulting root file is at most 10.25 KiB. These are
 engineering budgets that catch accidental growth and reserve instruction space
 for repository-owned guidance; they are not empirical performance thresholds.
 Do not game either budget with cryptic prose. Remove lower-value or duplicated

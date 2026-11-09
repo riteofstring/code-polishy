@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Restore the direct communication rule in canonical agent guidance: agents lead
+  with the outcome in plain language, default to one short paragraph or at most
+  five bullets, and include only facts and decisions that concern the user
+  unless asked for more. The canonical guidance budget rises from 5 KiB to
+  5.25 KiB.
+
 ## 0.33.2-beta.1 - 2026-11-09
 
 - Add a systematic bug-review guide with shared questions and frontend, backend,

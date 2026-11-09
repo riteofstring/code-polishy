@@ -20,8 +20,8 @@ func TestProjectPrinciplesAcceptBoundedFlatNumberedList(t *testing.T) {
 
 func TestCanonicalAgentGuidanceRejectsCRLFExpansionBeyondBudget(t *testing.T) {
 	t.Parallel()
-	template := bytes.Repeat([]byte("x\n"), 1710)
-	if len(template) > 5<<10 {
+	template := bytes.Repeat([]byte("x\n"), maximumCanonicalAgentsBytes/3+1)
+	if len(template) > maximumCanonicalAgentsBytes {
 		t.Fatalf("test fixture already exceeds the LF budget: %d", len(template))
 	}
 	err := validateCanonicalAgents(template)
