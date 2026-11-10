@@ -1,12 +1,22 @@
 # Changelog
 
-## Unreleased
+## 0.33.2 - 2026-11-10
 
+- Consolidate repeated remedies, recovery commands, generated-code producer
+  instructions, and vulnerability assessment details in terminal reports while
+  preserving every finding's facts, output stream, and complete JSON and SARIF
+  data. Keep rendering responsive for large `--display-limit all` reports.
+- Render recovery and generation commands with native PowerShell invocation and
+  literal argument escaping on Windows, including paths containing spaces or
+  apostrophes.
 - Restore the direct communication rule in canonical agent guidance: agents lead
   with the outcome in plain language, default to one short paragraph or at most
   five bullets, and include only facts and decisions that concern the user
   unless asked for more. Preserve the 5 KiB canonical guidance budget by removing
   redundant configuration and review reminders.
+- Add a systematic bug-review guide with shared questions and frontend, backend,
+  and cross-component follow-ups. Read it with `docs read bug-review` when a bug
+  review is requested.
 
 ## 0.33.2-beta.1 - 2026-11-09
 
