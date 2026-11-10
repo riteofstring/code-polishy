@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	maximumCanonicalAgentsBytes       = 5<<10 + 256
+	maximumCanonicalAgentsBytes       = 5 << 10
 	projectPrinciplesHeading          = "## Project principles"
 	maximumProjectPrinciplesBytes     = 5 << 10
 	maximumProjectPrincipleBytes      = 400

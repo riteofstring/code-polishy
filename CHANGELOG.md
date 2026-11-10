@@ -5,8 +5,8 @@
 - Restore the direct communication rule in canonical agent guidance: agents lead
   with the outcome in plain language, default to one short paragraph or at most
   five bullets, and include only facts and decisions that concern the user
-  unless asked for more. The canonical guidance budget rises from 5 KiB to
-  5.25 KiB.
+  unless asked for more. Preserve the 5 KiB canonical guidance budget by removing
+  redundant configuration and review reminders.
 
 ## 0.33.2-beta.1 - 2026-11-09
 
