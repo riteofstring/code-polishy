@@ -40,6 +40,13 @@ assessments retain their own evidence instead of disappearing.
 turn a complete failure into a pass. Use `summary.status` rather than counting
 the currently displayed findings or parsing the terminal's `PASS` line.
 
+Terminal findings reference shared remedy (`R`), command (`C`), and generated-code
+producer (`G`) blocks. Identical guidance appears once per output stream, even
+across different rules; command groups retain exact arguments and working
+directories. Reviewed vulnerabilities reference assessment (`A`) blocks while
+listing each advisory's observed severity. Groups cover the displayed findings
+only. JSON and SARIF retain each finding's complete data.
+
 Dependency review uses this same report contract. Its tables distinguish
 removals from additions and updates against the explicitly recorded base;
 the verdict still covers the candidate's required pre-install checks.

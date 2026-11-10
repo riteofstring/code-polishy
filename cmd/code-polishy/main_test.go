@@ -158,7 +158,7 @@ func TestPrintReportKeepsAssessedVulnerabilityVisible(t *testing.T) {
 	}}}
 	printReportTo(stdout, stderr, report)
 	if !strings.Contains(stdout.String(), "VULN-ACCEPTANCE") || !strings.Contains(stdout.String(), "high-not-affected") ||
-		!strings.Contains(stdout.String(), "observed high, ceiling high") || !strings.Contains(stdout.String(), "not-affected/unreachable") ||
+		!strings.Contains(stdout.String(), "observed high") || !strings.Contains(stdout.String(), "ceiling high") || !strings.Contains(stdout.String(), "not-affected/unreachable") ||
 		!strings.Contains(stdout.String(), "owned by Codex") || strings.Contains(stdout.String(), "approved by") ||
 		!strings.Contains(stdout.String(), "expires 2026-09-01 UTC") || stderr.Len() != 0 {
 		t.Fatalf("stdout=%q stderr=%q", stdout.String(), stderr.String())

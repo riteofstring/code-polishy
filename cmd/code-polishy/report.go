@@ -36,6 +36,7 @@ func printExecutionTelemetry(output io.Writer, telemetry *engine.ExecutionTeleme
 }
 
 func printFindings(stdout, stderr io.Writer, findings []policy.Finding) {
+	guidance := findingGuidance{}
 	for _, finding := range findings {
 		relation := finding.SelectionRelation
 		if relation == "" {
@@ -50,15 +51,10 @@ func printFindings(stdout, stderr io.Writer, findings []policy.Finding) {
 			output = stdout
 			label = "INFO"
 		}
-		fmt.Fprintf(output, "%s %-34s %s [%s] relation=%s\n     %s\n", label, finding.Check, findingLocation(finding), finding.Subject, relation, finding.Message)
-		if finding.Remediation.Summary != "" {
-			fmt.Fprintln(output, "     remedy:", finding.Remediation.Summary)
-		}
-		if finding.Remediation.NextCommand != nil {
-			fmt.Fprintln(output, "     next:", strings.Join(finding.Remediation.NextCommand.Argv, " "))
-		}
-		printGenerationRemediation(output, finding.Remediation.Generation)
+		references := guidance.add(finding.Remediation, label == "FAIL")
+		fmt.Fprintf(output, "%s %-34s %s [%s] relation=%s%s\n     %s\n", label, finding.Check, findingLocation(finding), finding.Subject, relation, references, finding.Message)
 	}
+	guidance.print(stdout, stderr)
 }
 
 func printGenerationRemediation(output io.Writer, generation *policy.GenerationRemediation) {
@@ -78,14 +74,14 @@ func printGenerationRemediation(output io.Writer, generation *policy.GenerationR
 	if len(inputs) < len(generation.Inputs) {
 		fmt.Fprintf(output, "     %d more producer input(s) in the complete report\n", len(generation.Inputs)-len(inputs))
 	}
-	fmt.Fprintf(output, "     generate (cwd %s): %s\n", generation.Generate.Cwd, displayGenerationCommand(generation.Generate.Argv))
-	fmt.Fprintf(output, "     verify (cwd %s): %s\n", generation.Verify.Cwd, displayGenerationCommand(generation.Verify.Argv))
+	fmt.Fprintf(output, "     generate (cwd %s): %s\n", generation.Generate.Cwd, displayRemediationCommand(generation.Generate.Argv))
+	fmt.Fprintf(output, "     verify (cwd %s): %s\n", generation.Verify.Cwd, displayRemediationCommand(generation.Verify.Argv))
 	for _, prerequisite := range generation.Prerequisites {
 		fmt.Fprintf(output, "     %s prerequisite: %s\n", prerequisite.Operation, prerequisite.Message)
 	}
 }
 
-func displayGenerationCommand(argv []string) string {
+func displayRemediationCommand(argv []string) string {
 	quoted := make([]string, 0, len(argv))
 	for _, argument := range argv {
 		quoted = append(quoted, "'"+strings.ReplaceAll(argument, "'", "'\\''")+"'")
@@ -153,6 +149,7 @@ func printSuppressedFindings(output io.Writer, suppressed []policy.Suppressed) {
 }
 
 func printVulnerabilityAssessments(output io.Writer, assessed []policy.AssessedVulnerability) {
+	groups := []reportGuidanceGroup[policy.VulnerabilityAssessment]{}
 	for _, assessment := range assessed {
 		observedSeverity := "unknown"
 		if assessment.Finding.Vulnerability != nil {
@@ -160,11 +157,16 @@ func printVulnerabilityAssessments(output io.Writer, assessed []policy.AssessedV
 		}
 		fmt.Fprintf(
 			output,
-			"VULN-ACCEPTANCE %-23s %s [%s] by %s (observed %s, ceiling %s, %s/%s, owned by %s%s, expires %s)\n",
-			assessment.Finding.Check, findingLocation(assessment.Finding), assessment.Finding.Subject, assessment.Assessment.ID,
-			observedSeverity, assessment.Assessment.Severity, assessment.Assessment.Status, assessment.Assessment.Basis, assessment.Assessment.Owner,
-			vulnerabilityApproval(assessment.Assessment), assessment.Assessment.Expires.Format("2006-01-02")+" UTC",
+			"VULN-ACCEPTANCE %-23s %s [%s] (observed %s) assessment=A%d\n",
+			assessment.Finding.Check, findingLocation(assessment.Finding), assessment.Finding.Subject,
+			observedSeverity, addReportGuidance(&groups, assessment.Assessment, false),
 		)
+	}
+	for index, group := range groups {
+		assessment := group.value
+		fmt.Fprintf(output, "ASSESSMENT A%d (%s): %s (ceiling %s, %s/%s, owned by %s%s, expires %s UTC)\n",
+			index+1, findingCount(group.count, "finding"), assessment.ID, assessment.Severity, assessment.Status, assessment.Basis, assessment.Owner,
+			vulnerabilityApproval(assessment), assessment.Expires.Format("2006-01-02"))
 	}
 }
 

@@ -132,6 +132,16 @@ agent-owned decisions, without implying human sign-off. Assessed findings stay
 visible with their disposition and expiry. See
 [Dependency assessment decisions](dependency-assessments.md).
 
+The terminal renderer preserves individual finding facts and display order while
+referencing shared remedy, next-command, and producer blocks. These components
+group independently by their complete values, so different rules can share
+advice without conflating different command arguments, working directories, or
+producer prerequisites. Assessment blocks likewise share only identical
+assessments; each advisory retains its observed severity. Groups contain only
+displayed occurrences and stay within their output stream so redirected failures
+and nonblocking findings each retain their guidance. Grouping is presentation
+only: complete machine reports retain every finding's remediation and assessment.
+
 Findings also retain their producing verification phase, source or security,
 through report composition and serialization. Coalescing preserves separate
 observations across those phases so a security refresh replaces only its own
