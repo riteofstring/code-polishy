@@ -4,6 +4,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
@@ -46,7 +52,7 @@ func TestReportConsolidatesGuidanceAcrossRulesAndKeepsEveryDiagnostic(t *testing
 					t.Fatalf("diagnostic lost its facts or shared guidance: %s", text)
 				}
 			}
-			if !strings.Contains(text, "remedy: Repair the selected source.") || !strings.Contains(text, "next: 'code-polishy' 'check' '--files' 'src/app.go'") {
+			if !strings.Contains(text, "remedy: Repair the selected source.") || !strings.Contains(text, "next: "+hostReportCommand("'code-polishy' 'check' '--files' 'src/app.go'", "& 'code-polishy' 'check' '--files' 'src/app.go'")) {
 				t.Fatalf("missing repair instructions: %s", text)
 			}
 		})
@@ -96,7 +102,7 @@ func TestReportGuidanceStaysWithItsOutputStream(t *testing.T) {
 	var output, diagnostics bytes.Buffer
 	printFindings(&output, &diagnostics, findings)
 	for _, text := range []string{output.String(), diagnostics.String()} {
-		if strings.Count(text, "remedy: Repair imports.") != 1 || strings.Count(text, "next: 'code-polishy' 'doctor'") != 1 {
+		if strings.Count(text, "remedy: Repair imports.") != 1 || strings.Count(text, "next: "+hostReportCommand("'code-polishy' 'doctor'", "& 'code-polishy' 'doctor'")) != 1 {
 			t.Fatalf("stream is missing its own guidance: %s", text)
 		}
 	}
@@ -124,10 +130,10 @@ func TestReportCommandGroupsPreserveArgumentBoundariesAndWorkingDirectories(t *t
 	printFindings(&output, &output, findings)
 	text := output.String()
 	for _, expected := range []string{
-		"COMMAND C1 (2 findings, cwd frontend):\n     next: 'tool' 'a b'",
-		"COMMAND C2 (1 finding, cwd frontend):\n     next: 'tool' 'a' 'b'",
-		"COMMAND C3 (1 finding, cwd backend):\n     next: 'tool' 'a b'",
-		"COMMAND C4 (1 finding, cwd frontend):\n     next: 'tool' 'a'\\''b'",
+		"COMMAND C1 (2 findings, cwd frontend):\n     next: " + hostReportCommand("'tool' 'a b'", "& 'tool' 'a b'"),
+		"COMMAND C2 (1 finding, cwd frontend):\n     next: " + hostReportCommand("'tool' 'a' 'b'", "& 'tool' 'a' 'b'"),
+		"COMMAND C3 (1 finding, cwd backend):\n     next: " + hostReportCommand("'tool' 'a b'", "& 'tool' 'a b'"),
+		"COMMAND C4 (1 finding, cwd frontend):\n     next: " + hostReportCommand("'tool' 'a'\\''b'", "& 'tool' 'a''b'"),
 	} {
 		if !strings.Contains(text, expected) {
 			t.Errorf("missing %q: %s", expected, text)
@@ -135,6 +141,117 @@ func TestReportCommandGroupsPreserveArgumentBoundariesAndWorkingDirectories(t *t
 	}
 	if strings.Count(text, "next:") != 4 {
 		t.Fatalf("wrong command count: %s", text)
+	}
+}
+
+func hostReportCommand(posix, powershell string) string {
+	if runtime.GOOS == "windows" {
+		return powershell
+	}
+	return posix
+}
+
+func TestReportRemediationCommandUsesPlatformInvocationAndLiteralArguments(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name  string
+		argv  []string
+		posix string
+		power string
+	}{
+		{"recovery", []string{"code-polishy", "check", "--files", "src/app.go"}, "'code-polishy' 'check' '--files' 'src/app.go'", "& 'code-polishy' 'check' '--files' 'src/app.go'"},
+		{"literal arguments", []string{"tools/it's a tool", "a'b", "", "$HOME; `echo hi`", `C:\src\file name.go`, `a"b`},
+			"'tools/it'\\''s a tool' 'a'\\''b' '' '$HOME; `echo hi`' 'C:\\src\\file name.go' 'a\"b'",
+			"& 'tools/it''s a tool' 'a''b' '' '$HOME; `echo hi`' 'C:\\src\\file name.go' 'a\"b'"},
+		{"Unicode delimiters", []string{"tools/‘’‚‛", "src/a’; Write-Output injected #.go", "‘’‚‛"},
+			"'tools/‘’‚‛' 'src/a’; Write-Output injected #.go' '‘’‚‛'",
+			"& 'tools/‘‘’’‚‚‛‛' 'src/a’’; Write-Output injected #.go' '‘‘’’‚‚‛‛'"},
+		{"empty", nil, "", ""},
+	} {
+		for _, goos := range []string{"linux", "darwin", "windows"} {
+			t.Run(test.name+"/"+goos, func(t *testing.T) {
+				want := test.posix
+				if goos == "windows" {
+					want = test.power
+				}
+				if got := platformRemediationCommand(test.argv, goos); got != want {
+					t.Fatalf("command = %q, want %q", got, want)
+				}
+				if goos == runtime.GOOS && displayRemediationCommand(test.argv) != want {
+					t.Fatalf("host command = %q, want %q", displayRemediationCommand(test.argv), want)
+				}
+			})
+		}
+	}
+}
+
+func TestReportRemediationCommandBoundsIncludePlatformInvocation(t *testing.T) {
+	t.Parallel()
+	for _, goos := range []string{"linux", "darwin", "windows"} {
+		for _, size := range []int{4092, 4093, 4095} {
+			command := platformRemediationCommand([]string{strings.Repeat("x", size)}, goos)
+			length := size + 2
+			if goos == "windows" {
+				length += 2
+			}
+			if (length > 4096) != strings.Contains(command, "complete report") || len(command) > 4096 {
+				t.Errorf("%s: %d-byte executable produced invalid bound: %s", goos, size, command)
+			}
+		}
+	}
+}
+
+func TestWindowsReportRecoveryCommandExecutesInPowerShell(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("native PowerShell execution runs on Windows")
+	}
+	t.Parallel()
+	script := filepath.Join(t.TempDir(), "capture it's arguments.ps1")
+	if err := os.WriteFile(script, []byte("$ErrorActionPreference = 'Stop'\nConvertTo-Json -InputObject @($args) -Compress\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	arguments := []string{"check", "--files", "src/it's a file.go", "", "$env:HOME", "`literal`", "a; Write-Error unexpected", `a"b`, `C:\source\`}
+	for _, delimiter := range "'‘’‚‛" {
+		arguments = append(arguments, "src/a"+string(delimiter)+"; Write-Output injected #.go")
+	}
+	finding := policy.Finding{Check: "quality.lint", Remediation: policy.FindingRemediation{
+		NextCommand: &policy.FindingCommand{Argv: append([]string{script}, arguments...), Cwd: "."},
+	}}
+	var report bytes.Buffer
+	printFindings(&report, &report, []policy.Finding{finding})
+	_, command, found := strings.Cut(report.String(), "     next: ")
+	if !found {
+		t.Fatalf("report omitted recovery command: %s", report.String())
+	}
+	output, err := exec.Command("pwsh", "-NoProfile", "-NonInteractive", "-Command", strings.TrimSuffix(command, "\n")).CombinedOutput()
+	if err != nil {
+		t.Fatalf("printed command failed: %v\n%s", err, output)
+	}
+	var received []string
+	if err := json.Unmarshal(bytes.TrimSpace(output), &received); err != nil || !slices.Equal(received, arguments) {
+		t.Fatalf("arguments = %q, want %q; decode error: %v; output: %s", received, arguments, err, output)
+	}
+}
+
+func BenchmarkReportGuidanceAll(b *testing.B) {
+	for _, count := range []int{5000, 20000} {
+		b.Run(fmt.Sprint(count), func(b *testing.B) {
+			report := engine.Report{
+				Protocol: engine.ReportProtocol, Summary: engine.ReportSummary{Status: "failed", Errors: count},
+				Display: &engine.ReportDisplay{All: true},
+			}
+			for index := range count {
+				path := fmt.Sprintf("src/file-%d.go", index)
+				report.Findings = append(report.Findings, policy.Finding{
+					Check: "quality.lint", Path: path, Message: "Repair imports.",
+					Remediation: policy.FindingRemediation{Summary: "Repair imports.", NextCommand: &policy.FindingCommand{Argv: []string{"code-polishy", "check", "--files", path}, Cwd: "."}},
+				})
+			}
+			b.ReportAllocs()
+			for b.Loop() {
+				printReportTo(io.Discard, io.Discard, report)
+			}
+		})
 	}
 }
 

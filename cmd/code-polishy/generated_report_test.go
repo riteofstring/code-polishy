@@ -29,7 +29,8 @@ func TestGeneratedRemediationPreservesLiteralCommandsAndBoundsTerminalOutput(t *
 	}
 	printGenerationRemediation(output, generation)
 	text := output.String()
-	if !strings.Contains(text, "source/schema.json") || !strings.Contains(text, "generate (cwd frontend): 'node' 'scripts/with space.js' 'a'\\''b'") || !strings.Contains(text, "verify (cwd frontend)") {
+	want := hostReportCommand("'node' 'scripts/with space.js' 'a'\\''b'", "& 'node' 'scripts/with space.js' 'a''b'")
+	if !strings.Contains(text, "source/schema.json") || !strings.Contains(text, "generate (cwd frontend): "+want) || !strings.Contains(text, "verify (cwd frontend)") {
 		t.Fatalf("generated commands = %q", text)
 	}
 	if command := displayRemediationCommand([]string{"node", strings.Repeat("x", 4096)}); !strings.Contains(command, "complete report") || len(command) > 128 {
@@ -73,8 +74,8 @@ func TestGeneratedReportGroupsCompleteProducerInstructions(t *testing.T) {
 				"client.generated.ts:2 [] relation=global generation=G1",
 				"client.generated.ts:3 [] relation=global generation=G2",
 				"GENERATION G1 (2 findings)", "GENERATION G2 (1 finding)",
-				"generate (cwd frontend): 'node' 'generate.js'",
-				"verify (cwd frontend): 'node' 'verify.js'", "generate prerequisite: Install the declared tool.",
+				"generate (cwd frontend): " + hostReportCommand("'node' 'generate.js'", "& 'node' 'generate.js'"),
+				"verify (cwd frontend): " + hostReportCommand("'node' 'verify.js'", "& 'node' 'verify.js'"), "generate prerequisite: Install the declared tool.",
 			} {
 				if !strings.Contains(text, expected) {
 					t.Errorf("missing %q: %s", expected, text)

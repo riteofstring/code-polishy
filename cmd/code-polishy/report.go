@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -82,11 +83,31 @@ func printGenerationRemediation(output io.Writer, generation *policy.GenerationR
 }
 
 func displayRemediationCommand(argv []string) string {
+	return platformRemediationCommand(argv, runtime.GOOS)
+}
+
+var powerShellQuoteEscapes = strings.NewReplacer(
+	"'", "''",
+	"‘", "‘‘",
+	"’", "’’",
+	"‚", "‚‚",
+	"‛", "‛‛",
+)
+
+func platformRemediationCommand(argv []string, goos string) string {
 	quoted := make([]string, 0, len(argv))
 	for _, argument := range argv {
-		quoted = append(quoted, "'"+strings.ReplaceAll(argument, "'", "'\\''")+"'")
+		if goos == "windows" {
+			argument = powerShellQuoteEscapes.Replace(argument)
+		} else {
+			argument = strings.ReplaceAll(argument, "'", "'\\''")
+		}
+		quoted = append(quoted, "'"+argument+"'")
 	}
 	command := strings.Join(quoted, " ")
+	if goos == "windows" && len(argv) > 0 {
+		command = "& " + command
+	}
 	if len(command) > 4096 {
 		return "command exceeds the terminal bound; see the complete report for its exact arguments"
 	}
@@ -149,7 +170,7 @@ func printSuppressedFindings(output io.Writer, suppressed []policy.Suppressed) {
 }
 
 func printVulnerabilityAssessments(output io.Writer, assessed []policy.AssessedVulnerability) {
-	groups := []reportGuidanceGroup[policy.VulnerabilityAssessment]{}
+	groups := reportGuidanceGroups[policy.VulnerabilityAssessment]{}
 	for _, assessment := range assessed {
 		observedSeverity := "unknown"
 		if assessment.Finding.Vulnerability != nil {
@@ -159,10 +180,10 @@ func printVulnerabilityAssessments(output io.Writer, assessed []policy.AssessedV
 			output,
 			"VULN-ACCEPTANCE %-23s %s [%s] (observed %s) assessment=A%d\n",
 			assessment.Finding.Check, findingLocation(assessment.Finding), assessment.Finding.Subject,
-			observedSeverity, addReportGuidance(&groups, assessment.Assessment, false),
+			observedSeverity, groups.add(assessment.Assessment, false),
 		)
 	}
-	for index, group := range groups {
+	for index, group := range groups.groups {
 		assessment := group.value
 		fmt.Fprintf(output, "ASSESSMENT A%d (%s): %s (ceiling %s, %s/%s, owned by %s%s, expires %s UTC)\n",
 			index+1, findingCount(group.count, "finding"), assessment.ID, assessment.Severity, assessment.Status, assessment.Basis, assessment.Owner,

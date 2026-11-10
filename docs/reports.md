@@ -46,6 +46,8 @@ across different rules; command groups retain exact arguments and working
 directories. Reviewed vulnerabilities reference assessment (`A`) blocks while
 listing each advisory's observed severity. Groups cover the displayed findings
 only. JSON and SARIF retain each finding's complete data.
+Printed commands use POSIX shell syntax on Unix and PowerShell invocation and
+quoting on Windows.
 
 Dependency review uses this same report contract. Its tables distinguish
 removals from additions and updates against the explicitly recorded base;

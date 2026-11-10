@@ -266,6 +266,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Native behavior review runtime contracts failed.' }
           & $go test -count=1 ./internal/documentation
           if ($LASTEXITCODE -ne 0) { throw 'Native versioned documentation contracts failed.' }
+          & $go test -count=1 ./cmd/code-polishy -run '^(TestReportRemediationCommand|TestWindowsReportRecoveryCommand|TestGeneratedRemediation|TestReportCommandGroups)'
+          if ($LASTEXITCODE -ne 0) { throw 'Native report recovery command contracts failed.' }
 
       - name: Install native release from source
         shell: pwsh

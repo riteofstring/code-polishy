@@ -142,6 +142,15 @@ displayed occurrences and stay within their output stream so redirected failures
 and nonblocking findings each retain their guidance. Grouping is presentation
 only: complete machine reports retain every finding's remediation and assessment.
 
+Grouping indexes complete serialized values together with their output stream;
+an ordered list retains first-seen group references. Lookup does not scan earlier
+groups, so an unlimited display scales with its input and output size. Commands
+use POSIX literal quoting on Unix and PowerShell literal quoting on Windows,
+including the invocation operator for quoted executables. The displayed shell
+syntax does not change command identity or the report's argument arrays.
+PowerShell escaping includes its four Unicode single-quote delimiters as well as
+the ASCII apostrophe, keeping paths containing these characters literal.
+
 Findings also retain their producing verification phase, source or security,
 through report composition and serialization. Coalescing preserves separate
 observations across those phases so a security refresh replaces only its own
