@@ -31,13 +31,9 @@ func checkGoOnlineWithCommands(ctx context.Context, repo repository.Repository, 
 	}
 	findings = append(findings, goReleaseAgeWithCommand(ctx, repo, module, commands[1], commandRunner)...)
 	if len(commands) == 2 {
-		return append(findings, policy.Finding{Check: "policy.tool", Path: "repository", Subject: "govulncheck", Message: "pinned govulncheck is unavailable; run ./tools/install-policy-tools.sh"})
+		return append(findings, goVulnerabilityCoverage(module.Manifest, errors.New("pinned govulncheck is unavailable; run ./tools/install-policy-tools.sh")))
 	}
-	vulnerability := commands[2]
-	if err := runner.RunCommand(ctx, commandRunner, repo.Root, vulnerability); err != nil {
-		findings = append(findings, policy.Finding{Check: "supplyChain.goVulnerability", Path: module.Manifest, Subject: "govulncheck", Message: err.Error()})
-	}
-	return findings
+	return append(findings, scanGoVulnerabilities(ctx, repo, module, commands[2], commandRunner)...)
 }
 
 func goOnlineCommands(repo repository.Repository, module repository.GoModule) []policy.Command {
@@ -52,7 +48,7 @@ func goOnlineCommands(repo repository.Repository, module repository.GoModule) []
 	govulncheck := repo.PolicyTool("govulncheck")
 	if runner.ExecutableFile(govulncheck) {
 		commands = append(commands, policy.Command{
-			Name: "govulncheck-" + safeName(module.Root), Argv: []string{govulncheck, "./..."}, Cwd: module.Root,
+			Name: "govulncheck-" + safeName(module.Root), Argv: []string{govulncheck, "-json", "./..."}, Cwd: module.Root,
 			Environment: repo.Config.SupplyChain.Environment, TimeoutSeconds: 1800,
 		})
 	}

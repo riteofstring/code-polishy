@@ -70,7 +70,7 @@ func securityEvidenceFinding(err error) policy.Finding {
 func newSecurityScanRunner(engine *Engine, commands []policy.Command) *securityScanRunner {
 	selected := map[string]policy.Command{}
 	for _, command := range commands {
-		if command.ReportProtocol == policy.OSVVulnerabilityReportProtocol || strings.HasPrefix(command.Name, "pnpm-audit-") {
+		if command.ReportProtocol == policy.OSVVulnerabilityReportProtocol || strings.HasPrefix(command.Name, "pnpm-audit-") || strings.HasPrefix(command.Name, "govulncheck-") {
 			selected[command.Name] = command
 		}
 	}

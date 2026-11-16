@@ -47,6 +47,13 @@ snapshot-bound consumption. Every consumer parses raw output again and applies
 current assessment and exploitation rules. Invalid output, operational failures,
 cancellation and timeout cannot establish a reusable scan.
 
+Go source scans likewise retain an uncached raw JSON report for each attempt.
+Their completion validator requires a supported source symbol scan and exact
+advisory/module identities before marking the attempt successful. Current CVE
+severity enrichment is separate online work; failure there also prevents package
+coverage even when the scanner itself completed. A clean recovery reruns source
+analysis and severity resolution, without reusing the earlier partial attempt.
+
 Each captured snapshot calculates its input identity once and reuses that identity
 through execution and publication.
 The persistent store is local verification evidence, not an authenticated claim

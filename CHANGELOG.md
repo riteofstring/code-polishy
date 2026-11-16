@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Preserve exact Go advisory identities from govulncheck so existing vulnerability
+  assessments apply. Resolve missing severity from current CVE metadata, retain
+  raw source-scan evidence, and keep incomplete scans and unknown severity blocking.
 - Allow explicitly configured test and check timeouts up to 24 hours while
   retaining existing defaults and execution-profile requirements.
 - Report unused container vulnerability assessments only after their target

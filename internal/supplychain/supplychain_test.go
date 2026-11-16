@@ -1186,6 +1186,8 @@ func (boundary supplyToolBoundary) runOutput(_ context.Context, _ string, comman
 		return runner.Result{ExitStatus: 0}, runner.Output{Stdout: []byte(output.String())}, nil
 	case "osv-scanner":
 		return runner.Result{ExitStatus: 0}, runner.Output{Stdout: []byte(`{"results":[]}` + "\n")}, nil
+	case "govulncheck":
+		return runner.Result{}, runner.Output{Stdout: []byte(cleanGoVulnerabilityReport)}, nil
 	default:
 		return runner.Result{}, runner.Output{}, fmt.Errorf("unsupported structured tool %q", executable)
 	}

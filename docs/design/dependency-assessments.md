@@ -85,6 +85,29 @@ unknown. Metadata from
 unrelated advisories cannot influence a group. No network lookup or operator
 override is needed to repair metadata already present in the scanner response.
 
+Go source scanning consumes govulncheck's structured symbol-scan stream. Its
+database entries and module or package observations are not evidence that a
+symbol is called. Only called-symbol findings become vulnerability identities,
+bound to the reported module, exact version and originating `go.mod`. Repeated
+traces share that identity. The raw report retains the complete call paths.
+Successful execution, supported protocol and scan mode, scanned modules and
+roots, and advisory-bound traces are required for completed coverage. A failed
+process or incomplete report remains an operational finding, which an advisory
+assessment cannot suppress.
+
+The Go vulnerability database commonly omits severity. When both its categorical
+severity and CVSS metadata are absent, Code Polishy obtains the current GitHub
+Advisory Database classification for each exact CVE alias. GitHub provides only
+severity; govulncheck continues to determine affected modules and called symbols.
+Unreviewed GitHub records can carry NVD classifications and need no package data
+for this narrow CVE lookup. Withdrawn records cannot supply severity. Conflicting
+classifications retain the highest value; unsupported or missing values remain
+unknown, and lookup failures also block coverage. An existing unsupported Go
+severity is never replaced with a more convenient classification. Lookups occur
+once per reported advisory within a module scan and run again on the next scan.
+Repositories use the existing exact assessment schema, with no custom scanner,
+severity override or command-output filter.
+
 ## Go toolchain containment
 
 The pinned Go standard library implements the repository's rooted filesystem

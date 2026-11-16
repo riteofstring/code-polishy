@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -19,7 +20,78 @@ import (
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
 	"github.com/riteofstring/code-polishy/internal/runner"
+	"github.com/riteofstring/code-polishy/internal/supplychain"
 )
+
+func TestGoSourceScansRetainEvidenceAndObserveChangedCalls(t *testing.T) {
+	database := t.TempDir()
+	writeEngineFile(t, database, "GO-2026-0001.json", `{"schema_version":"1.3.1","id":"GO-2026-0001","modified":"2026-01-01T00:00:00Z","published":"2026-01-01T00:00:00Z","affected":[{"package":{"name":"stdlib","ecosystem":"Go"},"ranges":[{"type":"SEMVER","events":[{"introduced":"0"}]}],"ecosystem_specific":{"imports":[{"path":"net/http","symbols":["Client.Do"]}]}}]}`, 0o600)
+	databasePath := filepath.ToSlash(database)
+	if !strings.HasPrefix(databasePath, "/") {
+		databasePath = "/" + databasePath
+	}
+	t.Setenv("GOTOOLCHAIN", "local")
+	t.Setenv("GOPROXY", "off")
+	root := t.TempDir()
+	writeEngineFile(t, root, "go.mod", "module example.test/govuln\n\ngo 1.26.0\n", 0o600)
+	repo := repository.Repository{Root: root, PolicyRoot: enginePolicyRoot(t), Config: policy.Config{SupplyChain: policy.SupplyChain{Environment: []string{"GOTOOLCHAIN", "GOPROXY"}}}}
+	policyEngine := &Engine{Repository: repo, Runner: goSourceScanRunner{database: (&url.URL{Scheme: "file", Path: databasePath}).String(), delegate: runner.OSRunner{Stdout: io.Discard, Stderr: io.Discard, PathEntries: []string{filepath.Dir(repo.GoTool("go"))}}}}
+	commands, err := supplychain.OnlineCommands(repo, []string{"go.mod"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	previousPath := ""
+	for _, source := range []string{
+		"package main\nfunc main() {}\n",
+		"package main\nimport \"net/http\"\nfunc main() { _, _ = http.DefaultClient.Do(nil) }\n",
+		"package main\nfunc main() { broken }\n",
+		"package main\nfunc main() {}\n",
+	} {
+		writeEngineFile(t, root, "main.go", source, 0o600)
+		scans := newSecurityScanRunner(policyEngine, commands)
+		findings := supplychain.OnlineWithCommands(t.Context(), repo, []string{"go.mod"}, commands, scans)
+		verification := scans.verification()
+		if len(verification.Scans) != 1 || verification.Scans[0].ReportPath == previousPath {
+			t.Fatalf("Go source scan did not retain a new attempt: %+v", verification)
+		}
+		previousPath = verification.Scans[0].ReportPath
+		data, err := os.ReadFile(filepath.Join(root, previousPath))
+		if err != nil || !strings.Contains(string(data), `\"protocol_version\"`) {
+			t.Fatalf("raw Go evidence missing: %s %v", data, err)
+		}
+		assertGoSourceScan(t, source, verification, findings)
+	}
+}
+
+func assertGoSourceScan(t *testing.T, source string, verification *policy.SecurityVerification, findings []policy.Finding) {
+	t.Helper()
+	switch {
+	case strings.Contains(source, "broken"):
+		if verification.Status != "unavailable" || !slices.ContainsFunc(findings, func(f policy.Finding) bool { return f.Check == "policy.securityScanner" }) {
+			t.Fatalf("incomplete scan established coverage: %+v %+v", verification, findings)
+		}
+	case strings.Contains(source, "http"):
+		if verification.Status != "current" || len(findings) != 1 || findings[0].Vulnerability == nil || findings[0].Vulnerability.Advisory != "GO-2026-0001" || findings[0].Vulnerability.Package != "stdlib" || findings[0].Vulnerability.Severity != "unknown" {
+			t.Fatalf("called vulnerability not reported: %+v %+v", verification, findings)
+		}
+	default:
+		if verification.Status != "current" || len(findings) != 0 {
+			t.Fatalf("clean scan failed: %+v %+v", verification, findings)
+		}
+	}
+}
+
+type goSourceScanRunner struct {
+	database string
+	delegate runner.OSRunner
+}
+
+func (scan goSourceScanRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
+	if strings.HasPrefix(invocation.Command.Name, "govulncheck-") {
+		invocation.Command.Argv = append([]string{invocation.Command.Argv[0], "-db", scan.database}, invocation.Command.Argv[1:]...)
+	}
+	return scan.delegate.Execute(ctx, invocation)
+}
 
 func TestRecursiveOSVScansDetectChangedIncludedRequirements(t *testing.T) {
 	t.Parallel()

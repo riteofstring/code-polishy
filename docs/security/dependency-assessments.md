@@ -7,10 +7,11 @@ reviewed on 2026-10-23 UTC.
 Zod configuration boundaries and available fixes rechecked on 2026-11-08 UTC.
 Minimatch globparts amplification, resolved callers, and available fixes
 rechecked on 2026-11-16 UTC.
+Go HTTP/1 server body-limit applicability reviewed on 2026-11-16 UTC.
 Assessment owner: Codex.
 
-The vulnerability assessments cover `tools/javascript/pnpm-lock.yaml` and
-`providers/javascript/pnpm-lock.yaml`, at the exact versions recorded in
+The vulnerability assessments cover `go.mod`, `tools/javascript/pnpm-lock.yaml`
+and `providers/javascript/pnpm-lock.yaml`, at the exact versions recorded in
 `.code-polishy.json`. They establish non-exposure in the current sealed tooling
 and JavaScript provider. They do not assert that the affected packages are free
 of vulnerabilities or that other consumers are unaffected.
@@ -100,6 +101,51 @@ Remove this admission when the exact release reaches 30 days or leaves the
 pins. Reassess immediately if upstream provenance changes or a regression or
 compromise is reported. Do not extend it to another toolchain version or weaken
 vulnerability scanning.
+
+## Go HTTP server body limit
+
+[GO-2026-6859](https://vuln.go.dev/ID/GO-2026-6859.json), aliased as
+CVE-2026-97054, affects Go 1.26.10's HTTP/1 server handling. Exceeding a
+`MaxBytesReader` or `MaxBytesHandler` limit can set `Connection: close` while a
+handler concurrently writes response headers, causing a concurrent-map panic.
+The [upstream correction](https://github.com/golang/go/commit/0e6d155b1a4d2a994c7d906ce069949e17f4b8b8)
+replaces `response.requestBodyLimitHit` with an atomic flag and removes header
+mutation from `response.requestTooLarge`. This is a server response path, not
+the HTTP client's response-header parser.
+
+The exact pinned `net/http/request.go` calls `requestTooLarge` through the
+server response passed to `maxBytesReader.Read`; `net/http/server.go` owns that
+response and its header map. Production `cmd` and `internal` sources contain
+no HTTP server construction or registration and no `MaxBytesReader` or
+`MaxBytesHandler` use. The online supply-chain client calls `registryClient`
+and `fetchArtifactDocument`; release downloads likewise issue client requests.
+Registry metadata, advisory bodies, release archives and repository inputs
+cannot create a server response or install a request-body-limiting handler.
+Temporary HTTP servers in boundary tests do not enable a production server.
+
+Govulncheck reports broad `net/http` symbols, including `Client.Do`, request
+construction, headers and interface call paths. Those traces establish reported
+symbol reachability but do not establish the concurrent server-handler
+prerequisites. The exact `stdlib@v1.26.10` assessment in `go.mod` therefore uses
+`not-affected` with an unreachable basis. This does not exempt other standard
+library advisories or other toolchain versions.
+
+The Go entry has no severity score. The current
+[GitHub record](https://github.com/advisories/GHSA-rg98-f588-44xg) for the exact
+CVE is an unreviewed NVD mirror, classified medium with CVSS 3.1 score 5.9
+(`AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:H`), normalized to moderate. The adapter
+resolves that current metadata itself; the assessment is only a severity ceiling.
+Missing severity, a higher classification or known exploitation still blocks.
+
+The [official release history](https://go.dev/doc/devel/release#go1.26.11)
+dates fixed Go 1.26.11 to 2026-11-10, with a conservative 30-day eligibility
+of 2026-12-11 00:00:00 UTC. The alternate fixed 1.27.4 is also fresh. Updating
+early would admit compiler, linker, runtime, cgo and library changes without
+removing a reachable exposure here. Retain the pinned toolchain and reassess
+by 2026-12-11, when an aged fixed patch can be evaluated. Remove the assessment
+when the pin changes or the advisory no longer appears. Reassess immediately
+if HTTP serving, body-limit handlers, input authority or the advisory changes.
+Owner: Codex; reviewed 2026-11-16; expires 2026-12-11.
 
 ## Brace expansion
 

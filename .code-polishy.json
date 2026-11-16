@@ -171,7 +171,11 @@
           "internal/policy/vulnerability.go",
           "internal/policy/release_age.go",
           "internal/supplychain/osv_severity.go",
-          "internal/supplychain/osv_severity_test.go"
+          "internal/supplychain/osv_severity_test.go",
+          "internal/supplychain/govulncheck.go",
+          "internal/supplychain/govulncheck_test.go",
+          "internal/supplychain/go_severity.go",
+          "internal/supplychain/go_severity_test.go"
         ]
       },
       {
@@ -2170,6 +2174,23 @@
       }
     ],
     "vulnerabilityAssessments": [
+      {
+        "id": "go-http-server-body-limit-absent",
+        "ecosystem": "go",
+        "advisory": "GO-2026-6859",
+        "package": "stdlib",
+        "affectedVersion": "v1.26.10",
+        "scope": "go.mod",
+        "severity": "moderate",
+        "status": "not-affected",
+        "basis": "unreachable",
+        "reason": "The HTTP/1 server race requires a MaxBytesReader or MaxBytesHandler limit and concurrent handler body reads and response-header writes. Production Code Polishy runs HTTP clients and registers no HTTP server or body-limit handler.",
+        "impact": "Registry, advisory and download responses cannot enter the server response.requestTooLarge path; the broad govulncheck client and interface traces do not supply the advisory's server prerequisites.",
+        "evidence": "https://github.com/riteofstring/code-polishy/blob/main/docs/security/dependency-assessments.md",
+        "owner": "Codex",
+        "reviewed": "2026-11-16",
+        "expires": "2026-12-11"
+      },
       {
         "id": "tooling-minimatch-10-optimization-disabled",
         "ecosystem": "pnpm",
