@@ -1,7 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.34.0 - 2026-11-16
 
+- Bundle published scanner package `1.0.1`, renewing its exact Trivy `0.76.1`
+  assessments through December 7, 2026 after fresh installed verification on
+  Linux amd64 and arm64. Preserve the pinned scanner image and execution contract.
 - Summarize optional analysis advisories in default terminal output, with full
   details available in the complete report or explicit inspection. Preserve
   other warnings, prioritize blockers and keep machine evidence complete.
@@ -32,6 +35,13 @@
 - Add exact `scope.pythonTypecheckEnvironments` mappings for files executed in
   separately locked Python runtimes. Preserve source ownership, validate the
   selected project and environment, and record which files ty analyzed there.
+- Migration: Code Polishy upgrades preserve the current scanner selection.
+  Explicitly preview and apply the published
+  [scanner 1.0.1 manifest](https://github.com/riteofstring/code-polishy/releases/download/scanner-v1.0.1/scanner.json)
+  with SHA-256
+  `38522b5ea64b80359fb17586cf2be4965128972f83e1e52d4093ad3b7d8c9b19`
+  using `scanner-update --manifest URL --sha256 DIGEST`, then repeat with
+  `--apply`. Upgrading Code Polishy alone does not renew an expired scanner pin.
 
 ## 0.33.2 - 2026-11-10
 
