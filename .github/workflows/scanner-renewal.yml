@@ -1,0 +1,86 @@
+name: Scanner renewal deadline
+
+on:
+  schedule:
+    - cron: "17 8 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deadline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out publisher policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+          git fetch --depth=1 origin "${GITHUB_SHA}"
+          git checkout --detach FETCH_HEAD
+      - name: Install locked verifier
+        run: ./code-polishyw setup
+      - name: Check the latest published scanner at least seven days before expiry
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import base64
+          import datetime
+          import hashlib
+          import json
+          import os
+          import re
+          import subprocess
+          import urllib.request
+
+          repository = os.environ["GITHUB_REPOSITORY"]
+
+          def fetch(url, maximum=8192, headers=None):
+              request = urllib.request.Request(url, headers=headers or {})
+              with urllib.request.urlopen(request, timeout=60) as response:
+                  data = response.read(maximum + 1)
+              if len(data) > maximum:
+                  raise SystemExit("Scanner publication response exceeded its bound")
+              return data
+
+          releases = []
+          page = 1
+          while True:
+              batch = json.loads(fetch(
+                  f"https://api.github.com/repos/{repository}/releases?per_page=100&page={page}",
+                  8 * 1024 * 1024, {"Authorization": "Bearer " + os.environ["GH_TOKEN"]},
+              ))
+              if not batch:
+                  break
+              releases.extend(item for item in batch if not item["draft"] and not item["prerelease"]
+                              and re.fullmatch(r"scanner-v\d+\.\d+\.\d+", item["tag_name"]))
+              page += 1
+          if not releases:
+              raise SystemExit("::error::No published scanner package is available")
+          published = max(releases, key=lambda item: item["published_at"])
+          tag = published["tag_name"]
+          base = f"https://github.com/{repository}/releases/download/{tag}"
+          digest = fetch(base + "/scanner.sha256").decode().split()[0]
+          envelope = fetch(base + "/scanner.json")
+          if not re.fullmatch(r"[a-f0-9]{64}", digest) or hashlib.sha256(envelope).hexdigest() != digest:
+              raise SystemExit("::error::Published scanner checksum does not match its envelope")
+          verified = subprocess.run(
+              ["./code-polishyw", "scanner-update", "--manifest", base + "/scanner.json", "--sha256", digest],
+              text=True, capture_output=True, check=False, timeout=180,
+          )
+          if verified.returncode:
+              print(verified.stdout)
+              print(verified.stderr)
+              raise SystemExit("::error::Published scanner cannot be adopted; the publisher must renew it")
+          manifest = json.loads(base64.b64decode(json.loads(envelope)["payload"], validate=True))
+          deadline = datetime.datetime.fromisoformat(manifest["reassessBy"].replace("Z", "+00:00"))
+          remaining = deadline - datetime.datetime.now(datetime.timezone.utc)
+          print(f"{tag}: publisher reassessment deadline {deadline.isoformat()}")
+          if remaining <= datetime.timedelta(days=7):
+              raise SystemExit("::error::Scanner renewal is due within seven days; reassess and publish a verified successor")
+          PY

@@ -30,8 +30,9 @@ const (
 var exactDigest = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 type Result struct {
-	Findings []policy.Finding
-	Notes    []string
+	Findings       []policy.Finding
+	Notes          []string
+	ScannedTargets []string
 }
 
 type scannerPolicy struct {

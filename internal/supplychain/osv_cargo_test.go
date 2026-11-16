@@ -165,12 +165,12 @@ func TestOSVCargoAssessmentAndReportExitUseObservedExactCoordinates(t *testing.T
 	}
 	now := time.Now().UTC()
 	assessment := policy.VulnerabilityAssessment{ID: "cargo", Ecosystem: "crates.io", Advisory: "RUSTSEC-2026-0001", Package: "registry-crate", AffectedVersion: "1.0.0", Scope: "Cargo.lock", Severity: "low", Expires: policy.Date{Time: now.AddDate(0, 0, 1)}}
-	kept, accepted := policy.ApplyVulnerabilityAssessments(findings, []policy.VulnerabilityAssessment{assessment}, now, true)
+	kept, accepted := policy.ApplyVulnerabilityAssessments(findings, []policy.VulnerabilityAssessment{assessment}, now, policy.VulnerabilityObservations{Packages: true})
 	if len(kept) != 0 || len(accepted) != 1 {
 		t.Fatalf("exact Cargo advisory assessment rejected: %+v, %+v", kept, accepted)
 	}
 	assessment.Scope = "nested/Cargo.lock"
-	kept, accepted = policy.ApplyVulnerabilityAssessments(findings, []policy.VulnerabilityAssessment{assessment}, now, false)
+	kept, accepted = policy.ApplyVulnerabilityAssessments(findings, []policy.VulnerabilityAssessment{assessment}, now, policy.VulnerabilityObservations{})
 	if len(kept) != 1 || len(accepted) != 0 {
 		t.Fatal("assessment for a different Cargo lock hid the advisory")
 	}

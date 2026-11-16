@@ -82,7 +82,7 @@ func TestVendorBulletinSharedByTwoAdvisoriesIsNotAnIdentity(t *testing.T) {
 	}
 	for advisory, want := range map[string]int{"RHSA-2026:1234": 0, "CVE-2026-1000": 1} {
 		assessment.Advisory = advisory
-		_, accepted := policy.ApplyVulnerabilityAssessments(findings, []policy.VulnerabilityAssessment{assessment}, now, false)
+		_, accepted := policy.ApplyVulnerabilityAssessments(findings, []policy.VulnerabilityAssessment{assessment}, now, policy.VulnerabilityObservations{})
 		if len(accepted) != want {
 			t.Fatalf("assessment of %s accepted %+v, want %d finding(s)", advisory, accepted, want)
 		}
@@ -336,7 +336,7 @@ func TestRunPublishesEvidenceThroughTheScannerBoundary(t *testing.T) {
 	}
 	boundary := newScannerBoundary(t, policyRoot)
 	result := Run(t.Context(), repo, boundary)
-	if len(result.Findings) != 0 || len(result.Notes) != 5 || !strings.Contains(result.Notes[0], "unix:///var/run/docker.sock (rootful)") {
+	if len(result.Findings) != 0 || len(result.Notes) != 5 || !strings.Contains(result.Notes[0], "unix:///var/run/docker.sock (rootful)") || !slices.Equal(result.ScannedTargets, []string{"agent", "image", "producer"}) {
 		t.Fatalf("artifact security result = %+v", result)
 	}
 	planned := PlannedCommands(repo)
@@ -448,9 +448,35 @@ func TestRunFailsClosedBeforeArtifactMutation(t *testing.T) {
 		}}},
 	}
 	unavailable := Run(t.Context(), repo, unavailableScannerBoundary{})
-	if len(unavailable.Findings) != 1 || unavailable.Findings[0].Subject != "scanner:docker-daemon" ||
+	if len(unavailable.ScannedTargets) != 0 || len(unavailable.Findings) != 1 || unavailable.Findings[0].Subject != "scanner:docker-daemon" ||
 		!strings.Contains(unavailable.Findings[0].Message, "scanner unavailable") {
 		t.Fatalf("scanner startup failure = %+v", unavailable)
+	}
+}
+
+func TestPartialArtifactScanRetainsOnlyCompletedTargetObservations(t *testing.T) {
+	root := t.TempDir()
+	policyRoot := scannerFixture(t, root)
+	if err := os.WriteFile(filepath.Join(root, "available.tar"), []byte("target image"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	repo := repository.Repository{Root: root, PolicyRoot: policyRoot, Config: policy.Config{
+		SupplyChain: policy.SupplyChain{ArtifactSecurity: policy.ArtifactSecurity{Targets: []policy.ArtifactTarget{
+			{Name: "missing", Mode: "archive", Archive: "missing.tar"},
+			{Name: "available", Mode: "archive", Archive: "available.tar"},
+		}}},
+	}}
+	result := Run(t.Context(), repo, newScannerBoundary(t, policyRoot))
+	if !slices.Equal(result.ScannedTargets, []string{"available"}) || len(result.Findings) != 1 || result.Findings[0].Subject != "missing:prepare" {
+		t.Fatalf("partial scan = %+v", result)
+	}
+	assessments := []policy.VulnerabilityAssessment{}
+	for _, target := range repo.Config.SupplyChain.ArtifactSecurity.Targets {
+		assessments = append(assessments, policy.VulnerabilityAssessment{ID: target.Name, Ecosystem: policy.ContainerEcosystem, Scope: target.Name, Expires: policy.Date{Time: time.Now().AddDate(0, 0, 7)}})
+	}
+	findings, _ := policy.ApplyVulnerabilityAssessments(result.Findings, assessments, time.Now(), policy.VulnerabilityObservations{ContainerTargets: result.ScannedTargets})
+	if len(findings) != 2 || findings[1].Check != "policy.vulnerabilityAssessmentUnused" || findings[1].Subject != "available" {
+		t.Fatalf("assessment usage did not follow completed scans: %+v", findings)
 	}
 }
 

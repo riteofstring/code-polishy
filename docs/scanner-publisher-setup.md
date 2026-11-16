@@ -61,6 +61,13 @@ architectures; production enrollment itself supplies no verification receipt.
 
 ## Publish a scanner revision
 
+The **Scanner renewal deadline** workflow runs daily and can be dispatched
+manually. The maintainer operating `scanner-publication` owns its failures.
+It checks the actual latest publication and alerts seven days before expiry;
+an unsigned candidate does not satisfy renewal. Review changed advisory inputs,
+reuse unchanged immutable binary evidence where applicable, and publish through
+the native verification workflow below. Extending a date alone is not a review.
+
 1. Edit `artifact-security/scanner-manifest.json`. Increment `packageVersion`;
    keep `version` and `sourceImage` unchanged for an assessment-only revision.
    Bind evidence to immutable references, preserve release-age admission, and set

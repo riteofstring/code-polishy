@@ -90,36 +90,41 @@ func recordRuntimeCleanup(result *Result, state *scannerRuntime) {
 
 func scanConfiguredTargets(ctx context.Context, repo repository.Repository, state *scannerRuntime, database databaseEvidence, targets []policy.ArtifactTarget, result *Result) {
 	for _, target := range targets {
-		findings, note := scanConfiguredTarget(ctx, repo, state, database, target)
+		findings, note, completed := scanConfiguredTarget(ctx, repo, state, database, target)
 		result.Findings = append(result.Findings, findings...)
+		if completed {
+			result.ScannedTargets = append(result.ScannedTargets, target.Name)
+		}
 		if note != "" {
 			result.Notes = append(result.Notes, note)
 		}
 	}
 }
 
-func scanConfiguredTarget(ctx context.Context, repo repository.Repository, state *scannerRuntime, database databaseEvidence, target policy.ArtifactTarget) ([]policy.Finding, string) {
+func scanConfiguredTarget(ctx context.Context, repo repository.Repository, state *scannerRuntime, database databaseEvidence, target policy.ArtifactTarget) ([]policy.Finding, string, bool) {
 	prepared, err := prepareArtifact(ctx, repo, state, target)
 	if err != nil {
-		return []policy.Finding{artifactOperationalFinding(state.operationContext(), target.Name, "prepare", err)}, ""
+		return []policy.Finding{artifactOperationalFinding(state.operationContext(), target.Name, "prepare", err)}, "", false
 	}
 	scanned, scanErr := state.scan(ctx, repo, "target-"+target.Name, target, prepared, database)
 	if err := errors.Join(scanErr, prepared.cleanup()); err != nil {
-		return []policy.Finding{artifactOperationalFinding(state.operationContext(), target.Name, "scan", err)}, ""
+		return []policy.Finding{artifactOperationalFinding(state.operationContext(), target.Name, "scan", err)}, "", false
 	}
 	outputPath, err := writeArtifacts(repo, target, scanned)
 	if err != nil {
-		return []policy.Finding{artifactOperationalFinding(state.operationContext(), target.Name, "report", err)}, ""
+		return []policy.Finding{artifactOperationalFinding(state.operationContext(), target.Name, "report", err)}, "", false
 	}
-	return scanned.findings, fmt.Sprintf("artifact security report for %s: %s", target.Name, outputPath)
+	return scanned.findings, fmt.Sprintf("artifact security report for %s: %s", target.Name, outputPath), true
 }
 
 func recordDatabaseImmutability(state *scannerRuntime, before databaseEvidence, result *Result) {
 	after, err := state.inspectDatabase(time.Now().UTC(), false)
 	if combined := errors.Join(err, databaseChangedError(before, after)); combined != nil {
+		result.ScannedTargets = nil
 		result.Findings = append(result.Findings, artifactOperationalFinding(state.operationContext(), "scanner", "database-immutability", combined))
 	}
 	if !state.policy.ReassessBy.After(time.Now().UTC()) {
+		result.ScannedTargets = nil
 		result.Findings = append(result.Findings, artifactOperationalFinding(state.operationContext(), "scanner", "scanner-policy", errors.New("scanner assessment expired during artifact verification")))
 	}
 

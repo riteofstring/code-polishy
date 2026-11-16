@@ -40,6 +40,31 @@ func TestLoadAppliesNonBypassableDefaults(t *testing.T) {
 	}
 }
 
+func TestCommandTimeoutsAcceptLongSuitesWithinOneDay(t *testing.T) {
+	t.Parallel()
+	for _, seconds := range []int{4500, 86400} {
+		configured := strings.ReplaceAll(minimalConfig(), `"argv":["go","test","./..."]`, fmt.Sprintf(`"argv":["go","test","./..."],"timeoutSeconds":%d`, seconds))
+		configured = strings.Replace(configured, `"checks":[]`, fmt.Sprintf(`"checks":[{"name":"build","provides":["build"],"argv":["go","build","./..."],"timeoutSeconds":%d}]`, seconds), 1)
+		config, err := Load(writeConfig(t, configured), "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if config.Tests.Suites[1].TimeoutSeconds != seconds || config.Checks[0].TimeoutSeconds != seconds || config.Tests.Suites[1].Cost != "standard" {
+			t.Fatalf("explicit command budget or scheduling changed: %+v %+v", config.Tests.Suites[1], config.Checks[0])
+		}
+	}
+	for _, seconds := range []int{0, -1, 86401} {
+		configured := strings.Replace(minimalConfig(), `"argv":["go","test","./..."]`, fmt.Sprintf(`"argv":["go","test","./..."],"timeoutSeconds":%d`, seconds), 1)
+		if _, err := Load(writeConfig(t, configured), ""); err == nil {
+			t.Fatalf("accepted invalid timeout %d", seconds)
+		}
+	}
+	config, err := Load(writeConfig(t, minimalConfig()), "")
+	if err != nil || config.Tests.Suites[0].TimeoutSeconds != 900 {
+		t.Fatalf("default timeout changed: %+v %v", config.Tests, err)
+	}
+}
+
 func TestLoadAppliesCommentPolicyDefault(t *testing.T) {
 	t.Parallel()
 	cases := map[string]struct {
@@ -954,7 +979,7 @@ func TestDateOnlyPolicyExpiryUsesUTCDay(t *testing.T) {
 	if len(suppressed) != 0 || len(kept) != 1 || kept[0].Message != "exception expired after 2026-08-12 UTC" {
 		t.Fatalf("exception status = %+v, suppressed = %+v", kept, suppressed)
 	}
-	kept, _ = ApplyVulnerabilityAssessments(nil, []VulnerabilityAssessment{{ID: "expired", Expires: expires}}, localEveningAfterUTCMidnight, false)
+	kept, _ = ApplyVulnerabilityAssessments(nil, []VulnerabilityAssessment{{ID: "expired", Expires: expires}}, localEveningAfterUTCMidnight, VulnerabilityObservations{})
 	if len(kept) != 1 || kept[0].Message != "vulnerability assessment expired after 2026-08-12 UTC" {
 		t.Fatalf("vulnerability status = %+v", kept)
 	}
@@ -982,13 +1007,13 @@ func TestVulnerabilityAssessmentRequiresExactIdentityAndReportsUnused(t *testing
 		Check: "supplyChain.nodeVulnerability", Path: identity.Scope,
 		Subject: VulnerabilitySubject(identity), Message: "low vulnerability", Vulnerability: &identity,
 	}
-	kept, accepted := ApplyVulnerabilityAssessments([]Finding{finding}, []VulnerabilityAssessment{assessment}, now, true)
+	kept, accepted := ApplyVulnerabilityAssessments([]Finding{finding}, []VulnerabilityAssessment{assessment}, now, VulnerabilityObservations{Packages: true})
 	if len(kept) != 0 || len(accepted) != 1 || accepted[0].Assessment.ID != assessment.ID {
 		t.Fatalf("kept=%+v accepted=%+v", kept, accepted)
 	}
 	moderateCeiling := assessment
 	moderateCeiling.Severity = "moderate"
-	kept, accepted = ApplyVulnerabilityAssessments([]Finding{finding}, []VulnerabilityAssessment{moderateCeiling}, now, true)
+	kept, accepted = ApplyVulnerabilityAssessments([]Finding{finding}, []VulnerabilityAssessment{moderateCeiling}, now, VulnerabilityObservations{Packages: true})
 	if len(kept) != 0 || len(accepted) != 1 {
 		t.Fatalf("moderate ceiling did not accept low finding: kept=%+v accepted=%+v", kept, accepted)
 	}
@@ -998,7 +1023,7 @@ func TestVulnerabilityAssessmentRequiresExactIdentityAndReportsUnused(t *testing
 	changedIdentity.AffectedVersion = "1.2.4"
 	changed.Vulnerability = &changedIdentity
 	changed.Subject = VulnerabilitySubject(changedIdentity)
-	kept, accepted = ApplyVulnerabilityAssessments([]Finding{changed}, []VulnerabilityAssessment{assessment}, now, true)
+	kept, accepted = ApplyVulnerabilityAssessments([]Finding{changed}, []VulnerabilityAssessment{assessment}, now, VulnerabilityObservations{Packages: true})
 	if len(accepted) != 0 || len(kept) != 2 || kept[1].Check != "policy.vulnerabilityAssessmentUnused" {
 		t.Fatalf("changed identity kept=%+v accepted=%+v", kept, accepted)
 	}
@@ -1018,7 +1043,7 @@ func TestVulnerabilityAssessmentCannotAcceptSeverityChangesOrKnownExploitedFindi
 		AffectedVersion: assessment.AffectedVersion, Scope: assessment.Scope, Severity: "moderate",
 	}
 	finding := Finding{Check: "supplyChain.osvVulnerability", Path: identity.Scope, Subject: VulnerabilitySubject(identity), Vulnerability: &identity}
-	kept, accepted := ApplyVulnerabilityAssessments([]Finding{finding}, []VulnerabilityAssessment{assessment}, now, true)
+	kept, accepted := ApplyVulnerabilityAssessments([]Finding{finding}, []VulnerabilityAssessment{assessment}, now, VulnerabilityObservations{Packages: true})
 	if len(accepted) != 0 || len(kept) != 2 || kept[0].Check != "policy.vulnerabilityAssessmentSeverity" {
 		t.Fatalf("severity change kept=%+v accepted=%+v", kept, accepted)
 	}
@@ -1026,7 +1051,7 @@ func TestVulnerabilityAssessmentCannotAcceptSeverityChangesOrKnownExploitedFindi
 	identity.Severity = "high"
 	identity.KnownExploited = true
 	finding.Vulnerability = &identity
-	kept, accepted = ApplyVulnerabilityAssessments([]Finding{finding}, []VulnerabilityAssessment{assessment}, now, true)
+	kept, accepted = ApplyVulnerabilityAssessments([]Finding{finding}, []VulnerabilityAssessment{assessment}, now, VulnerabilityObservations{Packages: true})
 	if len(accepted) != 0 || len(kept) != 2 || kept[0].Check != "policy.vulnerabilityAssessmentKnownExploited" {
 		t.Fatalf("known exploited kept=%+v accepted=%+v", kept, accepted)
 	}
@@ -1134,7 +1159,7 @@ func TestHighNotAffectedAssessmentReviewWindowIncludesExpiryDate(t *testing.T) {
 		t.Fatalf("overlong high not-affected window was accepted: %v", err)
 	}
 	finding := highNotAffectedFinding(assessment, "high")
-	kept, accepted := ApplyVulnerabilityAssessments([]Finding{finding}, []VulnerabilityAssessment{assessment}, assessment.Expires.Time, true)
+	kept, accepted := ApplyVulnerabilityAssessments([]Finding{finding}, []VulnerabilityAssessment{assessment}, assessment.Expires.Time, VulnerabilityObservations{Packages: true})
 	if len(kept) != 0 || len(accepted) != 1 || accepted[0].Assessment.ID != assessment.ID {
 		t.Fatalf("assessment was not effective through its expiry date: kept=%+v accepted=%+v", kept, accepted)
 	}
@@ -1146,21 +1171,21 @@ func TestHighNotAffectedAssessmentHonorsSeverityAndExactCoordinates(t *testing.T
 	assessment := highNotAffectedAssessment(now)
 	for _, severity := range []string{"low", "moderate", "high"} {
 		finding := highNotAffectedFinding(assessment, severity)
-		kept, accepted := ApplyVulnerabilityAssessments([]Finding{finding}, []VulnerabilityAssessment{assessment}, now, true)
+		kept, accepted := ApplyVulnerabilityAssessments([]Finding{finding}, []VulnerabilityAssessment{assessment}, now, VulnerabilityObservations{Packages: true})
 		if len(kept) != 0 || len(accepted) != 1 || accepted[0].Finding.Vulnerability.Severity != severity {
 			t.Fatalf("high not-affected assessment did not cover matching %s finding: kept=%+v accepted=%+v", severity, kept, accepted)
 		}
 	}
 	for _, severity := range []string{"critical", "unknown"} {
 		finding := highNotAffectedFinding(assessment, severity)
-		kept, accepted := ApplyVulnerabilityAssessments([]Finding{finding}, []VulnerabilityAssessment{assessment}, now, true)
+		kept, accepted := ApplyVulnerabilityAssessments([]Finding{finding}, []VulnerabilityAssessment{assessment}, now, VulnerabilityObservations{Packages: true})
 		if len(accepted) != 0 || len(kept) != 2 || kept[0].Check != "policy.vulnerabilityAssessmentSeverity" {
 			t.Fatalf("high not-affected assessment accepted %s finding: kept=%+v accepted=%+v", severity, kept, accepted)
 		}
 	}
 	knownExploited := highNotAffectedFinding(assessment, "high")
 	knownExploited.Vulnerability.KnownExploited = true
-	kept, accepted := ApplyVulnerabilityAssessments([]Finding{knownExploited}, []VulnerabilityAssessment{assessment}, now, true)
+	kept, accepted := ApplyVulnerabilityAssessments([]Finding{knownExploited}, []VulnerabilityAssessment{assessment}, now, VulnerabilityObservations{Packages: true})
 	if len(accepted) != 0 || len(kept) != 2 || kept[0].Check != "policy.vulnerabilityAssessmentKnownExploited" {
 		t.Fatalf("high not-affected assessment accepted a known-exploited finding: kept=%+v accepted=%+v", kept, accepted)
 	}
@@ -1184,7 +1209,7 @@ func TestHighNotAffectedAssessmentHonorsSeverityAndExactCoordinates(t *testing.T
 		finding := highNotAffectedFinding(assessment, "high")
 		change.mutate(finding.Vulnerability)
 		finding.Subject = VulnerabilitySubject(*finding.Vulnerability)
-		kept, accepted := ApplyVulnerabilityAssessments([]Finding{finding}, []VulnerabilityAssessment{assessment}, now, true)
+		kept, accepted := ApplyVulnerabilityAssessments([]Finding{finding}, []VulnerabilityAssessment{assessment}, now, VulnerabilityObservations{Packages: true})
 		if len(accepted) != 0 || len(kept) != 2 || kept[1].Check != "policy.vulnerabilityAssessmentUnused" {
 			t.Fatalf("changed %s matched high not-affected assessment: kept=%+v accepted=%+v", change.name, kept, accepted)
 		}

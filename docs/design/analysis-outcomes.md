@@ -32,6 +32,10 @@ governed `uv.lock` and a valid `.venv`; its normal supply-chain checks remain
 independent. Duplicate paths, stale source, malformed projects, escaping
 environments, and missing environments fail rather than choosing a fallback.
 There is one complete dependency environment per path, without overlays.
+Reuse the runtime's existing governed project, lock, and environment. The mapping
+does not require a separate typechecking project or custom checker. Declare a
+mapping only where source ownership differs from the existing execution runtime;
+ordinary projects keep their automatically discovered environment.
 
 The Python project inventory continues assigning source to its original package.
 Only ty invocations are partitioned by the explicit environment, retaining the

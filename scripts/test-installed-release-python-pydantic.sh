@@ -208,11 +208,11 @@ class TestModels(unittest.TestCase):
     focused = policy("check", "--files", "src/reported.py")
     if any(finding["ruleId"] == "quality.deadCode" for finding in focused["findings"]):
         raise AssertionError(f"{label}: focused check unexpectedly ran dead-code analysis: {focused['findings']}")
-    report = policy("check", "--all", status=1)
+    report = policy("check", "--all")
     first_line = original.count("\n") + 3
     locations = {(finding["path"], finding["line"]) for finding in report["findings"]}
     expected = {("src/reported.py", first_line + offset) for offset in (0, 1, 3)}
-    if locations != expected or any(finding["ruleId"] != "quality.deadCode" for finding in report["findings"]):
+    if locations != expected or any(finding["ruleId"] != "quality.deadCode" or finding["severity"] != "warning" for finding in report["findings"]):
         raise AssertionError(f"{label}: unrelated members were hidden or other checks failed: {report['findings']}")
     print(f"Installed Pydantic case passed: {label}", flush=True)
 PY

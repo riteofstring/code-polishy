@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/riteofstring/code-polishy/internal/artifactsecurity"
@@ -12,14 +13,15 @@ import (
 	"github.com/riteofstring/code-polishy/internal/supplychain"
 )
 
-func (engine *Engine) onlineSupplyChain(ctx context.Context, files []string, findings []policy.Finding, mode supplyChainMode) ([]policy.Finding, []supplychain.GitEvidenceReceipt, []string, *policy.SecurityVerification) {
+func (engine *Engine) onlineSupplyChain(ctx context.Context, files []string, findings []policy.Finding, mode supplyChainMode) ([]policy.Finding, []supplychain.GitEvidenceReceipt, []string, *policy.SecurityVerification, policy.VulnerabilityObservations) {
+	observations := policy.VulnerabilityObservations{}
 	before, err := supplychain.ReadGitEvidenceState(engine.Repository, time.Now().UTC())
 	if err != nil {
-		return append(findings, gitEvidenceStateFinding(err)), nil, nil, nil
+		return append(findings, gitEvidenceStateFinding(err)), nil, nil, nil, observations
 	}
 	commands, err := supplychain.OnlineCommands(engine.Repository, files)
 	if err != nil {
-		return append(findings, securityEvidenceFinding(err)), nil, nil, nil
+		return append(findings, securityEvidenceFinding(err)), nil, nil, nil, observations
 	}
 	scans := engine.securityScans
 	commandRunner := engine.Runner
@@ -28,6 +30,9 @@ func (engine *Engine) onlineSupplyChain(ctx context.Context, files []string, fin
 		commandRunner = scans
 	}
 	findings = append(findings, supplychain.Online(ctx, engine.Repository, files, commandRunner)...)
+	observations.Packages = scans.verification().Status == "current" && !slices.ContainsFunc(findings, func(finding policy.Finding) bool {
+		return finding.Check == "policy.securityScanner"
+	})
 	selection := repository.Selection{Files: files, All: true}
 	var notes []string
 	if mode == dependencyReviewMode {
@@ -35,19 +40,21 @@ func (engine *Engine) onlineSupplyChain(ctx context.Context, files []string, fin
 	} else {
 		findings = append(findings, quality.RunCommandsForProfiles(ctx, engine.Repository, selection, engine.Runner, "supply-chain", "supply-chain-online", "security")...)
 		artifacts := artifactsecurity.Run(ctx, engine.Repository, engine.Runner)
+		observations.ContainerTargets = artifacts.ScannedTargets
 		findings = append(findings, artifacts.Findings...)
 		notes = artifacts.Notes
 	}
 	findings = supplychain.ClassifyKnownExploited(ctx, engine.Repository, findings)
 	after, err := engine.currentGitEvidence(before.IdentitySHA256)
 	if err != nil {
-		return append(findings, gitEvidenceStateFinding(err)), nil, notes, scans.verification()
+		return append(findings, gitEvidenceStateFinding(err)), nil, notes, scans.verification(), policy.VulnerabilityObservations{}
 	}
 	verification := scans.verification()
 	if verification.Status == "unavailable" {
+		observations.Packages = false
 		findings = append(findings, securityEvidenceFinding(fmt.Errorf("a package scan failed or its evidence expired during verification")))
 	}
-	return findings, after, notes, verification
+	return findings, after, notes, verification, observations
 }
 
 func (engine *Engine) deferredSupplyChainChecks(selection repository.Selection) []string {

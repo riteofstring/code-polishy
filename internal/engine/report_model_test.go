@@ -85,7 +85,7 @@ func TestAssessmentOutcomesRetainTheirProducingPhase(t *testing.T) {
 		policy.Finding{Check: "source.configuration", VerificationPhase: policy.VerificationSource, Path: "repository", Message: "static source outcome", Severity: policy.FindingWarning},
 		policy.Finding{Check: "provider.scan", Path: "repository", Message: "online provider outcome", Severity: policy.FindingWarning},
 	)
-	report := policyEngine.finishWithAssessments(findings, nil, true, policyEngine.Repository.Config.SupplyChain.VulnerabilityAssessments, policy.VerificationSecurity)
+	report := policyEngine.finishWithAssessments(findings, nil, true, policy.VulnerabilityObservations{Packages: true}, policy.VerificationSecurity)
 	if len(report.Findings) != 2 || len(report.Suppressed) != 1 || len(report.Assessed) != 1 || len(report.ReleaseAges) != 1 {
 		t.Fatalf("phase selection changed policy decisions: %+v", report)
 	}
@@ -183,29 +183,6 @@ func TestReportViewFiltersWithoutChangingCompleteSummary(t *testing.T) {
 	}
 }
 
-func TestFullSupplyChainReportsAContainerAssessmentUnusedButDependencyReviewDoesNot(t *testing.T) {
-	expires := policy.Date{Time: time.Now().UTC().AddDate(0, 0, 7)}
-	policyEngine := &Engine{}
-	policyEngine.Repository.Config.SupplyChain.VulnerabilityAssessments = []policy.VulnerabilityAssessment{
-		{ID: "image", Ecosystem: policy.ContainerEcosystem, Expires: expires},
-		{ID: "lock", Ecosystem: "pypi", Expires: expires},
-	}
-	unused := func(mode supplyChainMode) []string {
-		subjects := []string{}
-		for _, finding := range policyEngine.finishWithAssessments(nil, nil, true, policyEngine.scannedAssessments(mode), policy.VerificationSecurity).Findings {
-			subjects = append(subjects, finding.Subject)
-		}
-		slices.Sort(subjects)
-		return subjects
-	}
-	if got := unused(supplyChainOnline); !slices.Equal(got, []string{"image", "lock"}) {
-		t.Fatalf("complete profile unused assessments = %v", got)
-	}
-	if got := unused(dependencyReviewMode); !slices.Equal(got, []string{"lock"}) {
-		t.Fatalf("dependency review judged an artifact assessment it did not scan: %v", got)
-	}
-}
-
 func TestAcceptedHighRiskPassesWhileAnUncoveredBlockerStillFails(t *testing.T) {
 	expires := policy.Date{Time: time.Now().UTC().AddDate(0, 0, 7)}
 	assessment := policy.VulnerabilityAssessment{
@@ -217,12 +194,12 @@ func TestAcceptedHighRiskPassesWhileAnUncoveredBlockerStillFails(t *testing.T) {
 		return policy.Finding{Check: "artifactSecurity.vulnerability", Path: "Dockerfile", Subject: policy.VulnerabilitySubject(identity), Message: "HIGH", Vulnerability: &identity}
 	}
 	policyEngine := &Engine{}
-	assessments := []policy.VulnerabilityAssessment{assessment}
-	passed := policyEngine.finishWithAssessments([]policy.Finding{finding("CVE-2026-1000")}, nil, true, assessments, policy.VerificationSecurity)
+	policyEngine.Repository.Config.SupplyChain.VulnerabilityAssessments = []policy.VulnerabilityAssessment{assessment}
+	passed := policyEngine.finishWithAssessments([]policy.Finding{finding("CVE-2026-1000")}, nil, true, policy.VulnerabilityObservations{ContainerTargets: []string{"api"}}, policy.VerificationSecurity)
 	if HasFindings(passed) || passed.Summary.Status == "failed" || len(passed.Assessed) != 1 || passed.Assessed[0].Finding.Status != policy.FindingReviewed {
 		t.Fatalf("accepted report = %+v", passed)
 	}
-	failed := policyEngine.finishWithAssessments([]policy.Finding{finding("CVE-2026-1000"), finding("CVE-2026-2000")}, nil, true, assessments, policy.VerificationSecurity)
+	failed := policyEngine.finishWithAssessments([]policy.Finding{finding("CVE-2026-1000"), finding("CVE-2026-2000")}, nil, true, policy.VulnerabilityObservations{ContainerTargets: []string{"api"}}, policy.VerificationSecurity)
 	if !HasFindings(failed) || failed.Summary.Status != "failed" || len(failed.Assessed) != 1 {
 		t.Fatalf("uncovered blocker report = %+v", failed)
 	}

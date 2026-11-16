@@ -33,16 +33,16 @@ func TestRiskAcceptanceDecisionPath(t *testing.T) {
 			assessments := []VulnerabilityAssessment{assessment}
 			finding := highNotAffectedFinding(assessment, "high")
 
-			if kept, accepted := ApplyVulnerabilityAssessments([]Finding{finding}, nil, now, true); len(kept) != 1 || len(accepted) != 0 {
+			if kept, accepted := ApplyVulnerabilityAssessments([]Finding{finding}, nil, now, VulnerabilityObservations{Packages: true, ContainerTargets: []string{"api"}}); len(kept) != 1 || len(accepted) != 0 {
 				t.Fatalf("unassessed high finding: kept=%+v accepted=%+v", kept, accepted)
 			}
-			kept, accepted := ApplyVulnerabilityAssessments([]Finding{finding}, assessments, now, true)
+			kept, accepted := ApplyVulnerabilityAssessments([]Finding{finding}, assessments, now, VulnerabilityObservations{Packages: true, ContainerTargets: []string{"api"}})
 			if len(kept) != 0 || len(accepted) != 1 || accepted[0].Finding.Vulnerability.Severity != "high" || accepted[0].Assessment.ApprovedBy == "" {
 				t.Fatalf("exact assessment: kept=%+v accepted=%+v", kept, accepted)
 			}
 			other := highNotAffectedFinding(assessment, "high")
 			other.Vulnerability.Advisory, other.Vulnerability.Aliases = "CVE-2026-2000", nil
-			kept, accepted = ApplyVulnerabilityAssessments([]Finding{finding, other}, assessments, now, true)
+			kept, accepted = ApplyVulnerabilityAssessments([]Finding{finding, other}, assessments, now, VulnerabilityObservations{Packages: true, ContainerTargets: []string{"api"}})
 			if len(kept) != 1 || kept[0].Vulnerability == nil || kept[0].Vulnerability.Advisory != "CVE-2026-2000" || len(accepted) != 1 {
 				t.Fatalf("uncovered blocker: kept=%+v accepted=%+v", kept, accepted)
 			}
@@ -79,7 +79,7 @@ func TestRiskAcceptanceStopsWhenTheDecisionStopsMatching(t *testing.T) {
 				if current.IsZero() {
 					current = now
 				}
-				kept, accepted := ApplyVulnerabilityAssessments([]Finding{finding}, []VulnerabilityAssessment{assessment}, current, false)
+				kept, accepted := ApplyVulnerabilityAssessments([]Finding{finding}, []VulnerabilityAssessment{assessment}, current, VulnerabilityObservations{})
 				if len(accepted) != 0 {
 					t.Fatalf("assessment still accepted the finding: %+v", accepted)
 				}
@@ -105,7 +105,7 @@ func TestExistingRiskAcceptanceWithoutApprovalLoadsButDoesNotApply(t *testing.T)
 	if err != nil {
 		t.Fatalf("assessment predating approvedBy must still load so upgrades can plan: %v", err)
 	}
-	kept, accepted := ApplyVulnerabilityAssessments([]Finding{highNotAffectedFinding(assessment, "moderate")}, config.SupplyChain.VulnerabilityAssessments, now, true)
+	kept, accepted := ApplyVulnerabilityAssessments([]Finding{highNotAffectedFinding(assessment, "moderate")}, config.SupplyChain.VulnerabilityAssessments, now, VulnerabilityObservations{Packages: true, ContainerTargets: []string{"api"}})
 	if len(accepted) != 0 || len(kept) != 2 {
 		t.Fatalf("kept=%+v accepted=%+v", kept, accepted)
 	}

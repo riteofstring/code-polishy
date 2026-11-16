@@ -335,7 +335,7 @@ func TestHighNotAffectedAssessmentCoversNativeAuditAndOSVIdentities(t *testing.T
 		if len(source.findings) != 1 || source.findings[0].Vulnerability == nil || source.findings[0].Vulnerability.Severity != "high" {
 			t.Fatalf("%s did not produce one high structured finding: %+v", source.name, source.findings)
 		}
-		kept, accepted := policy.ApplyVulnerabilityAssessments(source.findings, []policy.VulnerabilityAssessment{assessment}, now, true)
+		kept, accepted := policy.ApplyVulnerabilityAssessments(source.findings, []policy.VulnerabilityAssessment{assessment}, now, policy.VulnerabilityObservations{Packages: true})
 		if len(kept) != 0 || len(accepted) != 1 || accepted[0].Assessment.ID != assessment.ID {
 			t.Fatalf("%s high finding was not accepted by the exact assessment: kept=%+v accepted=%+v", source.name, kept, accepted)
 		}

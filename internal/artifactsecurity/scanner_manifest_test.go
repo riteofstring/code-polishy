@@ -20,6 +20,24 @@ import (
 
 const fixedScannerAssessment = `{"@context":"https://openvex.dev/ns/v0.2.0","@id":"https://example.test/scanner-fixture","author":"Test fixture","timestamp":"2026-01-01T00:00:00Z","version":1,"statements":[{"vulnerability":{"name":"CVE-2026-1000"},"products":[{"@id":"pkg:golang/example.org/scannerdep@v1.0.0"}],"status":"not_affected","justification":"vulnerable_code_not_in_execute_path","impact_statement":"Synthetic fixed advisory fixture exercises authenticated assessment adoption."}]}`
 
+func TestExpiredScannerHasNoTargetObservations(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		root := t.TempDir()
+		policyRoot := scannerFixture(t, root)
+		boundary := newScannerBoundary(t, policyRoot)
+		repo := repository.Repository{Root: root, PolicyRoot: policyRoot, Config: policy.Config{
+			SupplyChain: policy.SupplyChain{ArtifactSecurity: policy.ArtifactSecurity{Targets: []policy.ArtifactTarget{
+				{Name: "application", Mode: "archive", Archive: "application.tar"},
+			}}},
+		}}
+		time.Sleep(2 * time.Hour)
+		result := Run(t.Context(), repo, boundary)
+		if len(result.ScannedTargets) != 0 || len(boundary.commands) != 0 || len(result.Findings) != 1 || result.Findings[0].Subject != "scanner:scanner-policy" || !strings.Contains(result.Findings[0].Message, "expired") {
+			t.Fatalf("expired scanner produced observations or ran Docker: %+v %v", result, boundary.commands)
+		}
+	})
+}
+
 func scannerFixture(t *testing.T, repo string) string {
 	t.Helper()
 	root := t.TempDir()

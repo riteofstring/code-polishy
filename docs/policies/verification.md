@@ -23,6 +23,12 @@ suites it `covers`. Code Polishy gives each attempt a private managed directory,
 validates declared outputs after the command exits, and records their digests
 in gate evidence.
 
+Configured suites and checks default to 900 seconds and may explicitly declare
+`timeoutSeconds` from 1 through 86400 (24 hours). Choose enough time for the
+real workload; a suite exceeding one hour needs no policy exception. A longer
+timeout does not change its cost, execution profiles, or quick boundary-suite
+obligations. Cancellation and the finite configured deadline remain enforced.
+
 Module suites default to quick and all three profiles. Repository suites
 default to standard and full only. Browser, visual, E2E, performance, and live
 suites default to expensive. Mutation, acceptance-mutation, Gherkin-mutation,

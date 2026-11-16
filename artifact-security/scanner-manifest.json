@@ -1,13 +1,13 @@
 {
   "contract": "code-polishy-trivy/v1",
   "sourceImage": "docker.io/aquasec/trivy@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c",
-  "reassessBy": "2026-11-13T00:00:00Z",
+  "reassessBy": "2026-12-07T00:00:00Z",
   "openVex": {
     "@context": "https://openvex.dev/ns/v0.2.0",
-    "@id": "https://github.com/riteofstring/code-polishy/releases/tag/scanner-v1.0.0#openvex",
+    "@id": "https://github.com/riteofstring/code-polishy/releases/tag/scanner-v1.0.1#openvex",
     "author": "Codex",
-    "timestamp": "2026-11-08T03:11:40Z",
-    "version": 5,
+    "timestamp": "2026-11-16T20:33:34Z",
+    "version": 6,
     "statements": [
       {
         "vulnerability": {
@@ -20,7 +20,7 @@
         ],
         "status": "not_affected",
         "justification": "vulnerable_code_not_in_execute_path",
-        "impact_statement": "Codex reviewed Trivy 0.76.1 at e713f67f7d54decdcd9b3132c9751833dcced698 on 2026-10-28. Code Polishy enables version, anonymous OCI database download through go-containerregistry/net/http, and offline archive scans. Inputs cannot configure SPIFFE/xDS credentials or Sigstore OIDC; image-configuration JWT analysis uses a separate JWK implementation. No enabled input reaches go-jose RSA private-key validation. Reassess by 2026-11-13 UTC and whenever the image, execution contract, inputs or advisory changes."
+        "impact_statement": "Codex rechecked the pinned Trivy 0.76.1 execution paths and current advisory on 2026-11-16. Code Polishy enables version, anonymous OCI database download through go-containerregistry/net/http, and offline archive scans. Inputs cannot configure SPIFFE/xDS credentials or Sigstore OIDC; image-configuration JWT analysis uses a separate JWK implementation. No enabled input reaches go-jose RSA private-key validation. Reassess by 2026-12-07 UTC and whenever the image, execution contract, inputs or advisory changes."
       },
       {
         "vulnerability": {
@@ -33,11 +33,11 @@
         ],
         "status": "not_affected",
         "justification": "vulnerable_code_not_present",
-        "impact_statement": "Codex inspected both pinned Linux amd64 and arm64 executables on 2026-11-08. Validated Go runtime function-name tables, including inlined functions, contain html.init and charset routines but none of the affected HTML Parse entry points or parser methods. The vulnerable text-node coalescing code is absent from both binaries. The x/net v0.60.0 module remains present. Exact platform and executable digests, positive controls and reproducible inspection are recorded in the immutable evidence. Reassess by 2026-11-13 UTC and whenever the image, build settings, execution contract or advisory changes."
+        "impact_statement": "Codex rechecked GO-2026-6860 on 2026-11-16 against the unchanged image and November 8 binary evidence for both pinned Linux amd64 and arm64 executables. Validated Go runtime function-name tables, including inlined functions, contain html.init and charset routines but none of the affected HTML Parse entry points or parser methods. The vulnerable text-node coalescing code is absent from both binaries; x/net v0.60.0 remains present. Exact platform and executable digests, positive controls and reproducible inspection are in the immutable evidence. Reassess by 2026-12-07 UTC and on image, build, execution-contract or advisory changes."
       }
     ]
   },
   "evidence": "Scanner execution-path and binary evidence: https://github.com/riteofstring/code-polishy/blob/5aef31a07f0904c7fd1c05cf6e9f0573d371501f/docs/design/trivy-scanner-assessments.md . Both assessments bind this exact image and code-polishy-trivy/v1.",
-  "packageVersion": "1.0.0",
+  "packageVersion": "1.0.1",
   "version": "0.76.1"
 }

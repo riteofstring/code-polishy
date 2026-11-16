@@ -862,6 +862,7 @@
       "name": "tooling",
       "paths": [
         ".github/workflows/scanner-release.yml",
+        ".github/workflows/scanner-renewal.yml",
         "bin/**",
         "release/**",
         "scripts/**",
@@ -2183,8 +2184,8 @@
         "impact": "Repository patterns cannot enable the optimizationLevel >= 2 preprocessing required for globparts amplification.",
         "evidence": "https://github.com/riteofstring/code-polishy/blob/main/docs/security/dependency-assessments.md",
         "owner": "Codex",
-        "reviewed": "2026-10-31",
-        "expires": "2026-11-14"
+        "reviewed": "2026-11-16",
+        "expires": "2026-11-27"
       },
       {
         "id": "provider-minimatch-10-optimization-disabled",
@@ -2200,8 +2201,8 @@
         "impact": "Repository patterns cannot enable the optimizationLevel >= 2 preprocessing required for globparts amplification.",
         "evidence": "https://github.com/riteofstring/code-polishy/blob/main/docs/security/dependency-assessments.md",
         "owner": "Codex",
-        "reviewed": "2026-10-31",
-        "expires": "2026-11-14"
+        "reviewed": "2026-11-16",
+        "expires": "2026-11-27"
       },
       {
         "id": "provider-fast-uri-host-canonicalization-unreachable",

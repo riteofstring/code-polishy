@@ -1,8 +1,8 @@
 # Trivy Scanner Assessments
 
-RSA JWK execution paths reviewed by Codex on October 28, 2026 UTC; HTML parser
-binary evidence reviewed by Codex on November 8, 2026 UTC. Reassess by November
-13, 2026, or whenever the scanner image, invocation, mounts, environment,
+RSA JWK execution paths and current advisory prerequisites rechecked by Codex
+on November 16, 2026 UTC, reusing the November 8 immutable HTML parser binary
+evidence. Reassess by December 7, 2026, or whenever the scanner image, invocation, mounts, environment,
 transport, or advisory evidence changes.
 
 ## Runtime and admission
@@ -125,11 +125,12 @@ finding remains visible in `acceptedFindings`.
 
 The official [go-jose 4.1.6 release](https://github.com/go-jose/go-jose/releases/tag/v4.1.6)
 was published October 14 at 23:14:52 UTC and reaches 30 days on November 13.
-The official Trivy release inventory still ends at 0.76.1 on October 28; no
-fixed official scanner release is available. Retain the exact official scanner
-and its separate certificate-fix admission. Codex owns reassessment by November
-13 UTC, including checking for an official scanner carrying go-jose 4.1.6 or
-later. Remove the statement when that affected package leaves the scanner.
+The November 16 release inventory includes Trivy 0.76.2 with go-jose 4.1.6,
+but that scanner does not reach 30 days until December 5. Retain the exact
+official scanner and its separate certificate-fix admission until its own age
+requirement is satisfied. Codex owns reassessment by December 7 UTC, including
+evaluating the aged 0.76.2 release. Remove the statement when that affected
+package leaves the scanner.
 Any new scanner command, credential flow, configurable policy, mount or
 environment input requires reassessment before use.
 
@@ -290,9 +291,30 @@ go-jose v4.1.6. It is younger than the required 30-day admission window and
 includes additional dependency and base-image changes. The absent HTML parser
 and the separately assessed RSA credential path do not justify admitting that
 fresh release early. Retain the exact 0.76.1 image and its existing certificate-fix
-admission. Reassess by November 13 UTC or immediately if either image digest,
+admission. Reassess by December 7 UTC or immediately if either image digest,
 compiler/build settings, scanner execution contract or advisory changes. Do not
 carry this binary-absence claim to a different image.
+
+## November 16 renewal
+
+The current upstream RSA JWK advisory remains at its October 27 revision, and
+GO-2026-6860 retains the same affected parser entry points. The pinned image,
+both platform manifests and executable identities, and the execution contract
+are unchanged. Reinspection of the pinned archive scanner, default HTTP
+transport, registry bearer-token handling, gRPC trust-file input, OPA JWT
+implementation and Sigstore token flow preserves the input-to-API conclusions
+above. The complete binary inspection remains reusable evidence for those exact
+immutable executables; this review did not rebuild or re-inspect both binaries.
+
+Prepare scanner package 1.0.1 with the same Trivy 0.76.1 image and the two exact
+non-exposure statements. Its December 7 deadline allows review of official Trivy
+0.76.2 once it reaches 30 days on December 5 at 12:50:25 UTC. The daily publisher
+deadline check raises renewal on November 30, before that admission date.
+Retaining code whose affected paths remain absent or unreachable avoids a fresh
+binary update without a demonstrated security benefit. New advisory findings
+remain blocking: the protected publication workflow must still run fresh database
+self-scans and scratch-image verification on both native architectures before
+this revision is published.
 
 ## Scanner finding enforcement
 

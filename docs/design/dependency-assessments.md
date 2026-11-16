@@ -52,6 +52,16 @@ assessment covers every copy of that package version inside the target; image
 paths are excluded because they change across rebuilds. Scanner self-check
 findings carry the lock path as their scope, so no target can match them.
 
+Unused assessments require completed observations. Artifact verification returns
+the names of targets whose preparation, scan, OpenVEX reconciliation, SBOM and
+report completed successfully. Only those targets can produce unused-assessment
+findings; scanner startup failures and deferred targets provide no such evidence.
+A successful empty scan still detects stale assessments, independently of failures
+in other targets. Invalidated database or assessment-deadline evidence clears
+completion. Package assessments likewise defer unused checks when package
+scanner coverage is incomplete. Expired assessments and operational failures
+remain blocking in every mode, including pre-install review.
+
 Autonomy does not make fresh releases safe. The 30-day delay gives compromised
 or defective releases time to be discovered. A reachable advisory alone cannot
 justify bypassing that protection. Before a security-fix admission, the assessor

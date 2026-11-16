@@ -704,24 +704,26 @@ func (engine *Engine) supplyChain(ctx context.Context, mode supplyChainMode) (Re
 	notes := []string{}
 	gitEvidence := []supplychain.GitEvidenceReceipt{}
 	var security *policy.SecurityVerification
+	var observations policy.VulnerabilityObservations
 	if mode == supplyChainOffline {
 		findings = append(findings, supplychain.CheckCargoResolution(ctx, engine.Repository, files, true, engine.Runner)...)
 		findings = append(findings, quality.RunCommands(ctx, engine.Repository, selection, engine.Runner, "supply-chain")...)
 	}
 	if mode != supplyChainOffline {
-		onlineFindings, evidence, onlineNotes, verified := engine.onlineSupplyChain(ctx, files, findings, mode)
+		onlineFindings, evidence, onlineNotes, verified, observed := engine.onlineSupplyChain(ctx, files, findings, mode)
 		findings = onlineFindings
 		gitEvidence = evidence
 		security = verified
+		observations = observed
 		notes = append(notes, onlineNotes...)
 	}
 	notes = append([]string{"completed " + string(mode)}, notes...)
 	if mode == supplyChainOffline {
-		report := engine.finishWithAssessments(findings, notes, false, engine.Repository.Config.SupplyChain.VulnerabilityAssessments, policy.VerificationSecurity)
+		report := engine.finishWithAssessments(findings, notes, false, policy.VulnerabilityObservations{}, policy.VerificationSecurity)
 		report.Security = &policy.SecurityVerification{Status: "not-run"}
 		return report, nil
 	}
-	report := engine.finishWithAssessments(findings, notes, true, engine.scannedAssessments(mode), policy.VerificationSecurity)
+	report := engine.finishWithAssessments(findings, notes, true, observations, policy.VerificationSecurity)
 	report.GitEvidence = gitEvidence
 	report.Security = security
 	if security != nil && HasFindings(report) {
@@ -756,7 +758,7 @@ func (engine *Engine) DependencyReview(ctx context.Context, base string) (Report
 func (engine *Engine) ArtifactSecurity(ctx context.Context) Report {
 	result := artifactsecurity.Run(ctx, engine.Repository, engine.Runner)
 	findings := supplychain.ClassifyKnownExploited(ctx, engine.Repository, result.Findings)
-	return engine.finishWithAssessments(findings, result.Notes, false, engine.Repository.Config.SupplyChain.VulnerabilityAssessments, policy.VerificationSecurity)
+	return engine.finishWithAssessments(findings, result.Notes, false, policy.VulnerabilityObservations{ContainerTargets: result.ScannedTargets}, policy.VerificationSecurity)
 }
 
 func withCheckpointPolicy(report Report, scope, base, candidate, receiptPath string) Report {
@@ -769,22 +771,12 @@ func (engine *Engine) finish(findings []policy.Finding, notes []string) Report {
 }
 
 func (engine *Engine) finishWithAdvisories(findings []policy.Finding, advisories []policy.Advisory, notes []string) Report {
-	report := engine.finishWithAssessments(findings, notes, false, engine.Repository.Config.SupplyChain.VulnerabilityAssessments, policy.VerificationSource)
+	report := engine.finishWithAssessments(findings, notes, false, policy.VulnerabilityObservations{}, policy.VerificationSource)
 	report.Findings = append(report.Findings, advisoryFindings(advisories)...)
 	return engine.normalizeReport(report)
 }
 
-func (engine *Engine) scannedAssessments(mode supplyChainMode) []policy.VulnerabilityAssessment {
-	assessments := engine.Repository.Config.SupplyChain.VulnerabilityAssessments
-	if mode != dependencyReviewMode {
-		return assessments
-	}
-	return slices.DeleteFunc(slices.Clone(assessments), func(assessment policy.VulnerabilityAssessment) bool {
-		return assessment.Ecosystem == policy.ContainerEcosystem
-	})
-}
-
-func (engine *Engine) finishWithAssessments(findings []policy.Finding, notes []string, enforceUnused bool, assessments []policy.VulnerabilityAssessment, phase policy.VerificationPhase) Report {
+func (engine *Engine) finishWithAssessments(findings []policy.Finding, notes []string, enforceUnused bool, observations policy.VulnerabilityObservations, phase policy.VerificationPhase) Report {
 	ordered := append([]policy.Finding{}, findings...)
 	defaultFindingPhase(ordered, phase)
 	ordered = engine.normalizeFindings(ordered, nil)
@@ -793,7 +785,7 @@ func (engine *Engine) finishWithAssessments(findings []policy.Finding, notes []s
 	kept, releaseAges := policy.ApplyReleaseAgeAssessments(
 		ordered, engine.Repository.Config.SupplyChain.ReleaseAgeAssessments, time.Now().UTC(), enforceUnused,
 	)
-	kept, assessed := policy.ApplyVulnerabilityAssessments(kept, assessments, time.Now().UTC(), enforceUnused)
+	kept, assessed := policy.ApplyVulnerabilityAssessments(kept, engine.Repository.Config.SupplyChain.VulnerabilityAssessments, time.Now().UTC(), observations)
 	defaultFindingPhase(kept, phase)
 	kept, suppressed := policy.ApplyExceptions(kept, engine.Repository.Config.Exceptions, time.Now().UTC())
 	defaultFindingPhase(kept, phase)

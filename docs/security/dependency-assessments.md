@@ -5,8 +5,8 @@ reviewed on 2026-10-08; Go toolchain admission reviewed on 2026-10-21.
 The withdrawn glob advisory, Zod configuration validation, and the aged TOML fix
 reviewed on 2026-10-23 UTC.
 Zod configuration boundaries and available fixes rechecked on 2026-11-08 UTC.
-Minimatch globparts amplification reviewed on 2026-10-31 UTC; its revised
-affected range rechecked on 2026-11-05 UTC.
+Minimatch globparts amplification, resolved callers, and available fixes
+rechecked on 2026-11-16 UTC.
 Assessment owner: Codex.
 
 The vulnerability assessments cover `tools/javascript/pnpm-lock.yaml` and
@@ -172,11 +172,19 @@ The first fixed release, 11.0.1, was
 there is no aged fix or compatible 3.x/10.x backport. Forcing a fresh major
 outside the callers' supported ranges would add admission and compatibility
 risk without removing a reachable path. Retain the aged versions with these
-two assessments, owned by Codex and expiring on 2026-11-14. Recheck upstream
+two assessments, owned by Codex and expiring on 2026-11-27. Recheck upstream
 ranges and supported backports by expiry; evaluate a compatible fixed upgrade
 when available. Reassess immediately if the caller graph, parser authority,
 or minimatch options change. Do not extend this conclusion to other glob
 libraries or advisories.
+
+The November 16 reassessment checked the current advisory (last updated November
+4), both installed minimatch implementations, both typescript-estree callers,
+and the policy-owned parser configurations above. The level-2 prerequisite and
+disabled project-service boundary are unchanged. The npm registry still lists
+no fixed 10.x backport; 11.0.1 first becomes aged on November 26 at 22:26:03 UTC.
+Keep the exact existing versions and evaluate a supported update by November 27.
+This renewal changes no package, lock, enabled API, or exception category.
 
 ## URI processing
 

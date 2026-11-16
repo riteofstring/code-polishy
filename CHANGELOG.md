@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Allow explicitly configured test and check timeouts up to 24 hours while
+  retaining existing defaults and execution-profile requirements.
+- Report unused container vulnerability assessments only after their target
+  scan completes; retain operational failures, assessment expiry, and stale
+  assessment detection for successfully scanned targets.
+- Check the latest published scanner package daily and require publisher renewal
+  seven days before expiry, without adding consuming-repository configuration.
+- Correct installed Pydantic verification to expect advisory unused-code warnings
+  and a successful exit status.
 - Report Python unused-code candidates as advisory warnings, including unused
   callback arguments, while retaining blocking unreachable control flow and
   analysis failures. Focused checks explicitly identify deferred dead-code work.

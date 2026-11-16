@@ -291,16 +291,42 @@ func TestRecursiveScanCannotSatisfyAnUnavailableImageScan(t *testing.T) {
 	policyEngine.Repository.Config.SupplyChain.ArtifactSecurity.Targets = []policy.ArtifactTarget{
 		{Name: "application", Mode: "command", Producer: &policy.ArtifactProducer{Argv: []string{"build-image"}, Cwd: ".", Manifest: "image.json"}},
 	}
+	policyEngine.Repository.Config.SupplyChain.VulnerabilityAssessments = []policy.VulnerabilityAssessment{
+		{ID: "image-assessment", Ecosystem: policy.ContainerEcosystem, Scope: "application", Expires: policy.Date{Time: time.Now().UTC().AddDate(0, 0, 7)}},
+	}
 	preinstall, err := policyEngine.DependencyReview(t.Context(), "main")
 	requireSuccessfulSecurityReport(t, preinstall, err)
 	for range 2 {
 		report, err := policyEngine.SupplyChain(t.Context(), false)
-		if err != nil || !dependencyReviewHasFinding(report, "artifactSecurity.operation") || report.Security.Status != "failed" || report.Security.Scans[0].Status != "scanned" {
+		if err != nil || !dependencyReviewHasFinding(report, "artifactSecurity.operation") || dependencyReviewHasFinding(report, "policy.vulnerabilityAssessmentUnused") || report.Security.Status != "failed" || report.Security.Scans[0].Status != "scanned" {
 			t.Fatalf("package evidence bypassed an unavailable image scan: %+v %v", report, err)
 		}
 	}
 	if countCommand(scanner.commands, "osv-scan-root") != 3 {
 		t.Fatalf("deferred image verification or recursive scan was skipped: %v", scanner.commands)
+	}
+	policyEngine.Repository.Config.SupplyChain.VulnerabilityAssessments[0].Expires.Time = time.Now().UTC().AddDate(0, 0, -1)
+	expired, err := policyEngine.SupplyChain(t.Context(), false)
+	if err != nil || !dependencyReviewHasFinding(expired, "policy.vulnerabilityAssessmentExpired") || dependencyReviewHasFinding(expired, "policy.vulnerabilityAssessmentUnused") {
+		t.Fatalf("missing scan concealed expiry or invented unused evidence: %+v %v", expired, err)
+	}
+}
+
+func TestPackageScanFailureDefersUnusedAssessmentsUntilRecovery(t *testing.T) {
+	t.Parallel()
+	policyEngine, scanner, _ := securityTestEngine(t)
+	policyEngine.Repository.Config.SupplyChain.VulnerabilityAssessments = []policy.VulnerabilityAssessment{
+		{ID: "old-advisory", Ecosystem: "pnpm", Scope: "content/data.json", Expires: policy.Date{Time: time.Now().UTC().AddDate(0, 0, 7)}},
+	}
+	scanner.unavailable = true
+	failed, err := policyEngine.SupplyChain(t.Context(), false)
+	if err != nil || !dependencyReviewHasFinding(failed, "policy.securityScanner") || dependencyReviewHasFinding(failed, "policy.vulnerabilityAssessmentUnused") {
+		t.Fatalf("failed package scan declared an assessment unused: %+v %v", failed, err)
+	}
+	scanner.unavailable = false
+	recovered, err := policyEngine.SupplyChain(t.Context(), false)
+	if err != nil || dependencyReviewHasFinding(recovered, "policy.securityScanner") || !dependencyReviewHasFinding(recovered, "policy.vulnerabilityAssessmentUnused") {
+		t.Fatalf("successful empty scan lost stale assessment detection: %+v %v", recovered, err)
 	}
 }
 

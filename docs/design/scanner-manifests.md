@@ -110,6 +110,15 @@ candidate. Both checks must pass before publication. Reports and SBOMs, includin
 their advisory database identities, are retained as release evidence. The GitHub
 repository's immutable-release setting freezes the completed publication.
 
+The publisher owns renewal before expiry. A daily `Scanner renewal deadline`
+workflow verifies the latest public scanner package with the locked consumer's
+`scanner-update` preview and fails seven days before its deadline. It reads
+published releases rather than the unsigned working candidate, so an unpublished
+renewal cannot conceal an outage. It neither signs packages nor changes consumer
+locks. The maintainer responsible for `scanner-publication` owns the alert and
+arranges evidence review, native verification, and successor publication before
+the current deadline. Consumer repositories need no additional workflow.
+
 `artifact-security/scanner.json` is a public signed bootstrap fixture for ordinary
 Code Polishy installed-release checks. It is prepared during publisher setup and
 refreshed explicitly when needed. Its unit test authenticates the checked-in
