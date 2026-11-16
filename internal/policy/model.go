@@ -143,11 +143,12 @@ type Project struct {
 }
 
 type Scope struct {
-	PythonRuntimeLoaders []PythonRuntimeLoader `json:"pythonRuntimeLoaders,omitempty"`
-	PythonContracts      []PythonContract      `json:"pythonContracts,omitempty"`
-	Exclude              []string              `json:"exclude,omitempty"`
-	Generated            []string              `json:"generated,omitempty"`
-	Data                 []string              `json:"data,omitempty"`
+	PythonRuntimeLoaders        []PythonRuntimeLoader        `json:"pythonRuntimeLoaders,omitempty"`
+	PythonContracts             []PythonContract             `json:"pythonContracts,omitempty"`
+	PythonTypecheckEnvironments []PythonTypecheckEnvironment `json:"pythonTypecheckEnvironments,omitempty"`
+	Exclude                     []string                     `json:"exclude,omitempty"`
+	Generated                   []string                     `json:"generated,omitempty"`
+	Data                        []string                     `json:"data,omitempty"`
 
 	EntryPoints                 []string                     `json:"entryPoints,omitempty"`
 	GeneratedJavaScript         []GeneratedJavaScript        `json:"generatedJavaScript,omitempty"`
@@ -164,6 +165,12 @@ type Scope struct {
 type GeneratedJavaScript struct {
 	Paths         []string `json:"paths"`
 	SourcePackage string   `json:"sourcePackage"`
+}
+
+type PythonTypecheckEnvironment struct {
+	Paths              []string `json:"paths"`
+	EnvironmentProject string   `json:"environmentProject"`
+	Reason             string   `json:"reason"`
 }
 
 type BundledDependencies struct {

@@ -99,8 +99,9 @@ keep the sealed bundle portable and minimal.
   TypedDict schemas and consumer targets across the validated union with the
   same parser, AST extractor, and semantic resolvers. Each source record is
   limited to 16 MiB, the compact project to 256 MiB, and semantic traversal to
-  bounded depths and visits. A project-local `.venv` is passed only to `ty` when
-  dependencies require it; Vulture always uses carried CPython and its pinned
+  bounded depths and visits. A contained project-local `.venv` is passed only
+  to `ty` when dependencies require it or an exact runtime mapping selects it;
+  Vulture always uses carried CPython and its pinned
   built-in whitelists. Ambient Python paths and environments are not tool
   provenance.
 - Python manifests and `uv.lock` are target-owned inputs. Exact Git repository

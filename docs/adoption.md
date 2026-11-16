@@ -406,12 +406,15 @@ standard conditional behavior is:
   `F`, `I`, `PIE`, `RUF`, `SIM`, and `UP` lint, and C901 complexity. Ruff uses
   the project's declared Python target, detected package roots, and the shared
   88-character line length. Vulture `2.16` provides full-project dead-code
-  analysis at fixed 60% confidence through carried CPython
+  analysis collecting candidates from 60% confidence through carried CPython
   `3.12.13+20260728` from python-build-standalone; `ty` provides first-class
   type checking. The shared project inventory assigns nested projects
   separately and recognizes direct `src` plus in-tree PEP 517 backend roots and
   their direct `src`; ty receives those roots explicitly. A dependency-bearing
-  project uses only its contained `.venv`; a missing environment produces a
+  project uses its contained `.venv` by default. Exact
+  `scope.pythonTypecheckEnvironments` mappings can select a separately locked
+  runtime environment without relocating source. Unused-code candidates are
+  warnings; unreachable control flow remains blocking. A missing environment produces a
   clear coverage finding instead of ambient-Python behavior. A target pins and
   installs neither tool, its own Python runtime, nor an architecture provider.
 - A target bearing JavaScript or TypeScript is formatted by the sealed,

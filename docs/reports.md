@@ -36,6 +36,16 @@ and reviewed findings. `findings` carries actionable occurrences with their
 rule, path, `subject`, message, severity, and remedy. Accepted exceptions and
 assessments retain their own evidence instead of disappearing.
 
+Python unused-code candidates and generated JavaScript semantic lint are
+warnings, not assertions that a defect has been established. Syntax, supported
+unreachable Python control flow, and missing analyzer evidence still fail.
+Focused Python checks state in `notes` that global dead-code analysis was not
+run. Project inventory in `analysisContext` alone does not prove analysis ran.
+When ty uses an explicitly mapped runtime, a `quality.typecheckEnvironment`
+informational finding identifies its manifest and lists analyzed paths in
+`relatedLocations`. This records analysis even when type errors were found; it is not a
+dependency security or lock-synchronization receipt.
+
 `display` describes output filtering and bounds, not the verdict. Filters never
 turn a complete failure into a pass. Use `summary.status` rather than counting
 the currently displayed findings or parsing the terminal's `PASS` line.

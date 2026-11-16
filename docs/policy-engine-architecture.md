@@ -202,8 +202,11 @@ isolated import graph and decides module direction in Go; `internal/supplychain`
 parses PEP 508 and `uv.lock` facts from the same validated manifest boundary.
 Target Ruff configuration cannot alter the managed Python target, roots, line
 length, baseline, or architecture graph; target Vulture configuration is
-ignored, and a dependency-bearing project gives `ty` only its explicit
-contained `.venv`, never an ambient Python environment.
+ignored. Unused-code candidates are advisory; proven unreachable control flow
+and missing analysis evidence remain blocking. A dependency-bearing project
+gives `ty` its explicit contained `.venv` by default. Exact runtime mappings can
+select a separately locked project's environment for chosen files while retaining
+their source ownership and import roots. Ambient environments are never selected.
 
 `internal/portability` performs linear, subprocess-free scans for
 high-confidence machine/checkout assumptions and validates ownership coverage

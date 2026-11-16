@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- Report Python unused-code candidates as advisory warnings, including unused
+  callback arguments, while retaining blocking unreachable control flow and
+  analysis failures. Focused checks explicitly identify deferred dead-code work.
+- Report shared semantic lint on generated JavaScript as warnings. Preserve
+  blocking authored lint, generated syntax, coverage and security checks, and
+  distinguish review guidance from instructions to repair a confirmed defect.
+- Add exact `scope.pythonTypecheckEnvironments` mappings for files executed in
+  separately locked Python runtimes. Preserve source ownership, validate the
+  selected project and environment, and record which files ty analyzed there.
+
 ## 0.33.2 - 2026-11-10
 
 - Consolidate repeated remedies, recovery commands, generated-code producer

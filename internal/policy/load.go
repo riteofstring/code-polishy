@@ -338,6 +338,9 @@ func validateScope(config *Config) error {
 	if err := validatePythonDeclarations(&config.Scope); err != nil {
 		return err
 	}
+	if err := validatePythonTypecheckEnvironments(config.Scope.PythonTypecheckEnvironments); err != nil {
+		return err
+	}
 	if err := rejectUniversalPatterns(config.Scope.Development, "scope.development"); err != nil {
 		return err
 	}

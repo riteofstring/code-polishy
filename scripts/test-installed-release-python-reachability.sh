@@ -228,9 +228,11 @@ def check_contract(*, rejected=False):
     focused = command("check", "--files", "src/app/plugin.py")
     if any(finding["ruleId"] in {"quality.deadCode", "policy.pythonReachability"} for finding in focused["findings"]):
         raise AssertionError(f"focused external contract check retained the wrong scope: {focused['findings']}")
-    report = command("check", "--all", status=1)
+    report = command("check", "--all", status=int(rejected))
     findings = report["findings"]
     dead = {finding["line"] for finding in findings if finding["ruleId"] == "quality.deadCode"}
+    if any(finding["severity"] != "warning" for finding in findings if finding["ruleId"] == "quality.deadCode"):
+        raise AssertionError(f"unused members were treated as proven defects: {findings}")
     expected = {methods["unused_hook"].lineno}
     if rejected:
         expected.add(methods["on_event"].lineno)

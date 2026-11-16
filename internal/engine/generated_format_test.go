@@ -114,6 +114,18 @@ func TestGeneratedFindingsIdentifyProducerInputsCommandsAndUnavailablePrerequisi
 	}
 }
 
+func TestGeneratedAdvisoryPreservesReviewGuidanceAndPassingVerdict(t *testing.T) {
+	policyEngine, generated, _ := generatedFormatEngine(t)
+	summary := "Review the upstream diagnostic before changing the producer."
+	report := policyEngine.finish([]policy.Finding{{
+		Check: "quality.lint", Path: generated, Subject: "valid-typeof", Message: "upstream legacy check", Severity: policy.FindingWarning,
+		Remediation: policy.FindingRemediation{Summary: summary},
+	}}, nil)
+	if HasFindings(report) || report.Summary.Warnings != 1 || report.Findings[0].Remediation.Summary != summary || report.Findings[0].Remediation.Generation == nil {
+		t.Fatalf("advisory became a defect or lost its producer: %+v", report)
+	}
+}
+
 func generatedFormatEngine(t *testing.T) (*Engine, string, string) {
 	t.Helper()
 	root := t.TempDir()

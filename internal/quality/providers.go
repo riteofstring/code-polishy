@@ -3,6 +3,8 @@ package quality
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strings"
 
 	"github.com/riteofstring/code-polishy/internal/javascript"
 	"github.com/riteofstring/code-polishy/internal/pack"
@@ -14,6 +16,12 @@ import (
 func packQualityFindings(ctx context.Context, repo repository.Repository, selection repository.Selection, command policy.Command, boundary runner.Runner, profile string) []policy.Finding {
 	result := pack.RunAdapter(ctx, repo, selection, command, boundary, profile)
 	findings := result.Findings
+	if command.Adapter.Capability == "lint" {
+		for index, finding := range findings {
+			rule := strings.TrimPrefix(finding.Check, "pack."+command.Adapter.PackName+".")
+			findings[index] = generatedJavaScriptLintFinding(repo, finding, rule)
+		}
+	}
 	if result.Response.Facts == nil {
 		return findings
 	}
@@ -21,6 +29,15 @@ func packQualityFindings(ctx context.Context, repo repository.Repository, select
 		findings = append(findings, packCommentFindings(repo, *result.Response.Facts.Comments)...)
 	}
 	return findings
+}
+
+func generatedJavaScriptLintFinding(repo repository.Repository, finding policy.Finding, rule string) policy.Finding {
+	semanticRules := []string{"no-unreachable", "no-dupe-else-if", "no-duplicate-case", "no-constant-binary-expression", "no-unsafe-finally", "valid-typeof", "use-isnan"}
+	if repo.IsGenerated(finding.Path) && repo.Language(finding.Path) == "typescript" && slices.Contains(semanticRules, rule) {
+		finding.Severity = policy.FindingWarning
+		finding.Remediation.Summary = "Review this generated-code diagnostic against the authoritative inputs and runtime behavior. Repair the producer only for a confirmed defect; do not edit generated output."
+	}
+	return finding
 }
 
 func packCommentFindings(repo repository.Repository, comments []pack.CommentFact) []policy.Finding {

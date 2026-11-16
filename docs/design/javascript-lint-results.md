@@ -4,7 +4,11 @@ The native lint request carries the core's resolved complexity and comment
 activation alongside its framework activation. Generated source disables
 complexity, depth, parameter, and prose-comment collection before those facts
 can consume the transport budget. Authored source retains its applicable rules.
-Syntax and semantic lint still analyze every selected generated file, and
+Syntax and semantic lint still analyze every selected generated file. The core
+reports the shared semantic rules as warnings on generated JavaScript while
+retaining blocking syntax and coverage failures and authored-source enforcement.
+The native and optional provider paths share that severity decision. Producer
+guidance preserves the distinction between a candidate and a confirmed defect, and
 producer verification remains independent. Parser comment locations are still
 collected to distinguish inline-configuration warnings from incomplete analysis.
 
@@ -24,6 +28,9 @@ complete findings when one file exceeds a page. Repositories must remain stable
 during analysis, as they must for the other file-based checks; cursors are local
 to one operation and are never reusable evidence. Existing input-size, path,
 process, and deadline limits remain in force.
+
+The [analysis outcome policy](analysis-outcomes.md) owns the distinction between
+advisory semantics and blocking analysis failures.
 
 The engine and sealed runner are shipped together with the same strict request
 and response shapes. The optional provider shares semantic rule selection but

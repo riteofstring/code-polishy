@@ -115,7 +115,7 @@ func pythonQualityPlannedProjectForProfile(repo repository.Repository, manifest 
 		message := "the Python project inventory returned an unknown project"
 		return pythonQualityProject{}, false, pythonQualityAllCoverage(sources, message)
 	}
-	commands, typecheckProblem, err := pythonQualityProjectCommandsForProfile(repo, project, sources, includeVulture)
+	commands, findings, err := pythonQualityProjectCommandsForProfile(repo, project, sources, includeVulture)
 	if err != nil {
 		message := "the Python project cannot produce a contained quality command: " + err.Error()
 		findings := pythonQualityNonDeadCodeCoverage(sources, message)
@@ -123,12 +123,6 @@ func pythonQualityPlannedProjectForProfile(repo repository.Repository, manifest 
 			findings = append(findings, pythonVultureCoverage(project.Files, message)...)
 		}
 		return pythonQualityProject{}, false, findings
-	}
-	findings := []policy.Finding{}
-	if typecheckProblem != "" {
-		findings = append(findings, policy.Finding{
-			Check: "quality.typecheckCoverage", Path: project.Manifest, Subject: "ty", Message: typecheckProblem,
-		})
 	}
 	planned, routing := nativePythonCommands(repo, pythonQualityProject{project: project, sources: sources, commands: commands})
 	return planned, true, append(findings, routing...)

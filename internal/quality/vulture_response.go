@@ -43,16 +43,26 @@ func pythonVultureFindingsForSources(repo repository.Repository, project reposit
 	}
 	findings := pythonVultureReferenceFindings(response.Problems, origins)
 	for _, diagnostic := range response.Diagnostics {
-		findings = append(findings, policy.Finding{
-			Check: "quality.deadCode", Path: diagnostic.Path, Line: diagnostic.Line,
-			Subject: pythonVultureSubject(diagnostic), Message: pythonVultureMessage(diagnostic),
-			Remediation: policy.FindingRemediation{
-				Summary:     "Delete the unused definition. Do not generate reachability declarations or entry-point lists from dead-code findings.",
-				NextCommand: &policy.FindingCommand{Argv: []string{"code-polishy", "check", "--all"}, Cwd: "."},
-			},
-		})
+		findings = append(findings, pythonVultureDiagnosticFinding(diagnostic))
 	}
 	return findings
+}
+
+func pythonVultureDiagnosticFinding(diagnostic pythonVultureDiagnostic) policy.Finding {
+	severity := policy.FindingWarning
+	remedy := "Review runtime uses and public interfaces before removing this definition. Delete it only when confirmed unused; record genuine runtime contracts rather than generating declarations from analyzer findings."
+	if diagnostic.Kind == "unreachable_code" && diagnostic.Confidence == 100 {
+		severity = policy.FindingError
+		remedy = "Correct the unreachable control flow or remove the unreachable code after checking the intended behavior."
+	}
+	return policy.Finding{
+		Check: "quality.deadCode", Path: diagnostic.Path, Line: diagnostic.Line, Severity: severity,
+		Subject: pythonVultureSubject(diagnostic), Message: pythonVultureMessage(diagnostic),
+		Remediation: policy.FindingRemediation{
+			Summary:     remedy,
+			NextCommand: &policy.FindingCommand{Argv: []string{"code-polishy", "check", "--all"}, Cwd: "."},
+		},
+	}
 }
 
 func parsePythonVultureResponse(data []byte) (pythonVultureResponse, error) {

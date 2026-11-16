@@ -197,6 +197,11 @@
           "uniqueItems": true,
           "items": { "$ref": "code-polishy-python.schema.json#/$defs/contract" }
         },
+        "pythonTypecheckEnvironments": {
+          "type": "array",
+          "maxItems": 256,
+          "items": { "$ref": "#/$defs/pythonTypecheckEnvironment" }
+        },
         "pythonDynamicReferences": {
           "type": "array",
           "uniqueItems": true,
@@ -247,6 +252,24 @@
           "$ref": "#/$defs/exactPath",
           "pattern": "(?:^|/)package\\.json$"
         }
+      }
+    },
+    "pythonTypecheckEnvironment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["paths", "environmentProject", "reason"],
+      "properties": {
+        "paths": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4096,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/exactPath", "pattern": "\\.pyi?$" }
+        },
+        "environmentProject": {
+          "$ref": "#/$defs/pyprojectPath"
+        },
+        "reason": { "$ref": "#/$defs/nonemptyString" }
       }
     },
     "bundledDependencies": {

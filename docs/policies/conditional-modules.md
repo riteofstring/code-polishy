@@ -79,9 +79,12 @@ architecture provider. Build semantics remain project-specific.
 
 The same Python inventory invokes policy-owned Vulture `2.16` as the sole
 Python `dead-code` provider for `check --all` and merge gates. It analyzes the
-applicable governed contained project at fixed 60% confidence through carried
+applicable governed contained project, collecting candidates from 60% confidence through carried
 CPython `3.12.13+20260728`; it does not use a target or ambient Python
 interpreter, and target Vulture configuration is ignored.
+Unused-code candidates are warnings, including unused arguments; only
+100%-confidence unreachable control flow blocks. Analyzer and contract coverage
+failures remain blocking. Focused reports explicitly identify deferred analysis.
 
 A file selection activates selected-file Ruff and ty analysis through Python
 source or an exact Python project input. It does not activate repository-wide
@@ -116,7 +119,11 @@ The release carries `ty` `0.0.65` and invokes it with the release-owned
 `tools/ty.toml`. That configuration keeps `ty`'s normal diagnostic severity; it
 does not enable every rule or turn warnings into errors. A target `ty.toml` does
 not replace or weaken the policy-owned diagnostic configuration. A project with
-dependencies passes only its validated project-local `.venv` to `ty`; ambient
+dependencies passes its validated project-local `.venv` to `ty` by default. Exact
+`scope.pythonTypecheckEnvironments` mappings select a separately locked governed
+project's `.venv` for files executed in another runtime, preserving their source
+ownership and import roots. Environments are not combined, and missing selected
+environments fail coverage. Ambient
 Python environment variables and executable lookup do not decide the result.
 A project's non-root import roots are passed explicitly through repeatable
 `--extra-search-path` options.

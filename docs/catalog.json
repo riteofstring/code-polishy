@@ -50,6 +50,14 @@
       "public": true
     },
     {
+      "id": "analysis-outcomes",
+      "path": "docs/design/analysis-outcomes.md",
+      "title": "Analysis Outcomes and Runtime Ownership",
+      "summary": "Distinguish advisory candidates, generated semantic findings, and explicit Python runtime environments.",
+      "aliases": [],
+      "public": true
+    },
+    {
       "id": "analysis-providers",
       "path": "docs/design/analysis-providers.md",
       "title": "Analysis providers",

@@ -40,6 +40,25 @@
     "productInputs": ["docs/bug-review.md"],
     "design": [
       {
+        "path": "docs/design/analysis-outcomes.md",
+        "sourcePaths": [
+          "internal/policy/python_environments.go",
+          "internal/policy/python_environments_test.go",
+          "internal/repository/python_environments.go",
+          "internal/repository/python_environments_test.go",
+          "internal/quality/python_environments.go",
+          "internal/quality/python_environments_test.go",
+          "internal/quality/python.go",
+          "internal/quality/python_inventory.go",
+          "internal/quality/vulture_remediation_test.go",
+          "internal/quality/javascript_generated_test.go",
+          "internal/quality/providers.go",
+          "internal/quality/providers_test.go",
+          "internal/engine/generated_findings.go",
+          "internal/engine/generated_format_test.go"
+        ]
+      },
+      {
         "path": "docs/design/bundled-javascript-dependencies.md",
         "sourcePaths": [
           "internal/architecture/bundled_dependencies.go",

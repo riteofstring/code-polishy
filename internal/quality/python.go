@@ -45,8 +45,10 @@ const (
 )
 
 type pythonQualityCommand struct {
-	kind    pythonQualityKind
-	command policy.Command
+	kind        pythonQualityKind
+	command     policy.Command
+	sources     []string
+	environment string
 }
 
 type pythonQualityProject struct {
@@ -137,7 +139,14 @@ func pythonQualityCommandFindings(ctx context.Context, repo repository.Repositor
 		}
 		return []policy.Finding{pythonQualityToolFinding(project.project, specification.kind, runErr.Error())}
 	}
-	return pythonQualityOutputFindings(repo, project, specification.kind, output.Stdout)
+	if specification.sources != nil {
+		project.sources = specification.sources
+	}
+	findings := pythonQualityOutputFindings(repo, project, specification.kind, output.Stdout)
+	if specification.environment != "" && !slices.ContainsFunc(findings, func(finding policy.Finding) bool { return finding.Check == "quality.typecheckCoverage" }) {
+		findings = append(findings, pythonTypecheckEnvironmentEvidence(project, specification))
+	}
+	return findings
 }
 
 func commandRunnerPhaseRecorder(commandRunner runner.Runner) runner.CommandPhaseRecorder {
@@ -357,18 +366,14 @@ func pythonQualityNonDeadCodeCoverage(sources []string, message string) []policy
 	return append(findings, pythonQualityCoverage(sources, "quality.typecheckCoverage", "ty", message)...)
 }
 
-func pythonQualityProjectCommandsForProfile(repo repository.Repository, project repository.PythonProject, sources []string, includeVulture bool) ([]pythonQualityCommand, string, error) {
+func pythonQualityProjectCommandsForProfile(repo repository.Repository, project repository.PythonProject, sources []string, includeVulture bool) ([]pythonQualityCommand, []policy.Finding, error) {
 	paths, err := pythonQualityProjectPaths(project, sources)
 	if err != nil {
-		return nil, "", err
-	}
-	searchPaths, err := pythonQualityProjectSearchPaths(project)
-	if err != nil {
-		return nil, "", err
+		return nil, nil, err
 	}
 	ruffOptions, err := project.Ruff.CommandOptions(project.Root, project.SourceRoots)
 	if err != nil {
-		return nil, "", err
+		return nil, nil, err
 	}
 	modules := pythonQualityModules(repo, sources)
 	suffix := pythonQualityProjectName(project.Root)
@@ -381,23 +386,12 @@ func pythonQualityProjectCommandsForProfile(repo repository.Repository, project 
 	if includeVulture && len(repo.NativeAnalysisFiles(project.Files, "dead-code", "")) > 0 {
 		vulture, vultureErr := pythonVultureCommandForSources(repo, project, sources)
 		if vultureErr != nil {
-			return nil, "", vultureErr
+			return nil, nil, vultureErr
 		}
 		commands = append(commands, pythonQualityCommand{kind: pythonVultureQualityKind, command: vulture})
 	}
-	if len(repo.NativeAnalysisFiles(sources, "typecheck", "")) == 0 {
-		return commands, "", nil
-	}
-	if len(project.Requirements) == 0 {
-		commands = append(commands, pythonQualityCommand{kind: pythonTyQualityKind, command: pythonTyCommand(repo, project, suffix, modules, paths, searchPaths, "")})
-		return commands, "", nil
-	}
-	venv, venvErr := pythonQualityVenv(repo, project)
-	if venvErr != nil {
-		return commands, venvErr.Error(), nil
-	}
-	commands = append(commands, pythonQualityCommand{kind: pythonTyQualityKind, command: pythonTyCommand(repo, project, suffix, modules, paths, searchPaths, venv)})
-	return commands, "", nil
+	typechecks, findings := pythonTypecheckCommands(repo, project, sources)
+	return append(commands, typechecks...), findings, nil
 }
 
 func pythonRuffBaselineCoverageCommand(repo repository.Repository, project repository.PythonProject, suffix string, modules, paths, ruffOptions []string) policy.Command {

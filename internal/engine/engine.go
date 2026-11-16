@@ -213,6 +213,7 @@ func (engine *Engine) Check(ctx context.Context, selection repository.Selection,
 		findings = append(findings, supplychain.Static(phaseContext, engine.Repository, selection.Files)...)
 	})
 	notes := []string{fmt.Sprintf("checked %d files", len(selection.Files))}
+	notes = append(notes, quality.PythonCheckNotes(engine.Repository, selection, profile)...)
 	if len(selection.Candidate.Deleted) > 0 {
 		notes = append(notes, fmt.Sprintf("%d deletions participated in command selection", len(selection.Candidate.Deleted)))
 	}

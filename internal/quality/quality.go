@@ -342,6 +342,7 @@ func CoverageFindings(repo repository.Repository, files []string) []policy.Findi
 	languagesByModule, findings := inventoryModuleLanguages(repo, files)
 	findings = append(findings, cargoManifestFindings(repo, files)...)
 	findings = append(findings, repo.GeneratedJavaScriptOwnershipFindings(files)...)
+	findings = append(findings, repo.PythonTypecheckEnvironmentFindings(files)...)
 	findings = append(findings, repo.InspectGeneration(files).Findings...)
 	findings = append(findings, generatedStyleCoverageFindings(repo, files)...)
 	findings = append(findings, sourceCommentCoverageFindings(repo, files)...)

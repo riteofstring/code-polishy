@@ -289,7 +289,7 @@ func pythonAnalysisContexts(repo repository.Repository, allFiles []string, selec
 		paths := unselectedPaths(project.Files, selected)
 		if len(paths) > 0 {
 			contexts = append(contexts, AnalysisContext{
-				Analyzer: "python-project", Root: project.Root, Reason: "project-wide Python analysis", Paths: paths,
+				Analyzer: "python-project", Root: project.Root, Reason: "Python project inventory; this context does not establish that every analyzer ran", Paths: paths,
 			})
 		}
 	}

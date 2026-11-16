@@ -87,6 +87,11 @@ func enrichGeneratedFinding(finding *policy.Finding, remediations map[string]pol
 		return
 	}
 	finding.GeneratedProducer = remediation.Producer
+	if finding.Severity == policy.FindingWarning && finding.Remediation.Summary != "" {
+		finding.Remediation.Generation = &remediation
+		finding.Remediation.NextCommand = nil
+		return
+	}
 	finding.Remediation = policy.FindingRemediation{
 		Summary:    "Repair the authoritative producer inputs for this defect, regenerate the output, and run the declared verification command.",
 		Generation: &remediation,

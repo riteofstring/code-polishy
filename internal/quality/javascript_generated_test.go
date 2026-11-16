@@ -36,7 +36,7 @@ func TestGeneratedLintExemptionsPrecedeResultLimits(t *testing.T) {
 	for _, finding := range findings {
 		if finding.Path == "app/authored.js" && finding.Check == "quality.complexity" {
 			authored[finding.Subject] = true
-		} else if finding.Path == paths[0] && finding.Check == "quality.lint" && finding.Subject == "no-unreachable" {
+		} else if finding.Path == paths[0] && finding.Check == "quality.lint" && finding.Subject == "no-unreachable" && finding.Severity == policy.FindingWarning {
 			generated++
 		} else {
 			t.Fatalf("unexpected diagnostic: %+v", finding)
@@ -44,6 +44,28 @@ func TestGeneratedLintExemptionsPrecedeResultLimits(t *testing.T) {
 	}
 	if generated != 1 || !authored["complexity"] || !authored["max-depth"] || !authored["max-params"] {
 		t.Fatalf("generated semantic or authored complexity coverage lost: %+v", findings)
+	}
+}
+
+func TestGeneratedJavaScriptAdvisesOnSemanticsAndFailsOnSyntax(t *testing.T) {
+	repo := qualityRepository(t)
+	root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo.PolicyRoot = root
+	repo.Config.Scope.Generated = []string{"generated/**"}
+	source := "export function prevent(event) { if (typeof event.returnValue !== 'unknown') event.returnValue = false; }\n"
+	writeQualityFile(t, repo.Root, "generated/vendor.js", source)
+	writeQualityFile(t, repo.Root, "app/authored.js", source)
+	writeQualityFile(t, repo.Root, "generated/broken.js", "export const value = ;\n")
+	findings := JavaScriptLintFindings(t.Context(), repo, []string{"generated/vendor.js", "app/authored.js", "generated/broken.js"})
+	severities := map[string]policy.FindingSeverity{}
+	for _, finding := range findings {
+		severities[finding.Path] = policy.NormalizeFinding(finding).Severity
+	}
+	if len(findings) != 3 || severities["generated/vendor.js"] != policy.FindingWarning || severities["app/authored.js"] != policy.FindingError || severities["generated/broken.js"] != policy.FindingError {
+		t.Fatalf("generated syntax or authored enforcement changed: %+v", findings)
 	}
 }
 

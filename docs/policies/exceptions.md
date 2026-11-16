@@ -3,6 +3,11 @@
 An exception records bounded, temporary risk. It is not a second configuration
 system and never means "ignore this category forever."
 
+Supported runtime contracts are source configuration, not exceptions. Python
+runtime-consumption and typechecking-environment declarations have no date
+expiry; they must remain valid against current source and governed projects.
+Advisory unused-code and generated semantic findings need no exception to pass.
+
 Every exception must include:
 
 - a stable identifier;

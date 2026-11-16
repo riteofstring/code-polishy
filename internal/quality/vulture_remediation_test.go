@@ -23,8 +23,8 @@ func TestPythonVultureRemediationRechecksTheEditedProject(t *testing.T) {
 		t.Fatalf("unused definition findings = %+v", findings)
 	}
 	remediation := findings[0].Remediation
-	if !strings.HasPrefix(remediation.Summary, "Delete the unused definition.") || remediation.NextCommand == nil {
-		t.Fatalf("no actionable deletion remedy: %+v", remediation)
+	if findings[0].Severity != policy.FindingWarning || !strings.HasPrefix(remediation.Summary, "Review runtime uses") || remediation.NextCommand == nil {
+		t.Fatalf("unused candidate lacks a review remedy: %+v", findings[0])
 	}
 	if !slices.Equal(remediation.NextCommand.Argv, []string{"code-polishy", "check", "--all"}) || remediation.NextCommand.Cwd != "." {
 		t.Fatalf("recheck lost its complete project scope: %+v", remediation.NextCommand)
@@ -55,4 +55,46 @@ func vultureRemediationFindings(t *testing.T, repo repository.Repository) []poli
 		t.Fatal(err)
 	}
 	return pythonVultureFindings(repo, project, output.Stdout)
+}
+
+func TestPythonVultureSeparatesUnusedCandidatesFromUnreachableCode(t *testing.T) {
+	repo := pythonQualityRepository(t)
+	repo.PolicyRoot = pythonVulturePolicyRoot(t)
+	writeQualityFile(t, repo.Root, "pyproject.toml", "[project]\nname = 'example'\nrequires-python = '==3.12.*'\n")
+	writeQualityFile(t, repo.Root, "src/app.py", `from dataclasses import asdict, dataclass
+
+@dataclass
+class Selection:
+    device: str = "cpu"
+
+class Service:
+    def status(self):
+        return "ready"
+    recover = status
+
+def unused_function():
+    return 1
+
+def callback(unused_argument):
+    return 1
+
+def flow():
+    return 1
+    print("unreachable")
+
+print(asdict(Selection()), Service().status(), callback(None), flow())
+`)
+	findings := vultureRemediationFindings(t, repo)
+	for _, name := range []string{"device", "recover", "unused_function", "unused_argument"} {
+		if !slices.ContainsFunc(findings, func(finding policy.Finding) bool {
+			return finding.Check == "quality.deadCode" && finding.Severity == policy.FindingWarning && strings.Contains(finding.Message, "'"+name+"'")
+		}) {
+			t.Fatalf("missing advisory for %s: %+v", name, findings)
+		}
+	}
+	if len(findings) != 5 || !slices.ContainsFunc(findings, func(finding policy.Finding) bool {
+		return finding.Check == "quality.deadCode" && finding.Severity == policy.FindingError && strings.Contains(finding.Message, "unreachable")
+	}) {
+		t.Fatalf("unreachable control flow lost its failure: %+v", findings)
+	}
 }

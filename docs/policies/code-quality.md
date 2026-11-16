@@ -473,12 +473,21 @@ baseline or alter the managed Python version, source roots, or line length.
 
 Vulture `2.16` is the sole Python dead-code provider. An explicit
 `code-polishy check --all` or merge gate analyzes each applicable governed
-contained project at fixed 60% confidence through the release-carried
+contained project, collecting candidates from 60% confidence through the release-carried
 CPython `3.12.13+20260728` from python-build-standalone, rather than a target
 or ambient Python installation. Target Vulture configuration is ignored.
 Missing, unreadable, malformed, or incomplete analysis evidence is a coverage
 finding, never a clean result. Generated Python remains governed by this
 analysis; generated classification does not suppress dead-code coverage.
+
+Unused definitions, imports, attributes, and arguments are advisory
+`quality.deadCode` warnings. Vulture's confidence is a heuristic category, not
+proof that a runtime or external caller cannot consume a definition. Even a
+100%-confidence unused argument may belong to a required callback interface.
+Only its 100%-confidence `unreachable_code` diagnostics block. Review runtime
+uses and public interfaces before deleting a candidate. Existing exact runtime
+contracts remain useful for reducing noise; they are not required to pass an
+unused-code warning. Coverage and invalid-contract failures remain blocking.
 
 Dead-code reachability is a repository property. A focused file check and a
 changed-scope checkpoint therefore run selected-file Ruff and ty checks and
@@ -682,7 +691,7 @@ bytes. It cannot be suppressed or replaced by a path-level entry-point list.
 PEP 621 entry points and build hooks remain inferred;
 a configured target cannot repeat an already inferred consumer.
 No setup or remediation step generates these declarations from dead-code output.
-An unused-definition finding recommends deletion and provides an exact
+An unused-definition warning recommends reviewing runtime uses before deletion and provides an exact
 `check --files PATH` recheck. That selection still analyzes the owning Python
 project so remaining uses and definitions are evaluated together.
 
@@ -802,7 +811,7 @@ exception contract with the exact check, path, and subject; remove it when the
 diagnostic is fixed. A count ceiling is not a substitute: a new error must not
 be hidden by fixing another one.
 
-For a project with any declared dependency, `ty` receives only that project's
+By default, for a project with any declared dependency, `ty` receives that project's
 validated `<project>/.venv` through its explicit Python option. A missing,
 escaping, malformed, or interpreter-less environment produces one actionable
 `quality.typecheckCoverage` finding for the project instead of an
@@ -814,6 +823,40 @@ Every non-root import root from the shared inventory is passed explicitly as a
 same package model.
 That project-local `.venv` is only `ty`'s dependency-resolution input; it never
 selects Vulture's interpreter.
+
+Files executed in a separate runtime can declare an exact environment contract:
+
+```json
+{
+  "scope": {
+    "pythonTypecheckEnvironments": [
+      {
+        "paths": ["src/pkg/worker.py", "src/pkg/runner.py"],
+        "environmentProject": "typecheck/worker/pyproject.toml",
+        "reason": "These modules execute in the worker runtime."
+      }
+    ]
+  }
+}
+```
+
+Each path must name one current governed `.py` or `.pyi` file and can appear
+only once. The environment manifest must name a contained governed Python
+project with its own `uv.lock` and valid `.venv`, including for dependency-free
+runtime declarations. Declare all dependencies needed by that runtime in this
+project; environments are never combined. Its manifest and lock receive the
+ordinary dependency-review, lock-sync, release-age and advisory checks, with
+assessments scoped to its lockfile. The mapping itself does not establish that
+those checks have passed or that installed packages match the lock.
+
+Only ty's dependency environment changes. Files retain their source project,
+module identities, import roots, lint, architecture, and dead-code ownership.
+Each environment gets a separate invocation over its assigned selection. Missing
+or invalid environments fail coverage without falling back to the source
+project. A successful analyzer response records `quality.typecheckEnvironment`
+information with the environment manifest and every analyzed file in `relatedLocations`;
+type errors still fail normally. These declarations describe supported runtime
+behavior and have no expiry; stale paths and invalid project references fail.
 
 Do not call a repository type-safe because JavaScript syntax parses or because
 only a small handpicked directory is included. Production source should be
@@ -902,8 +945,9 @@ surface, confuses tools and agents, and preserves superseded behavior.
   in its source package's same dead-code tree. That package remains the
   execution context even when its generated output is outside the package
   directory; filesystem ancestry alone cannot assign another owner.
-- Python dead-code analysis is Vulture `2.16` at the fixed 60% confidence
-  threshold described above. Ruff `F` remains sealed lint only. Other languages
+- Python dead-code analysis collects Vulture `2.16` candidates from 60%
+  confidence, with advisory unused definitions and blocking unreachable control
+  flow as described above. Ruff `F` remains sealed lint only. Other languages
   need an explicit project command where a reliable tool is available.
 - Delete unused files, exports, dependencies, scripts, routes, config, docs,
   aliases, and tests in the same change that replaces them.
@@ -1030,12 +1074,18 @@ function boundaries and names, so applying authored-component rules to emitted
 vendor code is not reliable. The source package's authored React code continues
 to receive Hooks checks.
 
-Semantic lint evaluates each generated JavaScript file as one complete unit; it
-cannot infer which byte ranges a bundler copied from pinned dependencies. When
-a reproducible bundle reports a semantic-lint finding in verified upstream code,
-keep the bundle governed and retain its source, producer-drift, and applicable
-runtime tests. Record the accepted upstream diagnostic with an ordinary exact,
-expiring exception keyed to `quality.lint`, the bundle path, and the reported
-rule subject. Do not disable the rule for all generated output, and remove the
-exception when the dependency or producer stops emitting the construct. See
-the [Exception Policy](exceptions.md).
+Semantic lint evaluates each generated JavaScript file as one complete unit.
+The shared rules for unreachable code, duplicate conditions and cases, constant
+binary expressions, unsafe finally blocks, typeof and NaN comparisons report
+warnings on generated output. Without verified origin information they cannot
+distinguish authored logic from copied vendor code. Authored sources retain
+blocking semantic lint. Syntax errors, incomplete analysis, type errors,
+dependency security and producer ownership remain blocking for generated output.
+Producer verification and applicable runtime tests retain their ordinary
+selection rules; an advisory does not execute them automatically.
+
+Review generated semantic warnings against the inputs and actual runtime
+behavior. Repair a producer only for a confirmed defect. Intentional upstream
+constructs need no expiring exception merely to pass a check. This distinction
+does not introduce permanent waivers or input-hash exemptions, and generated
+classification never authorizes rewriting the output.

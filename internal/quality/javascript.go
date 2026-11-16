@@ -227,7 +227,10 @@ func javascriptLintResultFindings(repo repository.Repository, result javascript.
 			violations = append(violations, violation)
 		}
 	}
-	return append(findings, javascriptLintViolationFindings(violations)...)
+	for _, finding := range javascriptLintViolationFindings(violations) {
+		findings = append(findings, generatedJavaScriptLintFinding(repo, finding, finding.Subject))
+	}
+	return findings
 }
 
 func javascriptLintCommentFindings(repo repository.Repository, result javascript.LintResult) []policy.Finding {

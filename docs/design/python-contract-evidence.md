@@ -87,6 +87,11 @@ records are reviewed source configuration and participate in gate identity.
 They are not independently authenticated dependency evidence, and do not bypass
 dependency admission or vulnerability checks. Existing external-consumer
 contracts above remain available when installed-source evidence is wanted.
+Contracts describe supported runtime behavior and do not expire by date. They
+must still match current source. Unused-code candidates remain advisory without
+a contract; a declaration is not a requirement for avoiding a false blocking
+failure. The [analysis outcome policy](analysis-outcomes.md) separates that
+uncertainty from unreachable control flow and missing coverage.
 
 Astroid supplies class ancestry and nested object inference over the complete
 contained project source snapshot. Its import resolver accepts only those
