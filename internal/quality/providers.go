@@ -35,7 +35,7 @@ func generatedJavaScriptLintFinding(repo repository.Repository, finding policy.F
 	semanticRules := []string{"no-unreachable", "no-dupe-else-if", "no-duplicate-case", "no-constant-binary-expression", "no-unsafe-finally", "valid-typeof", "use-isnan"}
 	if repo.IsGenerated(finding.Path) && repo.Language(finding.Path) == "typescript" && slices.Contains(semanticRules, rule) {
 		finding.Severity = policy.FindingWarning
-		finding.Remediation.Summary = "Review this generated-code diagnostic against the authoritative inputs and runtime behavior. Repair the producer only for a confirmed defect; do not edit generated output."
+		finding.Remediation.Summary = "Advisory candidate: this warning requires no cleanup, investigation, waiver, or acknowledgement. If investigating this candidate, compare the authoritative inputs with runtime behavior. Apply confirmed fixes through the producer."
 	}
 	return finding
 }

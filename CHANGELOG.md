@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Make Python unused-code and generated JavaScript warning guidance explicitly
+  optional, with no required cleanup, investigation, waiver or acknowledgement.
+  Label nonblocking follow-up commands and producer instructions as optional
+  investigation aids while retaining blocking recovery guidance.
 - Preserve exact Go advisory identities from govulncheck so existing vulnerability
   assessments apply. Resolve missing severity from current CVE metadata, retain
   raw source-scan evidence, and keep incomplete scans and unknown severity blocking.

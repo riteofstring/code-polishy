@@ -23,8 +23,8 @@ func TestPythonVultureRemediationRechecksTheEditedProject(t *testing.T) {
 		t.Fatalf("unused definition findings = %+v", findings)
 	}
 	remediation := findings[0].Remediation
-	if findings[0].Severity != policy.FindingWarning || !strings.HasPrefix(remediation.Summary, "Review runtime uses") || remediation.NextCommand == nil {
-		t.Fatalf("unused candidate lacks a review remedy: %+v", findings[0])
+	if findings[0].Severity != policy.FindingWarning || !strings.Contains(remediation.Summary, "If investigating this candidate") || remediation.NextCommand == nil {
+		t.Fatalf("unused candidate lacks conditional investigation guidance: %+v", findings[0])
 	}
 	if !slices.Equal(remediation.NextCommand.Argv, []string{"code-polishy", "check", "--all"}) || remediation.NextCommand.Cwd != "." {
 		t.Fatalf("recheck lost its complete project scope: %+v", remediation.NextCommand)

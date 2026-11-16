@@ -6,6 +6,15 @@ a product defect. The policy keeps uncertain candidates visible without
 requiring consumers to delete live interfaces or renew exceptions for supported
 architecture. Coverage failures remain failures, not successful empty analyses.
 
+Advisory candidates must reduce repeated judgment as well as exception upkeep.
+Python unused-code and generated JavaScript semantic warnings alone require no
+cleanup, investigation, waiver, or acknowledgement to complete a task. Their
+remedies are conditional on choosing to investigate relevant work or evidence
+of a defect. Reappearance alone does not require another review. This policy
+belongs to shared guidance and reports; consuming repositories need no triage
+ledger, duplicate checks or additional configuration. Follow-up commands remain
+available as optional investigation aids and do not select extra verification.
+
 Vulture continues collecting every candidate at its existing 60% floor. Its
 scores describe analyzer categories: even a 100% unused argument can be required
 by a callback signature. Unused definitions, imports, attributes, and arguments
@@ -22,8 +31,8 @@ does not establish the origin of each expression. The core reports the shared
 semantic rules as advisory for generated JavaScript in both native and pack
 execution. Authored semantic lint, whole-output syntax, incomplete analysis,
 type checking, dependency security and producer verification retain their
-existing obligations. Producer details remain attached, but a candidate's
-remedy asks for review before changing authoritative inputs. No source-map
+existing obligations. Producer details remain attached as optional investigation
+context, and confirmed fixes belong in authoritative inputs. No source-map
 engine, permanent exemption, or extra automatic verification run is introduced.
 
 `scope.pythonTypecheckEnvironments` maps exact source paths to a contained

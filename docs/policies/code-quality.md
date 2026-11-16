@@ -484,10 +484,14 @@ Unused definitions, imports, attributes, and arguments are advisory
 `quality.deadCode` warnings. Vulture's confidence is a heuristic category, not
 proof that a runtime or external caller cannot consume a definition. Even a
 100%-confidence unused argument may belong to a required callback interface.
-Only its 100%-confidence `unreachable_code` diagnostics block. Review runtime
-uses and public interfaces before deleting a candidate. Existing exact runtime
-contracts remain useful for reducing noise; they are not required to pass an
-unused-code warning. Coverage and invalid-contract failures remain blocking.
+Only its 100%-confidence `unreachable_code` diagnostics block. Unused-code
+warnings alone require no cleanup, investigation, waiver, or acknowledgement
+to complete a task. Investigate when relevant to the requested work or supported
+by evidence of a defect; repeated warnings alone do not require repeated triage.
+If investigating a candidate, check runtime uses and public interfaces before
+deleting it. Existing exact runtime contracts remain useful for reducing noise
+and are optional for these warnings. Suggested rechecks are optional investigation
+aids. Coverage and invalid-contract failures remain blocking.
 
 Dead-code reachability is a repository property. A focused file check and a
 changed-scope checkpoint therefore run selected-file Ruff and ty checks and
@@ -1084,8 +1088,11 @@ dependency security and producer ownership remain blocking for generated output.
 Producer verification and applicable runtime tests retain their ordinary
 selection rules; an advisory does not execute them automatically.
 
-Review generated semantic warnings against the inputs and actual runtime
-behavior. Repair a producer only for a confirmed defect. Intentional upstream
-constructs need no expiring exception merely to pass a check. This distinction
-does not introduce permanent waivers or input-hash exemptions, and generated
-classification never authorizes rewriting the output.
+Generated semantic warnings alone require no cleanup, investigation, waiver,
+or acknowledgement to complete a task. Investigate when relevant to the
+requested work or supported by evidence of a defect; reappearance alone does
+not require repeated triage. If investigating, compare the authoritative inputs
+with actual runtime behavior and repair a producer only for a confirmed defect.
+Suggested producer commands are optional investigation aids. Ordinary producer
+verification retains its existing selection rules. Generated classification
+never authorizes rewriting the output directly.

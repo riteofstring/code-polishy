@@ -41,6 +41,14 @@ features from prose or decide that an ordinary task is a merge checkpoint.
 Select a behavior feature only by the caller's intended canonical name or exact
 alias. See [task selection and intent](capabilities.md#start-a-task).
 
+Python unused-code candidates and generated JavaScript semantic warnings are
+optional advice. These warnings alone require no cleanup, investigation, waiver,
+or acknowledgement to complete a task. Investigate when relevant to the requested
+work or supported by evidence of a defect. A warning's reappearance alone does
+not warrant repeating prior triage. Suggested follow-up commands and producer
+instructions are optional investigation aids; ordinary verification selection
+still governs which checks run.
+
 ## Choose verification from the event
 
 | Event                                                                                                | Action                                                                          |

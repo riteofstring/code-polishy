@@ -50,6 +50,20 @@ func (group reportGuidanceGroup[T]) output(stdout, stderr io.Writer) io.Writer {
 	return stdout
 }
 
+func (group reportGuidanceGroup[T]) qualifier() string {
+	if group.failure {
+		return ""
+	}
+	return ", optional investigation"
+}
+
+func followUpLabel(failure bool) string {
+	if failure {
+		return "next"
+	}
+	return "optional"
+}
+
 type findingGuidance struct {
 	remedies    reportGuidanceGroups[string]
 	commands    reportGuidanceGroups[policy.FindingCommand]
@@ -62,7 +76,7 @@ func (guidance *findingGuidance) add(remediation policy.FindingRemediation, fail
 		references += fmt.Sprintf(" remedy=R%d", guidance.remedies.add(remediation.Summary, failure))
 	}
 	if remediation.NextCommand != nil {
-		references += fmt.Sprintf(" next=C%d", guidance.commands.add(*remediation.NextCommand, failure))
+		references += fmt.Sprintf(" %s=C%d", followUpLabel(failure), guidance.commands.add(*remediation.NextCommand, failure))
 	}
 	if remediation.Generation != nil {
 		references += fmt.Sprintf(" generation=G%d", guidance.generations.add(*remediation.Generation, failure))
@@ -77,11 +91,11 @@ func (guidance findingGuidance) print(stdout, stderr io.Writer) {
 	}
 	for index, group := range guidance.commands.groups {
 		output := group.output(stdout, stderr)
-		fmt.Fprintf(output, "COMMAND C%d (%s, cwd %s):\n     next: %s\n", index+1, findingCount(group.count, "finding"), group.value.Cwd, displayRemediationCommand(group.value.Argv))
+		fmt.Fprintf(output, "COMMAND C%d (%s, cwd %s%s):\n     %s: %s\n", index+1, findingCount(group.count, "finding"), group.value.Cwd, group.qualifier(), followUpLabel(group.failure), displayRemediationCommand(group.value.Argv))
 	}
 	for index, group := range guidance.generations.groups {
 		output := group.output(stdout, stderr)
-		fmt.Fprintf(output, "GENERATION G%d (%s):\n", index+1, findingCount(group.count, "finding"))
+		fmt.Fprintf(output, "GENERATION G%d (%s%s):\n", index+1, findingCount(group.count, "finding"), group.qualifier())
 		printGenerationRemediation(output, &group.value)
 	}
 }

@@ -96,20 +96,35 @@ func TestReportGuidanceStaysWithItsOutputStream(t *testing.T) {
 	for _, severity := range []policy.FindingSeverity{policy.FindingError, policy.FindingWarning, policy.FindingInformation} {
 		findings = append(findings, policy.Finding{
 			Check: "quality.lint", Path: "src/app.go", Severity: severity,
-			Remediation: policy.FindingRemediation{Summary: "Repair imports.", NextCommand: &policy.FindingCommand{Argv: []string{"code-polishy", "doctor"}, Cwd: "."}},
+			Remediation: policy.FindingRemediation{
+				Summary: "Repair imports.", NextCommand: &policy.FindingCommand{Argv: []string{"code-polishy", "doctor"}, Cwd: "."},
+				Generation: &policy.GenerationRemediation{
+					Producer: "contracts", Inputs: []string{"source/schema.json"},
+					Generate: policy.GenerationCommand{Argv: []string{"node", "generate.js"}, Cwd: "frontend"},
+					Verify:   policy.GenerationCommand{Argv: []string{"node", "verify.js"}, Cwd: "frontend"},
+				},
+			},
 		})
 	}
 	var output, diagnostics bytes.Buffer
 	printFindings(&output, &diagnostics, findings)
-	for _, text := range []string{output.String(), diagnostics.String()} {
-		if strings.Count(text, "remedy: Repair imports.") != 1 || strings.Count(text, "next: "+hostReportCommand("'code-polishy' 'doctor'", "& 'code-polishy' 'doctor'")) != 1 {
-			t.Fatalf("stream is missing its own guidance: %s", text)
+	for _, stream := range []struct{ text, commandRole string }{{output.String(), "optional"}, {diagnostics.String(), "next"}} {
+		if strings.Count(stream.text, "remedy: Repair imports.") != 1 || strings.Count(stream.text, stream.commandRole+": "+hostReportCommand("'code-polishy' 'doctor'", "& 'code-polishy' 'doctor'")) != 1 {
+			t.Fatalf("stream is missing its own guidance: %s", stream.text)
 		}
 	}
 	if !strings.Contains(diagnostics.String(), "FAIL quality.lint") || strings.Contains(diagnostics.String(), "WARN") ||
 		strings.Contains(output.String(), "FAIL") || !strings.Contains(output.String(), "WARN quality.lint") || !strings.Contains(output.String(), "INFO quality.lint") ||
 		!strings.Contains(output.String(), "REMEDY R2 (2 findings)") || !strings.Contains(diagnostics.String(), "REMEDY R1 (1 finding)") {
 		t.Fatalf("streams or group identities were conflated: stdout=%s stderr=%s", output.String(), diagnostics.String())
+	}
+	if strings.Contains(output.String(), "next=") || strings.Contains(output.String(), "next:") || strings.Contains(diagnostics.String(), "optional") {
+		t.Fatalf("optional investigation was conflated with required recovery: stdout=%s stderr=%s", output.String(), diagnostics.String())
+	}
+	for _, expected := range []string{"optional=C2", "COMMAND C2 (2 findings, cwd ., optional investigation)", "GENERATION G2 (2 findings, optional investigation)", "source/schema.json", "generate (cwd frontend)", "verify (cwd frontend)"} {
+		if !strings.Contains(output.String(), expected) {
+			t.Errorf("optional guidance lost %q: %s", expected, output.String())
+		}
 	}
 }
 

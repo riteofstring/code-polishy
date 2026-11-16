@@ -142,6 +142,14 @@ displayed occurrences and stay within their output stream so redirected failures
 and nonblocking findings each retain their guidance. Grouping is presentation
 only: complete machine reports retain every finding's remediation and assessment.
 
+Nonblocking follow-up commands and producer instructions are labeled as optional
+investigation. Suggested commands use `optional` rather than `next` in terminal
+references and blocks. The existing failure distinction already separates those
+groups from blocking recovery, so no additional action flag or report field is
+needed. Machine consumers interpret available actions using the finding's
+severity; command presence does not require execution or acknowledgement.
+Other task and policy obligations remain independent of these command labels.
+
 Grouping indexes complete serialized values together with their output stream;
 an ordered list retains first-seen group references. Lookup does not scan earlier
 groups, so an unlimited display scales with its input and output size. Commands

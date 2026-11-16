@@ -39,6 +39,9 @@ assessments retain their own evidence instead of disappearing.
 Python unused-code candidates and generated JavaScript semantic lint are
 warnings, not assertions that a defect has been established. Syntax, supported
 unreachable Python control flow, and missing analyzer evidence still fail.
+These warnings alone require no cleanup, investigation, waiver, or acknowledgement
+to complete a task. Investigate when relevant to the requested work or supported
+by evidence of a defect; repetition alone does not require another review.
 Focused Python checks state in `notes` that global dead-code analysis was not
 run. Project inventory in `analysisContext` alone does not prove analysis ran.
 When ty uses an explicitly mapped runtime, a `quality.typecheckEnvironment`
@@ -56,6 +59,15 @@ across different rules; command groups retain exact arguments and working
 directories. Reviewed vulnerabilities reference assessment (`A`) blocks while
 listing each advisory's observed severity. Groups cover the displayed findings
 only. JSON and SARIF retain each finding's complete data.
+Follow-up command and producer blocks for warnings and information are labeled
+`optional investigation`; command references use `optional=C` and command blocks
+use `optional:`. Blocking
+findings retain `next=C` and `next:` recovery commands. Optional producer blocks
+retain their inputs, prerequisites, generation and verification commands without
+selecting those commands for execution. In machine reports, `nextCommand` and
+`generation` retain the available actions; the finding's severity determines
+whether it blocks. Their presence does not make investigation mandatory.
+Independent task and policy obligations still apply.
 Printed commands use POSIX shell syntax on Unix and PowerShell invocation and
 quoting on Windows.
 
