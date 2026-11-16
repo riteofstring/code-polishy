@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/riteofstring/code-polishy/internal/gaterun"
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
 	"github.com/riteofstring/code-polishy/internal/runner"
@@ -71,6 +72,78 @@ func TestPythonTypecheckUsesTheDeclaredRuntimeWithoutMovingSources(t *testing.T)
 	}
 	if typechecks != 2 {
 		t.Fatalf("typechecks = %d", typechecks)
+	}
+}
+
+func TestPythonTypecheckRuntimeCommandsHaveDistinctStableGateIdentities(t *testing.T) {
+	repo := pythonQualityRepository(t)
+	repo.PolicyRoot = pythonVulturePolicyRoot(t)
+	roots := []string{"services/controller", "services-controller"}
+	environments := []string{"environments/production/python-worker", "environments/production/python/worker"}
+	for _, root := range append(slices.Clone(roots), environments...) {
+		writeQualityFile(t, repo.Root, root+"/pyproject.toml", "[project]\nname='runtime'\nrequires-python='==3.12.*'\n")
+	}
+	for _, root := range roots {
+		writeQualityFile(t, repo.Root, root+"/src/worker.py", "value: int = 1\n")
+		writeQualityFile(t, repo.Root, root+"/src/other.py", "value: int = 2\n")
+	}
+	manifests := []string{""}
+	for _, root := range environments {
+		writeQualityFile(t, repo.Root, root+"/uv.lock", "version=1\n")
+		writePythonVenv(t, repo.Root, root+"/.venv")
+		writeQualityFile(t, repo.Root, root+"/.venv/pyvenv.cfg", "home = /python\nversion = 3.12.13\n")
+		manifests = append(manifests, root+"/pyproject.toml")
+	}
+	files, err := repo.AllFiles()
+	if err != nil {
+		t.Fatal(err)
+	}
+	projects, _ := repo.PythonProjectInventory(files).Owners()
+	commands := []gaterun.CommandSpec{}
+	seen := map[string]bool{}
+	for _, root := range roots {
+		project := projects[root+"/pyproject.toml"]
+		sources := []string{root + "/src/worker.py", root + "/src/other.py"}
+		for _, manifest := range manifests {
+			specification, err := pythonTypecheckEnvironmentCommand(repo, project, sources, manifest)
+			if err != nil {
+				t.Fatal(err)
+			}
+			command := specification.command
+			if seen[command.Name] {
+				t.Fatalf("distinct source/runtime pairs share command %q", command.Name)
+			}
+			seen[command.Name] = true
+			if command.Cwd != root || !slices.Equal(command.Argv[len(command.Argv)-2:], []string{"src/other.py", "src/worker.py"}) {
+				t.Fatalf("command lost source ownership: %+v", command)
+			}
+			if manifest != "" {
+				venv, err := repo.Resolve(filepath.ToSlash(filepath.Join(filepath.Dir(manifest), ".venv")))
+				if err != nil || !slices.Contains(command.Argv, venv) || specification.environment != manifest {
+					t.Fatalf("command lost runtime: %+v, %v", specification, err)
+				}
+			}
+			focused, err := pythonTypecheckEnvironmentCommand(repo, project, sources[1:], manifest)
+			if err != nil || focused.command.Name != command.Name {
+				t.Fatalf("focused selection changed command identity: %+v, %v", focused, err)
+			}
+			commands = append(commands, gaterun.CommandSpec{
+				Category: gaterun.Check, Scope: "repository", Cost: "standard", Name: command.Name,
+				Argv: command.Argv, Cwd: command.Cwd, TimeoutSeconds: command.TimeoutSeconds,
+			})
+		}
+	}
+	_, err = gaterun.NewIdentity(gaterun.IdentityInput{
+		Gate: gaterun.MergeGate, RequestedBase: "main", ExactBase: strings.Repeat("a", 40), Candidate: strings.Repeat("b", 40), PolicyLevel: "full",
+		Release: gaterun.ReleaseIdentity{Version: "development", Digest: strings.Repeat("c", 64)}, ConfigurationSHA256: strings.Repeat("d", 64),
+		Platform: gaterun.Platform{OS: "darwin", Arch: "arm64"}, Commands: commands,
+		BehaviorReview: gaterun.BehaviorReview{
+			State: gaterun.BehaviorReviewNotRun, RequiredBoundary: gaterun.BehaviorReviewOnRequest,
+			SelectedFeatures: []gaterun.BehaviorReviewFeatureSelection{}, SelectionDigest: strings.Repeat("1", 64),
+		},
+	})
+	if err != nil {
+		t.Fatalf("nested runtime commands cannot start a gate: %v", err)
 	}
 }
 

@@ -770,8 +770,12 @@ func onlyAllowed(arguments []string, allowed string) bool {
 }
 
 func printReportWithMode(stdout, stderr io.Writer, report engine.Report, verbose bool) {
-	printReportCompletion(stdout, stderr, report)
-	printReportSummaryGroups(stdout, report.Summary)
+	detailed := detailedReportFindings(report.Display, verbose)
+	visible, advisories := terminalReportFindings(report.Findings, detailed)
+	printReportCompletion(stdout, stderr, report, advisories)
+	if detailed {
+		printReportSummaryGroups(stdout, report.Summary)
+	}
 	printFormattingOutcome(stdout, report.Formatting)
 	printGitEvidence(stdout, report)
 	printSecurityEvidence(stdout, report.Security)
@@ -783,7 +787,7 @@ func printReportWithMode(stdout, stderr io.Writer, report engine.Report, verbose
 	printAssessedSevereFindings(stdout, report.Assessed)
 	limit := report.Display.FindingLimit()
 	remaining := limit
-	findings := boundedReportItems(report.Findings, &remaining)
+	findings := boundedReportItems(visible, &remaining)
 	suppressed := boundedReportItems(report.Suppressed, &remaining)
 	assessed := boundedReportItems(report.Assessed, &remaining)
 	releaseAges := boundedReportItems(report.ReleaseAges, &remaining)
@@ -793,7 +797,7 @@ func printReportWithMode(stdout, stderr io.Writer, report engine.Report, verbose
 	printVulnerabilityAssessments(stdout, assessed)
 	printReleaseAgeAssessments(stdout, releaseAges)
 	displayed := len(findings) + len(suppressed) + len(assessed) + len(releaseAges)
-	total := len(report.Findings) + len(report.Suppressed) + len(report.Assessed) + len(report.ReleaseAges)
+	total := len(visible) + len(report.Suppressed) + len(report.Assessed) + len(report.ReleaseAges)
 	if omitted := total - displayed; omitted > 0 {
 		fmt.Fprintf(stdout, "OMITTED %d finding(s) from the bounded terminal view\n", omitted)
 	}

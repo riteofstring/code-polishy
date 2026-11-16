@@ -15,6 +15,14 @@ belongs to shared guidance and reports; consuming repositories need no triage
 ledger, duplicate checks or additional configuration. Follow-up commands remain
 available as optional investigation aids and do not select extra verification.
 
+The quality boundary marks these candidates with
+`fields.analysisOutcome: advisory-candidate` in the existing finding metadata.
+The terminal summarizes only warnings carrying that classification; it does not
+infer optionality from rule names, paths or remediation prose. Other warnings,
+including security coverage and dependency-maintenance notices, stay visible.
+Complete diagnostics and guidance remain in machine reports and explicit
+terminal inspection. No acknowledgement history or repository setting is needed.
+
 Vulture continues collecting every candidate at its existing 60% floor. Its
 scores describe analyzer categories: even a 100% unused argument can be required
 by a callback signature. Unused definitions, imports, attributes, and arguments
@@ -49,9 +57,13 @@ ordinary projects keep their automatically discovered environment.
 The Python project inventory continues assigning source to its original package.
 Only ty invocations are partitioned by the explicit environment, retaining the
 original working directory and import roots. Structured diagnostics must name
-files in that invocation's partition. A completed response records the runtime
-manifest and analyzed files even when it contains type errors. This evidence
-does not certify installation integrity or replace frozen-lock verification.
+files in that invocation's partition. Mapped commands use a bounded digest of
+the source-project root and runtime-manifest path as their immutable pair
+identity, so nested paths fit the gate's command-name limit. Source selection
+does not change that identity; complete paths remain in arguments and evidence.
+A completed response records the runtime manifest and analyzed files even when
+it contains type errors. This evidence does not certify installation integrity
+or replace frozen-lock verification.
 Ruff, Vulture, architecture contracts and module ownership are unchanged.
 
 Runtime contracts express supported behavior and do not expire by date. They

@@ -50,13 +50,15 @@ func pythonVultureFindingsForSources(repo repository.Repository, project reposit
 
 func pythonVultureDiagnosticFinding(diagnostic pythonVultureDiagnostic) policy.Finding {
 	severity := policy.FindingWarning
+	fields := map[string]string{"analysisOutcome": "advisory-candidate"}
 	remedy := "Advisory candidate: this warning requires no cleanup, investigation, waiver, or acknowledgement. If investigating this candidate, check runtime uses and public interfaces before removing a confirmed unused definition. Declare runtime contracts only to describe supported behavior."
 	if diagnostic.Kind == "unreachable_code" && diagnostic.Confidence == 100 {
 		severity = policy.FindingError
+		fields = nil
 		remedy = "Correct the unreachable control flow or remove the unreachable code after checking the intended behavior."
 	}
 	return policy.Finding{
-		Check: "quality.deadCode", Path: diagnostic.Path, Line: diagnostic.Line, Severity: severity,
+		Check: "quality.deadCode", Path: diagnostic.Path, Line: diagnostic.Line, Severity: severity, Fields: fields,
 		Subject: pythonVultureSubject(diagnostic), Message: pythonVultureMessage(diagnostic),
 		Remediation: policy.FindingRemediation{
 			Summary:     remedy,

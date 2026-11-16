@@ -300,3 +300,115 @@ func TestReportGuidanceUsesOnlyVisibleFindingsAndPreservesMachineData(t *testing
 		t.Fatalf("terminal grouping changed machine report data: %v", err)
 	}
 }
+
+func optionalAdvisoryReport() engine.Report {
+	report := engine.Report{
+		Protocol: engine.ReportProtocol, ReportPath: ".code-polishy-reports/check/example/report.json",
+		Summary: engine.ReportSummary{
+			Status: "passed", Warnings: 37, ByRule: map[string]int{"quality.deadCode": 37},
+			ByModule: map[string]int{"application": 37}, ByRelation: map[policy.SelectionRelation]int{policy.SelectionSelected: 37},
+		},
+	}
+	for index := range 37 {
+		report.Findings = append(report.Findings, policy.NormalizeFinding(policy.Finding{
+			Check: "quality.deadCode", Path: fmt.Sprintf("src/worker_%02d.py", index), Line: 3, Subject: "unused",
+			Message: fmt.Sprintf("unused candidate %02d", index), Severity: policy.FindingWarning,
+			Fields: map[string]string{"analysisOutcome": "advisory-candidate"},
+			Remediation: policy.FindingRemediation{
+				Summary: "Optional investigation guidance.", NextCommand: &policy.FindingCommand{Argv: []string{"code-polishy", "check", "--all"}, Cwd: "."},
+				Generation: &policy.GenerationRemediation{
+					Producer: "worker", Inputs: []string{"source/schema.json"},
+					Generate: policy.GenerationCommand{Argv: []string{"generate"}, Cwd: "."},
+					Verify:   policy.GenerationCommand{Argv: []string{"verify"}, Cwd: "."},
+				},
+			},
+		}))
+	}
+	return report
+}
+
+func TestOptionalAdvisoryReportIsCompactAndPreservesMachineEvidence(t *testing.T) {
+	t.Parallel()
+	report := optionalAdvisoryReport()
+	before, err := json.Marshal(report)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var output, diagnostics bytes.Buffer
+	printReportTo(&output, &diagnostics, report)
+	if diagnostics.Len() != 0 || engine.HasFindings(report) || strings.Count(output.String(), "\n") != 2 ||
+		!strings.Contains(output.String(), "PASS — 37 advisory warnings; no action required.") || !strings.Contains(output.String(), report.ReportPath) {
+		t.Fatalf("advisories are not a compact passing summary: stdout=%s stderr=%s", output.String(), diagnostics.String())
+	}
+	after, err := json.Marshal(report)
+	if err != nil || !bytes.Equal(before, after) {
+		t.Fatalf("terminal compaction changed the machine report: %v", err)
+	}
+	sarif, err := engine.SARIF(report)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, finding := range report.Findings {
+		for _, document := range [][]byte{after, sarif} {
+			if !bytes.Contains(document, []byte(finding.Message)) || !bytes.Contains(document, []byte(finding.Path)) || !bytes.Contains(document, []byte("Optional investigation guidance.")) {
+				t.Fatalf("machine evidence lost advisory %q", finding.Path)
+			}
+		}
+	}
+}
+
+func TestOptionalAdvisoryDetailsRequireExplicitInspection(t *testing.T) {
+	t.Parallel()
+	for name, test := range map[string]struct {
+		verbose bool
+		display engine.DisplayOptions
+		count   int
+	}{
+		"verbose":  {verbose: true, display: engine.DisplayOptions{Limit: 3}, count: 3},
+		"all":      {display: engine.DisplayOptions{All: true}, count: 37},
+		"filtered": {display: engine.DisplayOptions{Filters: engine.ReportFilters{Paths: []string{"src/worker_36.py"}}}, count: 1},
+		"grouped":  {display: engine.DisplayOptions{GroupBy: "module", Limit: 2}, count: 2},
+	} {
+		t.Run(name, func(t *testing.T) {
+			report := engine.ReportView(optionalAdvisoryReport(), test.display)
+			var output, diagnostics bytes.Buffer
+			printReportWithMode(&output, &diagnostics, report, test.verbose)
+			if diagnostics.Len() != 0 || strings.Count(output.String(), "WARN quality.deadCode") != test.count ||
+				!strings.Contains(output.String(), "Optional investigation guidance.") || !strings.Contains(output.String(), "optional:") ||
+				!strings.Contains(output.String(), "producer: worker") || !strings.Contains(output.String(), "COUNT RULE quality.deadCode: 37") {
+				t.Fatalf("explicit inspection lost advisory details: stdout=%s stderr=%s", output.String(), diagnostics.String())
+			}
+		})
+	}
+}
+
+func TestOptionalAdvisoriesDoNotCrowdOutBlockersOrHideOtherWarnings(t *testing.T) {
+	t.Parallel()
+	report := optionalAdvisoryReport()
+	report.Findings = append(report.Findings,
+		policy.Finding{Check: "supplyChain.gitSourceCoverage", Path: "uv.lock", Severity: policy.FindingWarning, Message: "coverage is unverified"},
+		policy.Finding{Check: "quality.typecheckEnvironment", Path: "worker/pyproject.toml", Severity: policy.FindingInformation, Message: "runtime evidence"},
+		policy.Finding{
+			Check: "quality.lint", Path: "broken.py", Severity: policy.FindingError, Message: "syntax is invalid",
+			Fields:      map[string]string{"analysisOutcome": "advisory-candidate"},
+			Remediation: policy.FindingRemediation{Summary: "Repair the syntax.", NextCommand: &policy.FindingCommand{Argv: []string{"check"}, Cwd: "."}},
+		},
+	)
+	report.Summary.Status, report.Summary.Errors, report.Summary.Warnings, report.Summary.Information = "failed", 1, 38, 1
+	for _, limit := range []int{1, 20} {
+		report.Display = &engine.ReportDisplay{Limit: limit}
+		var output, diagnostics bytes.Buffer
+		printReportTo(&output, &diagnostics, report)
+		if !strings.Contains(diagnostics.String(), "FAIL quality.lint") || !strings.Contains(diagnostics.String(), "next:") ||
+			!strings.Contains(output.String(), "37 advisory warnings; no action required for these advisories.") ||
+			strings.Contains(output.String(), "unused candidate") || strings.Contains(output.String(), "PASS") {
+			t.Fatalf("advisories obscured the failure: stdout=%s stderr=%s", output.String(), diagnostics.String())
+		}
+		if limit == 1 && !strings.Contains(output.String(), "OMITTED 2 finding(s)") {
+			t.Fatalf("collapsed advisories consumed the display budget: %s", output.String())
+		}
+		if limit == 20 && (!strings.Contains(output.String(), "WARN supplyChain.gitSourceCoverage") || !strings.Contains(output.String(), "INFO quality.typecheckEnvironment")) {
+			t.Fatalf("other warnings or evidence were hidden: %s", output.String())
+		}
+	}
+}

@@ -44,7 +44,7 @@ func pythonTypecheckEnvironmentCommand(repo repository.Repository, project repos
 	}
 	suffix := pythonQualityProjectName(project.Root)
 	if environment != "" {
-		suffix += "-environment-" + pythonQualityProjectName(environment)
+		suffix = "environment-" + safeName(project.Root+"\x00"+environment)
 	}
 	return pythonQualityCommand{
 		kind: pythonTyQualityKind, sources: slices.Clone(sources), environment: environment,

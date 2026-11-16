@@ -58,6 +58,41 @@ func printFindings(stdout, stderr io.Writer, findings []policy.Finding) {
 	guidance.print(stdout, stderr)
 }
 
+func detailedReportFindings(display *engine.ReportDisplay, verbose bool) bool {
+	if verbose {
+		return true
+	}
+	if display == nil {
+		return false
+	}
+	return display.All || display.GroupBy != "" || len(display.Filters.Rules) > 0 || len(display.Filters.Modules) > 0 ||
+		len(display.Filters.Paths) > 0 || len(display.Filters.Relations) > 0
+}
+
+func terminalReportFindings(findings []policy.Finding, detailed bool) ([]policy.Finding, int) {
+	visible := make([]policy.Finding, 0, len(findings))
+	advisories := 0
+	for _, finding := range findings {
+		if finding.Severity == policy.FindingWarning && finding.Fields["analysisOutcome"] == "advisory-candidate" {
+			advisories++
+			if !detailed {
+				continue
+			}
+		}
+		visible = append(visible, finding)
+	}
+	if !detailed {
+		sort.SliceStable(visible, func(left, right int) bool {
+			return blockingReportFinding(visible[left]) && !blockingReportFinding(visible[right])
+		})
+	}
+	return visible, advisories
+}
+
+func blockingReportFinding(finding policy.Finding) bool {
+	return finding.Severity != policy.FindingWarning && finding.Severity != policy.FindingInformation
+}
+
 func printGenerationRemediation(output io.Writer, generation *policy.GenerationRemediation) {
 	if generation == nil {
 		return
@@ -289,7 +324,7 @@ func printReportNotes(output io.Writer, notes []string, verbose bool) {
 	}
 }
 
-func printReportCompletion(stdout, stderr io.Writer, report engine.Report) {
+func printReportCompletion(stdout, stderr io.Writer, report engine.Report, advisories int) {
 	errors, warnings, information := report.Summary.Errors, report.Summary.Warnings, report.Summary.Information
 	if report.Protocol == "" {
 		errors, warnings, information = reportFindingTotals(report.Findings)
@@ -298,12 +333,22 @@ func printReportCompletion(stdout, stderr io.Writer, report engine.Report) {
 		fmt.Fprintf(stdout, "REVIEW REQUIRED errors=%d warnings=%d information=%d\n", errors, warnings, information)
 	} else if errors > 0 || report.GateRunPolicy != nil && report.GateRunPolicy.Status == "failed" {
 		fmt.Fprintf(stderr, "FAILED errors=%d warnings=%d information=%d\n", errors, warnings, information)
+	} else if advisories > 0 && advisories == warnings && information == 0 {
+		fmt.Fprintf(stdout, "PASS — %s; no action required.\n", findingCount(advisories, "advisory warning"))
+		return
 	} else if warnings > 0 {
 		fmt.Fprintf(stdout, "PASS with %s; errors=0 warnings=%d information=%d\n", findingCount(warnings, "warning"), warnings, information)
 	} else if information > 0 {
 		fmt.Fprintf(stdout, "PASS with %s; errors=0 warnings=0 information=%d\n", findingCount(information, "informational finding"), information)
 	} else {
 		fmt.Fprintln(stdout, "PASS errors=0 warnings=0 information=0")
+	}
+	printAdvisorySummary(stdout, advisories)
+}
+
+func printAdvisorySummary(stdout io.Writer, advisories int) {
+	if advisories > 0 {
+		fmt.Fprintf(stdout, "ADVISORIES: %s; no action required for these advisories.\n", findingCount(advisories, "advisory warning"))
 	}
 }
 

@@ -87,13 +87,13 @@ print(asdict(Selection()), Service().status(), callback(None), flow())
 	findings := vultureRemediationFindings(t, repo)
 	for _, name := range []string{"device", "recover", "unused_function", "unused_argument"} {
 		if !slices.ContainsFunc(findings, func(finding policy.Finding) bool {
-			return finding.Check == "quality.deadCode" && finding.Severity == policy.FindingWarning && strings.Contains(finding.Message, "'"+name+"'")
+			return finding.Check == "quality.deadCode" && finding.Severity == policy.FindingWarning && finding.Fields["analysisOutcome"] == "advisory-candidate" && strings.Contains(finding.Message, "'"+name+"'")
 		}) {
 			t.Fatalf("missing advisory for %s: %+v", name, findings)
 		}
 	}
 	if len(findings) != 5 || !slices.ContainsFunc(findings, func(finding policy.Finding) bool {
-		return finding.Check == "quality.deadCode" && finding.Severity == policy.FindingError && strings.Contains(finding.Message, "unreachable")
+		return finding.Check == "quality.deadCode" && finding.Severity == policy.FindingError && finding.Fields["analysisOutcome"] == "" && strings.Contains(finding.Message, "unreachable")
 	}) {
 		t.Fatalf("unreachable control flow lost its failure: %+v", findings)
 	}

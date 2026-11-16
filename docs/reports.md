@@ -32,7 +32,7 @@ passed = report["summary"]["status"] == "passed"
 ## Complete results and display
 
 `summary` includes total errors, warnings, information, suppressed findings,
-and reviewed findings. `findings` carries actionable occurrences with their
+and reviewed findings. `findings` carries all occurrences with their
 rule, path, `subject`, message, severity, and remedy. Accepted exceptions and
 assessments retain their own evidence instead of disappearing.
 
@@ -42,6 +42,25 @@ unreachable Python control flow, and missing analyzer evidence still fail.
 These warnings alone require no cleanup, investigation, waiver, or acknowledgement
 to complete a task. Investigate when relevant to the requested work or supported
 by evidence of a defect; repetition alone does not require another review.
+
+The default terminal view summarizes these candidates with a warning count and
+the complete report location. When they are the only findings, it reports, for
+example, `PASS — 37 advisory warnings; no action required.` Individual advisory
+diagnostics, explanations, follow-up commands and producer details are available
+in the complete report, or through explicit inspection with `--verbose`,
+`--display-limit all`, display filters or `--group-by`. Inspection also shows
+counts by rule, module and selection relation. A numeric `--display-limit`
+continues to bound listed findings; summarized advisories consume no slots.
+The default lists blockers first and keeps other warnings, such as unverified
+security coverage or dependency-maintenance notices, visible.
+
+These optional candidates carry `fields.analysisOutcome: advisory-candidate`.
+The terminal aggregates only warnings with that classification. This uses
+existing finding metadata; there is no repository setting or acknowledgement
+record. JSON and SARIF retain the diagnostics and guidance regardless of
+terminal aggregation. Display filters still select their requested machine view;
+the managed report remains complete.
+
 Focused Python checks state in `notes` that global dead-code analysis was not
 run. Project inventory in `analysisContext` alone does not prove analysis ran.
 When ty uses an explicitly mapped runtime, a `quality.typecheckEnvironment`

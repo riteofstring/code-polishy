@@ -63,6 +63,9 @@ func TestGeneratedJavaScriptAdvisesOnSemanticsAndFailsOnSyntax(t *testing.T) {
 	severities := map[string]policy.FindingSeverity{}
 	for _, finding := range findings {
 		severities[finding.Path] = policy.NormalizeFinding(finding).Severity
+		if (finding.Fields["analysisOutcome"] == "advisory-candidate") != (finding.Path == "generated/vendor.js") {
+			t.Fatalf("native lint lost the advisory classification: %+v", finding)
+		}
 	}
 	if len(findings) != 3 || severities["generated/vendor.js"] != policy.FindingWarning || severities["app/authored.js"] != policy.FindingError || severities["generated/broken.js"] != policy.FindingError {
 		t.Fatalf("generated syntax or authored enforcement changed: %+v", findings)

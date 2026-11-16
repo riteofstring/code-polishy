@@ -26,6 +26,9 @@ func TestProviderGeneratedSemanticsAreAdvisoryWithoutWeakeningSyntaxOrAuthoredCo
 	severities := map[string]policy.FindingSeverity{}
 	for _, finding := range findings {
 		severities[finding.Path] = policy.NormalizeFinding(finding).Severity
+		if (finding.Fields["analysisOutcome"] == "advisory-candidate") != (finding.Path == paths[0]) {
+			t.Fatalf("provider lost the advisory classification: %+v", finding)
+		}
 	}
 	if len(findings) != 3 || severities[paths[0]] != policy.FindingWarning || severities[paths[1]] != policy.FindingError || severities[paths[2]] != policy.FindingError {
 		t.Fatalf("provider findings lost core ownership policy: %+v", findings)

@@ -132,7 +132,19 @@ agent-owned decisions, without implying human sign-off. Assessed findings stay
 visible with their disposition and expiry. See
 [Dependency assessment decisions](dependency-assessments.md).
 
-The terminal renderer preserves individual finding facts and display order while
+The default terminal view summarizes optional analysis candidates by count and
+points to the complete report. The quality boundary records their classification
+in `fields.analysisOutcome`; warning severity alone does not establish optional
+investigation. The renderer aggregates only warnings classified as
+`advisory-candidate`, leaving other warnings and informational evidence visible.
+Aggregated candidates consume no finding-display slots, and blocking findings
+come first in the default view. Counts by rule, module and selection relation
+appear during explicit inspection through verbose output, unlimited display,
+filters or grouping. Those inspection modes also show individual advisories,
+respect their selected display bound and preserve the requested ordering.
+Presentation never changes the verdict, exit status or complete machine report.
+
+When listing findings, the terminal renderer preserves individual facts while
 referencing shared remedy, next-command, and producer blocks. These components
 group independently by their complete values, so different rules can share
 advice without conflating different command arguments, working directories, or
@@ -144,10 +156,10 @@ only: complete machine reports retain every finding's remediation and assessment
 
 Nonblocking follow-up commands and producer instructions are labeled as optional
 investigation. Suggested commands use `optional` rather than `next` in terminal
-references and blocks. The existing failure distinction already separates those
-groups from blocking recovery, so no additional action flag or report field is
-needed. Machine consumers interpret available actions using the finding's
-severity; command presence does not require execution or acknowledgement.
+references and blocks. The existing failure distinction separates those
+groups from blocking recovery. Machine consumers interpret available actions
+using the finding's severity; command presence does not require execution or
+acknowledgement.
 Other task and policy obligations remain independent of these command labels.
 
 Grouping indexes complete serialized values together with their output stream;

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Summarize optional analysis advisories in default terminal output, with full
+  details available in the complete report or explicit inspection. Preserve
+  other warnings, prioritize blockers and keep machine evidence complete.
+- Bound Python runtime-mapping command identities so nested source and runtime
+  paths cannot exceed the gate's command-name limit.
 - Make Python unused-code and generated JavaScript warning guidance explicitly
   optional, with no required cleanup, investigation, waiver or acknowledgement.
   Label nonblocking follow-up commands and producer instructions as optional

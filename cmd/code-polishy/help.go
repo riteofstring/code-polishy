@@ -599,6 +599,7 @@ func reportOutputHelp() []string {
 		"--output PATH atomically writes an explicit contained regular file instead of stdout.",
 		"--filter-rule, --filter-module, --filter-path, and --filter-relation are repeatable display-only filters.",
 		"--group-by rule|module|path|relation controls view ordering without changing the complete report.",
+		"Optional analysis advisories are summarized by default; --verbose, --display-limit all, or display filters/grouping show their diagnostics and guidance.",
 		fmt.Sprintf("--display-limit N|all bounds human findings from 1 through %d or lists every finding; the default is %d.", engine.MaximumFindingDisplayLimit, engine.DefaultFindingDisplayLimit),
 	}
 }
