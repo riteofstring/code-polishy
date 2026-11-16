@@ -47,6 +47,11 @@ type goReachabilityGateRunner struct {
 
 func (commandRunner *goReachabilityGateRunner) Execute(_ context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
 	command := invocation.Command
+	if strings.HasPrefix(command.Name, "govulncheck-") {
+		payload := `{"config":{"protocol_version":"v1.0.0","scan_mode":"source","scan_level":"symbol"}}
+{"SBOM":{"modules":[{"path":"example.test/content"}],"roots":["example.test/content"]}}`
+		return runner.Result{}, runner.Output{Stdout: []byte(payload)}, nil
+	}
 	if len(command.Argv) > 0 && filepath.Base(command.Argv[0]) == "osv-scanner" {
 		return runner.Result{}, runner.Output{Stdout: []byte(`{"results":[]}`)}, nil
 	}
