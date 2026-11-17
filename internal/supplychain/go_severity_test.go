@@ -7,6 +7,9 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/riteofstring/code-polishy/internal/policy"
 )
 
 func TestGoAdvisorySeverityUsesExactCurrentCVERecords(t *testing.T) {
@@ -39,10 +42,62 @@ func TestGoAdvisorySeverityUsesExactCurrentCVERecords(t *testing.T) {
 		{"unavailable", "", "unknown", true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			client := &goSeverityClient{t: t, payload: test.payload}
+			client := &goSeverityClient{t: t, payload: test.payload, githubPayload: `[]`}
 			advisory := osvVulnerability{ID: "GO-2026-0001", Aliases: []string{"CVE-2026-12345", "CVE-2026-12345", "GHSA-other"}}
 			severity, source, err := goAdvisorySeverity(t.Context(), client, advisory)
-			if severity != test.severity || (err != nil) != test.failure || client.calls != 1 || source == "" {
+			expectedCalls := 1
+			if test.name == "missing" {
+				expectedCalls = 2
+			}
+			if severity != test.severity || (err != nil) != test.failure || client.calls != expectedCalls || source == "" {
+				t.Fatalf("severity=%s source=%s err=%v requests=%d", severity, source, err, client.calls)
+			}
+		})
+	}
+}
+
+func TestGoScorelessCVERetainsExistingExactAssessment(t *testing.T) {
+	t.Parallel()
+	payload := strings.NewReplacer("GO-2026-0001", "GO-2023-2102", "CVE-2026-12345", "CVE-2023-39325", "v1.26.10", "v1.20.9", "v1.26.11", "v1.20.10", `,"database_specific":{"severity":"MODERATE"}`, "").Replace(cleanGoVulnerabilityReport + goTestAdvisory + goTestCall)
+	report, err := decodeGoVulnerabilityReport([]byte(payload))
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &goSeverityClient{
+		t: t, cve: "CVE-2023-39325",
+		payload:       `{"dataType":"CVE_RECORD","dataVersion":"5.1","cveMetadata":{"cveId":"CVE-2023-39325","state":"PUBLISHED"},"containers":{"cna":{"providerMetadata":{"shortName":"Go"}},"adp":[{"providerMetadata":{"shortName":"CVE"}}]}}`,
+		githubPayload: `[{"cve_id":"CVE-2023-39325","ghsa_id":"GHSA-4374-p667-p6c8","severity":"high","withdrawn_at":null}]`,
+	}
+	findings := goVulnerabilityFindings(t.Context(), "go.mod", report, client)
+	if len(findings) != 1 || findings[0].Vulnerability == nil || findings[0].Vulnerability.Severity != "high" || !strings.Contains(findings[0].Message, "GHSA-4374-p667-p6c8") {
+		t.Fatalf("findings=%+v", findings)
+	}
+	now := time.Now().UTC()
+	assessment := policy.VulnerabilityAssessment{ID: "client-only", Advisory: "CVE-2023-39325", Ecosystem: "go", Package: "stdlib", AffectedVersion: "v1.20.9", Scope: "go.mod", Severity: "high", Status: policy.NotAffectedAssessment, Expires: policy.Date{Time: now.AddDate(0, 0, 1)}}
+	kept, assessed := policy.ApplyVulnerabilityAssessments(findings, []policy.VulnerabilityAssessment{assessment}, now, policy.VulnerabilityObservations{Packages: true})
+	if len(kept) != 0 || len(assessed) != 1 || client.calls != 2 {
+		t.Fatalf("kept=%+v assessed=%+v requests=%d", kept, assessed, client.calls)
+	}
+}
+
+func TestGoScorelessCVERequiresCurrentExactGitHubSeverity(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name, payload, severity string
+		failure                 bool
+	}{
+		{"highest", `[{"cve_id":"CVE-2026-12345","ghsa_id":"GHSA-first","severity":"medium"},{"cve_id":"CVE-2026-12345","ghsa_id":"GHSA-second","severity":"critical"}]`, "critical", false},
+		{"unsupported", `[{"cve_id":"CVE-2026-12345","ghsa_id":"GHSA-example","severity":"unrated"}]`, "unknown", false},
+		{"withdrawn", `[{"cve_id":"CVE-2026-12345","ghsa_id":"GHSA-example","severity":"high","withdrawn_at":"2026-11-01T00:00:00Z"}]`, "unknown", false},
+		{"foreign", `[{"cve_id":"CVE-2026-54321","ghsa_id":"GHSA-example","severity":"high"}]`, "unknown", true},
+		{"malformed", `[`, "unknown", true},
+		{"null", `null`, "unknown", true},
+		{"unavailable", "", "unknown", true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			client := &goSeverityClient{t: t, payload: `{"dataType":"CVE_RECORD","dataVersion":"5.2","cveMetadata":{"cveId":"CVE-2026-12345","state":"PUBLISHED"},"containers":{"cna":{"metrics":[{"other":{"type":"ssvc"}}]}}}`, githubPayload: test.payload}
+			severity, source, err := goAdvisorySeverity(t.Context(), client, osvVulnerability{ID: "GO-2026-0001", Aliases: []string{"CVE-2026-12345"}})
+			if severity != test.severity || (err != nil) != test.failure || client.calls != 2 || source == "" {
 				t.Fatalf("severity=%s source=%s err=%v requests=%d", severity, source, err, client.calls)
 			}
 		})
@@ -85,19 +140,31 @@ func TestGoSeverityFailureKeepsAdvisoryAndCoverageError(t *testing.T) {
 }
 
 type goSeverityClient struct {
-	t       *testing.T
-	payload string
-	calls   int
+	t             *testing.T
+	cve           string
+	payload       string
+	githubPayload string
+	calls         int
 }
 
 func (client *goSeverityClient) Do(request *http.Request) (*http.Response, error) {
 	client.t.Helper()
 	client.calls++
-	if request.URL.Scheme != "https" || request.URL.Host != "cveawg.mitre.org" || request.URL.Path != "/api/cve/CVE-2026-12345" || request.URL.RawQuery != "" || request.Header.Get("Authorization") != "" {
+	cve := client.cve
+	if cve == "" {
+		cve = "CVE-2026-12345"
+	}
+	endpoint := *request.URL
+	endpoint.RawQuery = endpoint.Query().Encode()
+	payload, found := map[string]string{
+		"https://cveawg.mitre.org/api/cve/" + cve:                           client.payload,
+		"https://api.github.com/advisories?cve_id=" + cve + "&per_page=100": client.githubPayload,
+	}[endpoint.String()]
+	if !found || request.Header.Get("Authorization") != "" {
 		client.t.Fatalf("unexpected advisory request %s", request.URL.Redacted())
 	}
-	if client.payload == "" {
+	if payload == "" {
 		return nil, errors.New("advisory service unavailable")
 	}
-	return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(client.payload)), Header: http.Header{}}, nil
+	return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(payload)), Header: http.Header{}}, nil
 }

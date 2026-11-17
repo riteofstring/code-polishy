@@ -97,21 +97,29 @@ assessment cannot suppress.
 
 The Go vulnerability database commonly omits severity. When both its categorical
 severity and CVSS metadata are absent, Code Polishy obtains the current published
-CVE Program record for each exact CVE alias. Its public CVE Services endpoint
-requires no repository credentials and avoids shared anonymous GitHub API quotas.
-CVE records provide only severity; govulncheck continues to determine affected
+CVE Program record for each exact CVE alias. Scored records use its public CVE
+Services endpoint without consuming GitHub's shared anonymous API quota. These
+records provide only severity; govulncheck continues to determine affected
 modules and called symbols.
 
 The record must identify the requested CVE in the supported CVE 5 format.
 Published CNA and authorized data publisher containers contribute their CVSS
 2.0, 3.0, 3.1 and 4.0 base scores and categorical severity through the existing
 policy normalization. Metric names and versions must agree. Conflicting
-classifications retain the highest value; rejected records, unsupported or
-missing values remain unknown, and lookup failures also block coverage. An
-existing unsupported Go severity is never replaced with a more convenient
-classification. Lookups occur once per reported advisory within a module scan
-and run again on the next scan. Repositories use the existing exact assessment
-schema, with no custom scanner, severity override or command-output filter.
+classifications retain the highest value. A published record with no CVSS
+metrics retains the exact GitHub Advisory Database lookup: scoreless records
+such as CVE-2023-39325 must not erase GitHub's existing HIGH classification or
+invalidate an otherwise valid assessment. Unreviewed GitHub records can carry
+NVD classifications and need no package data for this narrow CVE lookup.
+Withdrawn or mismatched GitHub records cannot supply severity.
+
+Rejected CVEs and present but unsupported CVSS metadata remain unknown instead
+of selecting a more convenient classification. Missing severity across both
+sources stays unknown, and lookup failures also block coverage. An existing
+unsupported Go severity is never replaced. Lookups occur once per reported
+advisory within a module scan and run again on the next scan. Repositories use
+the existing exact assessment schema, with no custom scanner, severity override,
+credentials or command-output filter.
 
 ## Go toolchain containment
 

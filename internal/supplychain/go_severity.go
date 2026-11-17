@@ -69,11 +69,14 @@ func cveProgramSeverity(ctx context.Context, client artifactHTTPClient, cve stri
 	for _, container := range record.Containers.ADP {
 		metrics = append(metrics, container.Metrics...)
 	}
-	severity, source := cveMetricsSeverity(cve, metrics)
+	severity, source, present := cveMetricsSeverity(cve, metrics)
+	if !present {
+		return githubCVESeverity(ctx, client, cve)
+	}
 	return severity, source, nil
 }
 
-func cveMetricsSeverity(cve string, metrics []map[string]json.RawMessage) (string, string) {
+func cveMetricsSeverity(cve string, metrics []map[string]json.RawMessage) (string, string, bool) {
 	values, sources := []string{}, []string{}
 	for _, metric := range metrics {
 		for _, kind := range slices.Sorted(maps.Keys(metric)) {
@@ -85,9 +88,10 @@ func cveMetricsSeverity(cve string, metrics []map[string]json.RawMessage) (strin
 		}
 	}
 	if len(values) == 0 {
-		return "unknown", "CVE Program has no current severity for " + cve
+		return "unknown", "CVE Program has no current severity for " + cve, false
 	}
-	return resolveOSVSeverity(values, sources, slices.Contains(values, "unknown"))
+	severity, source := resolveOSVSeverity(values, sources, slices.Contains(values, "unknown"))
+	return severity, source, true
 }
 
 func cveCVSSSeverity(cve, kind string, payload json.RawMessage) (string, string) {
@@ -113,4 +117,40 @@ func cveCVSSSeverity(cve, kind string, payload json.RawMessage) (string, string)
 		return "unknown", origin + " has no severity or base score"
 	}
 	return resolveOSVSeverity(values, sources, slices.Contains(values, "unknown"))
+}
+
+func githubCVESeverity(ctx context.Context, client artifactHTTPClient, cve string) (string, string, error) {
+	endpoint := "https://api.github.com/advisories?cve_id=" + url.QueryEscape(cve) + "&per_page=100"
+	payload, err := fetchArtifactDocument(ctx, client, endpoint, "application/vnd.github+json")
+	if err != nil {
+		return "unknown", "", fmt.Errorf("resolve %s severity: %w", cve, err)
+	}
+	var records []struct {
+		CVEID       string `json:"cve_id"`
+		GHSAID      string `json:"ghsa_id"`
+		Severity    string
+		WithdrawnAt *string `json:"withdrawn_at"`
+	}
+	if err := json.Unmarshal(payload, &records); err != nil || records == nil || len(records) >= 100 {
+		return "unknown", "", fmt.Errorf("resolve %s severity: invalid or incomplete GitHub advisory response", cve)
+	}
+	values, sources := []string{}, []string{}
+	unsupported := false
+	for _, record := range records {
+		if record.CVEID != cve || !strings.HasPrefix(record.GHSAID, "GHSA-") {
+			return "unknown", "", fmt.Errorf("resolve %s severity: GitHub advisory identity mismatch", cve)
+		}
+		if record.WithdrawnAt != nil {
+			continue
+		}
+		value := policy.NormalizeVulnerabilitySeverity(record.Severity)
+		unsupported = unsupported || value == "unknown"
+		values = append(values, value)
+		sources = append(sources, fmt.Sprintf("GitHub %s (%s) severity=%q", record.GHSAID, cve, record.Severity))
+	}
+	if len(values) == 0 {
+		return "unknown", "GitHub has no current severity for " + cve, nil
+	}
+	severity, source := resolveOSVSeverity(values, sources, unsupported)
+	return severity, source, nil
 }
