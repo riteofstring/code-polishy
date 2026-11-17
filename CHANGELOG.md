@@ -15,8 +15,9 @@
   Label nonblocking follow-up commands and producer instructions as optional
   investigation aids while retaining blocking recovery guidance.
 - Preserve exact Go advisory identities from govulncheck so existing vulnerability
-  assessments apply. Resolve missing severity from current CVE metadata, retain
-  raw source-scan evidence, and keep incomplete scans and unknown severity blocking.
+  assessments apply. Resolve missing severity from current public CVE Program
+  records, avoiding the GitHub API's anonymous request limit. Retain raw
+  source-scan evidence, and keep incomplete scans and unknown severity blocking.
 - Allow explicitly configured test and check timeouts up to 24 hours while
   retaining existing defaults and execution-profile requirements.
 - Report unused container vulnerability assessments only after their target

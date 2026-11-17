@@ -96,17 +96,22 @@ process or incomplete report remains an operational finding, which an advisory
 assessment cannot suppress.
 
 The Go vulnerability database commonly omits severity. When both its categorical
-severity and CVSS metadata are absent, Code Polishy obtains the current GitHub
-Advisory Database classification for each exact CVE alias. GitHub provides only
-severity; govulncheck continues to determine affected modules and called symbols.
-Unreviewed GitHub records can carry NVD classifications and need no package data
-for this narrow CVE lookup. Withdrawn records cannot supply severity. Conflicting
-classifications retain the highest value; unsupported or missing values remain
-unknown, and lookup failures also block coverage. An existing unsupported Go
-severity is never replaced with a more convenient classification. Lookups occur
-once per reported advisory within a module scan and run again on the next scan.
-Repositories use the existing exact assessment schema, with no custom scanner,
-severity override or command-output filter.
+severity and CVSS metadata are absent, Code Polishy obtains the current published
+CVE Program record for each exact CVE alias. Its public CVE Services endpoint
+requires no repository credentials and avoids shared anonymous GitHub API quotas.
+CVE records provide only severity; govulncheck continues to determine affected
+modules and called symbols.
+
+The record must identify the requested CVE in the supported CVE 5 format.
+Published CNA and authorized data publisher containers contribute their CVSS
+2.0, 3.0, 3.1 and 4.0 base scores and categorical severity through the existing
+policy normalization. Metric names and versions must agree. Conflicting
+classifications retain the highest value; rejected records, unsupported or
+missing values remain unknown, and lookup failures also block coverage. An
+existing unsupported Go severity is never replaced with a more convenient
+classification. Lookups occur once per reported advisory within a module scan
+and run again on the next scan. Repositories use the existing exact assessment
+schema, with no custom scanner, severity override or command-output filter.
 
 ## Go toolchain containment
 
