@@ -2158,19 +2158,6 @@
         "owner": "Codex",
         "reviewed": "2026-10-23",
         "expires": "2026-11-20"
-      },
-      {
-        "id": "go-1-26-10-x509-security-fix",
-        "ecosystem": "artifact",
-        "package": "go",
-        "version": "1.26.10",
-        "scope": "scripts/go_version.txt",
-        "category": "security-fix",
-        "evidence": "https://github.com/riteofstring/code-polishy/blob/main/docs/security/dependency-assessments.md",
-        "reason": "GO-2026-6809 permits known compromised intermediates during TLS verification on hosts whose trust stores still accept them. An intercepting peer can forge release-age metadata used for dependency admission. No aged fix exists, and requiring trust-store repair on every supported host cannot enforce this boundary; the narrow official x509 patch is safer than waiting through 2026-11-18.",
-        "owner": "Codex",
-        "reviewed": "2026-10-21",
-        "expires": "2026-11-18"
       }
     ],
     "vulnerabilityAssessments": [
@@ -2239,8 +2226,8 @@
         "impact": "Repository-controlled authorities cannot reach fast-uri host canonicalization or a host-based authorization decision through the provider.",
         "evidence": "https://github.com/riteofstring/code-polishy/blob/main/docs/security/dependency-assessments.md",
         "owner": "Codex",
-        "reviewed": "2026-10-23",
-        "expires": "2026-11-19"
+        "reviewed": "2026-11-20",
+        "expires": "2026-12-07"
       },
       {
         "id": "provider-fast-uri-suffix-scheme-unreachable",
@@ -2256,8 +2243,8 @@
         "impact": "Repository input cannot reach suffix serialization and become an executable URI through the provider.",
         "evidence": "https://github.com/riteofstring/code-polishy/blob/main/docs/security/dependency-assessments.md",
         "owner": "Codex",
-        "reviewed": "2026-10-23",
-        "expires": "2026-11-19"
+        "reviewed": "2026-11-20",
+        "expires": "2026-12-07"
       },
       {
         "id": "provider-fast-uri-encoded-scheme-unreachable",
@@ -2273,8 +2260,8 @@
         "impact": "Repository-controlled percent-encoded schemes cannot become executable URLs or authorization keys through fast-uri in this provider.",
         "evidence": "https://github.com/riteofstring/code-polishy/blob/main/docs/security/dependency-assessments.md",
         "owner": "Codex",
-        "reviewed": "2026-10-23",
-        "expires": "2026-11-19"
+        "reviewed": "2026-11-20",
+        "expires": "2026-12-07"
       },
       {
         "id": "provider-fast-uri-relative-path-unreachable",
@@ -2290,8 +2277,8 @@
         "impact": "Repository-controlled relative references cannot reach fast-uri and be conflated into resource, cache, or authorization identities through the provider.",
         "evidence": "https://github.com/riteofstring/code-polishy/blob/main/docs/security/dependency-assessments.md",
         "owner": "Codex",
-        "reviewed": "2026-10-23",
-        "expires": "2026-11-19"
+        "reviewed": "2026-11-20",
+        "expires": "2026-12-07"
       },
       {
         "id": "tooling-zod-configuration-unreachable",

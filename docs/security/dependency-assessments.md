@@ -8,6 +8,8 @@ Zod configuration boundaries and available fixes rechecked on 2026-11-08 UTC.
 Minimatch globparts amplification, resolved callers, and available fixes
 rechecked on 2026-11-16 UTC.
 Go HTTP/1 server body-limit applicability reviewed on 2026-11-16 UTC.
+Fast-uri service boundaries and current advisories rechecked on 2026-11-20 UTC;
+the completed Go toolchain early-admission exception was removed that day.
 Assessment owner: Codex.
 
 The vulnerability assessments cover `go.mod`, `tools/javascript/pnpm-lock.yaml`
@@ -24,13 +26,15 @@ toolchain admission addresses certificate verification during online dependency 
 
 ## Go toolchain
 
-Admit official Go 1.26.10, replacing 1.26.9, under the exact
-`go-1-26-10-x509-security-fix` release-age assessment. This admits the fixed
-compiler and carried SDK; it does not suppress a vulnerability. Go's
+Official Go 1.26.10 replaced 1.26.9 under the exact
+`go-1-26-10-x509-security-fix` release-age assessment. That temporary admission
+was removed on November 20 after the compiler and carried SDK reached the
+ordinary minimum age. It did not suppress a vulnerability. Go's
 [release history](https://go.dev/doc/devel/release#go1.26.10) dates it to
 2026-10-19. With the validator's conservative end-of-day bound, it reaches
-30 days on 2026-11-19 at 00:00:00 UTC. The admission expires at the end of
-2026-11-18 UTC, covering only that waiting period.
+30 days on 2026-11-19 at 00:00:00 UTC. The admission expired at the end of
+2026-11-18 UTC, covering only that waiting period. The following records its
+original exposure and admission analysis.
 
 ### Exposure and the cost of waiting
 
@@ -305,16 +309,28 @@ temporary dependency was restored afterward. This exercises the existing
 provider contract without changing production dependencies or test sources.
 
 All four advisories are fixed in the official 3.1.9 release, published on
-2026-10-19 at 23:05:26.357 UTC. It reaches the 30-day minimum on 2026-11-18 at
-23:05:26.357 UTC. The alternative fixed lines, 2.4.8 and 4.2.3, were also
-published on October 19 and provide no aged replacement. Introducing fresh
-parser code now would add supply-chain and regression risk without removing a
-reachable vulnerability from the enabled provider. Retain the aged 3.1.8
-resolution with four exact assessments owned by Codex, reviewed October 23,
-and expiring November 19. On November 19, review and admit 3.1.9 or a later
-aged fixed candidate, generate the minimal lock change without scripts, run
-dependency review, install frozen with scripts disabled, verify the provider
-boundary and security profile, and remove these assessments.
+2026-10-19 at 23:05:26.357 UTC. It reached the 30-day minimum on November 18;
+the alternative fixed lines 2.4.8 and 4.2.3 were also published October 19.
+
+The November 20 review re-read all four upstream advisories, which retain
+their October 23 descriptions, affected ranges and low or moderate severities.
+None is withdrawn or present in CISA's November 18 known-exploited catalog.
+Reinspection of the current provider's `checkerFor` confirms that it constructs
+only TypeScript and, when enabled, Astro services. The exact resolved Astro
+2.16.11 entry points still register YAML only in the omitted full
+language-server plugin. Repository inputs cannot add that service. The resolved
+dependency versions are unchanged, so the prior integrity-bound archive trace
+and load-counter evidence remain applicable; the load-counter experiment was
+not repeated for this renewal.
+
+Retain the aged 3.1.8 under four exact `not-affected` assessments owned by Codex,
+reviewed November 20 and expiring December 7. An aged fix is now available,
+but changing this unused dependency adds no demonstrated security benefit to
+the enabled provider. Reassess by December 7 or on any service, dependency or
+advisory change. Before enabling an affected caller, adopt 3.1.9 or a later
+aged fixed candidate through script-free lock generation, dependency review,
+frozen installation and provider boundary/security verification, and remove
+the corresponding assessments.
 
 Enabling Astro's full language server, the YAML service, an Ajv 8 consumer, or
 another fast-uri caller invalidates this conclusion and requires a new exposure

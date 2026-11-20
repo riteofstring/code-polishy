@@ -4,10 +4,10 @@
   "reassessBy": "2026-12-07T00:00:00Z",
   "openVex": {
     "@context": "https://openvex.dev/ns/v0.2.0",
-    "@id": "https://github.com/riteofstring/code-polishy/releases/tag/scanner-v1.0.1#openvex",
+    "@id": "https://github.com/riteofstring/code-polishy/releases/tag/scanner-v1.0.2#openvex",
     "author": "Codex",
-    "timestamp": "2026-11-16T20:33:34Z",
-    "version": 6,
+    "timestamp": "2026-11-20T05:01:35Z",
+    "version": 7,
     "statements": [
       {
         "vulnerability": {
@@ -34,10 +34,36 @@
         "status": "not_affected",
         "justification": "vulnerable_code_not_present",
         "impact_statement": "Codex rechecked GO-2026-6860 on 2026-11-16 against the unchanged image and November 8 binary evidence for both pinned Linux amd64 and arm64 executables. Validated Go runtime function-name tables, including inlined functions, contain html.init and charset routines but none of the affected HTML Parse entry points or parser methods. The vulnerable text-node coalescing code is absent from both binaries; x/net v0.60.0 remains present. Exact platform and executable digests, positive controls and reproducible inspection are in the immutable evidence. Reassess by 2026-12-07 UTC and on image, build, execution-contract or advisory changes."
+      },
+      {
+        "vulnerability": {
+          "name": "CVE-2026-97054"
+        },
+        "products": [
+          {
+            "@id": "pkg:golang/stdlib@v1.27.3"
+          }
+        ],
+        "status": "not_affected",
+        "justification": "vulnerable_code_not_in_execute_path",
+        "impact_statement": "Codex reviewed GO-2026-6859 on 2026-11-20. The race requires an HTTP/1 server response writer and concurrent body-limit handling. Enabled version, registry-client database download and standalone archive scans create no HTTP server or handler. Inputs cannot enable server mode. Reassess by 2026-12-07 or on image, contract, input or advisory changes."
+      },
+      {
+        "vulnerability": {
+          "name": "CVE-2026-95839"
+        },
+        "products": [
+          {
+            "@id": "pkg:golang/github.com/containerd/containerd/v2@v2.4.1"
+          }
+        ],
+        "status": "not_affected",
+        "justification": "vulnerable_code_not_in_execute_path",
+        "impact_statement": "Codex reviewed GHSA-vwhp-8p66-mq4f on 2026-11-20. Archive readers and OCI database download use go-containerregistry, not containerd transfer or SetChildrenMappedLabels. Inputs cannot enable a containerd service or content-store labeling. This excludes the separate host daemon. Reassess by 2026-12-07 or on image, contract, input or advisory changes."
       }
     ]
   },
-  "evidence": "Scanner execution-path and binary evidence: https://github.com/riteofstring/code-polishy/blob/5aef31a07f0904c7fd1c05cf6e9f0573d371501f/docs/design/trivy-scanner-assessments.md . Both assessments bind this exact image and code-polishy-trivy/v1.",
-  "packageVersion": "1.0.1",
+  "evidence": "Execution-path and binary evidence: https://github.com/riteofstring/code-polishy/blob/bacaf2e32e02dacc972dac9a70f52b53bb744b3c/docs/design/trivy-scanner-assessments.md . All statements bind this image and code-polishy-trivy/v1.",
+  "packageVersion": "1.0.2",
   "version": "0.76.1"
 }
