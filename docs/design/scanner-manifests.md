@@ -112,7 +112,11 @@ repository's immutable-release setting freezes the completed publication.
 
 The publisher owns renewal before expiry. A daily `Scanner renewal deadline`
 workflow verifies the latest public scanner package with the locked consumer's
-`scanner-update` preview and fails seven days before its deadline. It reads
+`scanner-update` preview and fails seven days before its deadline. It also runs
+the existing installed scanner/self-scan and scratch-image verification with
+fresh advisory data, using that same published package and locked engine. Unused
+non-exposure statements produce warnings; new blocking findings or incomplete
+scans fail the daily check. It reads
 published releases rather than the unsigned working candidate, so an unpublished
 renewal cannot conceal an outage. It neither signs packages nor changes consumer
 locks. The maintainer responsible for `scanner-publication` owns the alert and

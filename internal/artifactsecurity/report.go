@@ -154,6 +154,12 @@ func renderMarkdown(report artifactReport) string {
 			fmt.Fprintf(builder, "- **%s** — %s: %s\n", markdownText(accepted.Finding.ID), markdownText(accepted.Justification), markdownText(accepted.ImpactStatement))
 		}
 	}
+	if len(report.UnusedAssessments) > 0 {
+		builder.WriteString("\n## Unused OpenVEX assessments (warnings)\n\nNo matching vulnerability was observed; these assessments authorized no suppression.\n\n")
+		for _, assessment := range report.UnusedAssessments {
+			fmt.Fprintf(builder, "- **%s** — `%s`\n", markdownText(assessment.Advisory), markdownText(assessment.Product))
+		}
+	}
 	return builder.String()
 }
 

@@ -630,8 +630,10 @@ missing-coverage finding, never a workspace that declared nothing.
   `reviewed` and `expires` inside the new window; high and critical still
   require `not-affected`. Otherwise remediate the dependency.
 - Applied assessments remain visible as `VULN-ACCEPTANCE` findings, including
-  disposition, actual owner, and expiry. Changed, expired, and unused
-  assessments fail the complete online profile. Scanner failures and findings
+  disposition, actual owner, and expiry. Changed and expired assessments fail
+  the complete online profile. Unused valid `not-affected` assessments warn after
+  completed observations; they accept no finding. Unused `risk-accepted`
+  exceptions remain blocking. Scanner failures and findings
   without a complete structured identity are never assessable.
 - An advisory page or generic commit listing is not this repository's exposure
   analysis or remediation plan. Link to the real technical record; do not

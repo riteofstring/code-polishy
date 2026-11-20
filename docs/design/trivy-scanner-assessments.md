@@ -18,7 +18,8 @@ Code Polishy copies only its executable and CA bundle into the scanner image.
 [Trivy 0.76.1](https://github.com/aquasecurity/trivy/releases/tag/v0.76.1)
 explicitly corrects CVE-2026-111943 through the patched Go runtime and an updated
 CA bundle. The exact `trivy-0-76-1-x509-security-fix` admission covers the period
-until it reaches 30 days on November 20 at 11:18:34 UTC; it expires that day.
+until it reached 30 days on November 20 at 11:18:34 UTC. The admission was
+removed after that boundary; the unchanged version now meets ordinary age policy.
 
 The previous Go 1.26.6 runtime can accept certificates issued through compromised
 intermediates during the scanner's HTTPS advisory-database download. An attacker
@@ -397,7 +398,7 @@ Retaining this image avoids a new scanner binary without a demonstrated
 security benefit for these unreachable paths. Evaluate an admitted official
 Trivy release containing Go 1.27.4 or later and containerd 2.4.2 or later by
 December 7; remove each statement when its affected package leaves the image.
-The existing certificate-fix admission remains bounded to its original date.
+The certificate-fix admission ended when the unchanged version met ordinary age policy.
 The signed candidate must pass fresh-database scanner and scratch-image checks
 on native Linux amd64 and arm64 before publication. Accepted findings remain
 visible, and unrelated or unmatched findings continue to block.
@@ -409,8 +410,16 @@ signature, exact image, execution contract, and assessment deadline are verified
 before the statement can authorize a suppression. See
 [Scanner manifests](scanner-manifests.md) and
 [Publisher setup](../scanner-publisher-setup.md).
-Every statement must match an observed advisory and package PURL. New or
-unmatched findings, changed findings, and unused statements remain blocking.
+Every suppressed finding must match an exact assessed advisory and package PURL.
+Assessments authorize suppression; they are not an inventory that the changing
+advisory database must reproduce. A valid statement with no observed matching
+vulnerability produces a maintenance warning in command and artifact reports,
+authorizes no suppression, and needs no replacement manifest. If the finding
+returns, the same exact statement can apply while its signature and deadline
+remain valid. A statement matching an observed vulnerability but failing to
+suppress it still blocks. New or unmatched findings, changed findings, invalid
+signatures, expired assessments, and incomplete scans remain blocking.
+Scanner and target OpenVEX use this same reconciliation rule.
 Target OpenVEX and generic dependency assessments cannot override these
 publisher-authenticated decisions.
 

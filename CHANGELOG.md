@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.34.1 - 2026-11-20
+
+- Keep scanner and application verification working when advisory data stops
+  reporting a previously assessed vulnerability. Unused valid non-exposure
+  assessments warn and authorize no suppression; exact matching, expiry,
+  signatures, incomplete scans and new findings retain their enforcement.
+- Keep unused risk-acceptance exceptions blocking, while unused package
+  `not-affected` assessments produce maintenance warnings.
+- Add fresh installed scanner and scratch-image verification to the daily
+  publisher check, using the latest published scanner package.
+- Bundle published scanner package `1.0.2` and remove the Trivy early-age
+  admission now that the unchanged version meets the ordinary waiting period.
+
 ## 0.34.0 - 2026-11-16
 
 - Bundle published scanner package `1.0.1`, renewing its exact Trivy `0.76.1`

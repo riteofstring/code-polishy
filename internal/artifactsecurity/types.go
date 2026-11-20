@@ -70,6 +70,7 @@ type acceptedFinding struct {
 }
 
 type artifactReport struct {
+	UnusedAssessments    []openVEXAssessment `json:"unusedAssessments,omitempty"`
 	Platform             string              `json:"platform"`
 	ScannerPackageSHA256 string              `json:"scannerPackageSha256"`
 	Version              int                 `json:"version"`

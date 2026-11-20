@@ -102,7 +102,7 @@ func TestParseTrivyReportRejectsNonBlockingSeverity(t *testing.T) {
 	}
 }
 
-func TestOpenVEXReconciliationIsExactAndRejectsUnusedStatements(t *testing.T) {
+func TestOpenVEXReconciliationKeepsUnusedStatementsSeparate(t *testing.T) {
 	t.Parallel()
 	finding := normalizedFinding{
 		Artifact: "agent", Kind: "vulnerability", ID: "CVE-2026-1000", Severity: "HIGH",
@@ -113,14 +113,31 @@ func TestOpenVEXReconciliationIsExactAndRejectsUnusedStatements(t *testing.T) {
 		Justification: "vulnerable_code_not_in_execute_path", ImpactStatement: "The affected call path is not present in this artifact.",
 	}
 	key := openVEXKey(assessment.Advisory, assessment.Product)
-	blocking, accepted, err := reconcileOpenVEX([]normalizedFinding{finding}, nil, map[string]openVEXAssessment{key: assessment})
-	if err != nil || len(blocking) != 0 || len(accepted) != 1 {
+	blocking, accepted, unused, err := reconcileOpenVEX([]normalizedFinding{finding}, nil, map[string]openVEXAssessment{key: assessment})
+	if err != nil || len(blocking) != 0 || len(accepted) != 1 || len(unused) != 0 {
 		t.Fatalf("blocking=%+v accepted=%+v err=%v", blocking, accepted, err)
 	}
 	extra := assessment
 	extra.Advisory = "CVE-2026-2000"
-	if _, _, err := reconcileOpenVEX([]normalizedFinding{finding}, nil, map[string]openVEXAssessment{key: assessment, openVEXKey(extra.Advisory, extra.Product): extra}); err == nil {
-		t.Fatal("unused OpenVEX statement was accepted")
+	blocking, accepted, unused, err = reconcileOpenVEX([]normalizedFinding{finding}, nil, map[string]openVEXAssessment{key: assessment, openVEXKey(extra.Advisory, extra.Product): extra})
+	if err != nil || len(blocking) != 0 || len(accepted) != 1 || len(unused) != 1 || unused[0] != extra {
+		t.Fatalf("unused assessment altered enforcement: %v %v %v %v", blocking, accepted, unused, err)
+	}
+	for _, test := range []struct {
+		name               string
+		observed, enforced []normalizedFinding
+		assessments        map[string]openVEXAssessment
+	}{
+		{"unsuppressed", []normalizedFinding{finding}, []normalizedFinding{finding}, map[string]openVEXAssessment{key: assessment}},
+		{"unassessed", []normalizedFinding{finding}, nil, nil},
+		{"introduced", nil, []normalizedFinding{finding}, nil},
+		{"non-vulnerability", []normalizedFinding{{Kind: "secret", ID: finding.ID, PackagePURL: finding.PackagePURL}}, nil, map[string]openVEXAssessment{key: assessment}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if _, _, _, err := reconcileOpenVEX(test.observed, test.enforced, test.assessments); err == nil {
+				t.Fatal("invalid suppression was accepted")
+			}
+		})
 	}
 }
 
@@ -144,8 +161,8 @@ func TestOpenVEXEmptyAssessmentsRetainBlockingFindings(t *testing.T) {
 			t.Fatal(err)
 		}
 		finding := normalizedFinding{Kind: "vulnerability", ID: "CVE-2026-111943", Severity: "HIGH", PackagePURL: "pkg:golang/stdlib@v1.26.6"}
-		blocking, accepted, err := reconcileOpenVEX([]normalizedFinding{finding}, []normalizedFinding{finding}, assessments)
-		if err != nil || len(blocking) != 1 || len(accepted) != 0 {
+		blocking, accepted, unused, err := reconcileOpenVEX([]normalizedFinding{finding}, []normalizedFinding{finding}, assessments)
+		if err != nil || len(blocking) != 1 || len(accepted) != 0 || len(unused) != 0 {
 			t.Fatalf("empty policy changed findings: blocking=%+v accepted=%+v err=%v", blocking, accepted, err)
 		}
 	}

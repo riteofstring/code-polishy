@@ -40,10 +40,10 @@ type openVEXStatement struct {
 }
 
 type openVEXAssessment struct {
-	Advisory        string
-	Product         string
-	Justification   string
-	ImpactStatement string
+	Advisory        string `json:"advisory"`
+	Product         string `json:"product"`
+	Justification   string `json:"justification"`
+	ImpactStatement string `json:"impactStatement"`
 }
 
 func parseOpenVEX(path string, now time.Time) (map[string]openVEXAssessment, error) {
@@ -149,7 +149,7 @@ func reconcileOpenVEX(
 	observed []normalizedFinding,
 	enforced []normalizedFinding,
 	assessments map[string]openVEXAssessment,
-) ([]normalizedFinding, []acceptedFinding, error) {
+) ([]normalizedFinding, []acceptedFinding, []openVEXAssessment, error) {
 	remaining := normalizedFindingCounts(enforced)
 	used := map[string]bool{}
 	accepted := []acceptedFinding{}
@@ -160,12 +160,12 @@ func reconcileOpenVEX(
 			continue
 		}
 		if finding.Kind != "vulnerability" || finding.PackagePURL == "" {
-			return nil, nil, fmt.Errorf("OpenVEX suppressed non-vulnerability finding %s/%s", finding.Kind, finding.ID)
+			return nil, nil, nil, fmt.Errorf("OpenVEX suppressed non-vulnerability finding %s/%s", finding.Kind, finding.ID)
 		}
 		key := openVEXKey(finding.ID, finding.PackagePURL)
 		assessment, exists := assessments[key]
 		if !exists {
-			return nil, nil, fmt.Errorf("OpenVEX suppressed unassessed finding %s", key)
+			return nil, nil, nil, fmt.Errorf("OpenVEX suppressed unassessed finding %s", key)
 		}
 		used[key] = true
 		accepted = append(accepted, acceptedFinding{
@@ -174,12 +174,7 @@ func reconcileOpenVEX(
 	}
 	for _, key := range sortedFindingKeys(remaining) {
 		if remaining[key] != 0 {
-			return nil, nil, fmt.Errorf("OpenVEX enforcement introduced or changed finding %q", key)
-		}
-	}
-	for key := range assessments {
-		if !used[key] {
-			return nil, nil, fmt.Errorf("OpenVEX assessment %q did not match an observed suppression", key)
+			return nil, nil, nil, fmt.Errorf("OpenVEX enforcement introduced or changed finding %q", key)
 		}
 	}
 	blocking := append([]normalizedFinding{}, enforced...)
@@ -187,7 +182,31 @@ func reconcileOpenVEX(
 	slices.SortFunc(accepted, func(left, right acceptedFinding) int {
 		return strings.Compare(normalizedFindingKey(left.Finding), normalizedFindingKey(right.Finding))
 	})
-	return blocking, accepted, nil
+	unused, err := unusedOpenVEXAssessments(observed, assessments, used)
+	return blocking, accepted, unused, err
+}
+
+func unusedOpenVEXAssessments(observed []normalizedFinding, assessments map[string]openVEXAssessment, used map[string]bool) ([]openVEXAssessment, error) {
+	seen := map[string]bool{}
+	for _, finding := range observed {
+		if finding.Kind == "vulnerability" {
+			seen[openVEXKey(finding.ID, finding.PackagePURL)] = true
+		}
+	}
+	unused := []openVEXAssessment{}
+	for key := range assessments {
+		if used[key] {
+			continue
+		}
+		if seen[key] {
+			return nil, fmt.Errorf("OpenVEX assessment %q did not match an observed suppression", key)
+		}
+		unused = append(unused, assessments[key])
+	}
+	slices.SortFunc(unused, func(left, right openVEXAssessment) int {
+		return strings.Compare(openVEXKey(left.Advisory, left.Product), openVEXKey(right.Advisory, right.Product))
+	})
+	return unused, nil
 }
 
 func validAdvisoryID(value string) bool {

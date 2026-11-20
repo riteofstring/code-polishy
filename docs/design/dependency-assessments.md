@@ -34,8 +34,12 @@ missing value blocks the finding through a policy finding instead of failing
 configuration loading, so `upgrade plan` still works for repositories with older
 acceptances and reports them as new errors. Reports identify the actual assessment
 owner separately from the approver.
-Exact matching, expiry, severity ceilings, and unused-assessment checks still
-apply to both dispositions.
+Exact matching, expiry, and severity ceilings still apply to both dispositions.
+An unused valid `not-affected` assessment warns: advisory databases may remove or
+reclassify findings without changing the assessed code. It accepts nothing while
+absent and can apply again only to its exact coordinates. An unused
+`risk-accepted` exception remains blocking so obsolete exposure permissions must
+be removed. Neither status can hide new findings or incomplete observations.
 
 Container findings use the same mechanism with narrower limits. OpenVEX remains
 the only container non-exposure surface, so a `container` assessment can only be

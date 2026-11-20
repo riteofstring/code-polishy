@@ -100,7 +100,7 @@ func (state *scannerRuntime) scan(
 		return scanOutput{}, err
 	}
 	artifact.imageID = imageID
-	blocking, accepted, err := state.applyArtifactOpenVEX(ctx, operation, target, artifact, outputDirectory, mounts, observed, imageID)
+	blocking, accepted, unused, err := state.applyArtifactOpenVEX(ctx, operation, target, artifact, outputDirectory, mounts, observed, imageID)
 	if err != nil {
 		return scanOutput{}, err
 	}
@@ -114,7 +114,7 @@ func (state *scannerRuntime) scan(
 	if artifact.mode == "scanner" && !state.policy.ReassessBy.After(time.Now().UTC()) {
 		return scanOutput{}, errors.New("scanner assessment expired during scanning")
 	}
-	return buildScanOutput(state, target, artifact, started, database, archiveHash, sbom, blocking, accepted), nil
+	return buildScanOutput(state, target, artifact, started, database, archiveHash, sbom, blocking, accepted, unused), nil
 }
 
 func (state *scannerRuntime) scanVulnerabilityReport(
@@ -144,16 +144,16 @@ func (state *scannerRuntime) applyArtifactOpenVEX(
 	mounts []scannerMount,
 	observed []normalizedFinding,
 	imageID string,
-) ([]normalizedFinding, []acceptedFinding, error) {
+) ([]normalizedFinding, []acceptedFinding, []openVEXAssessment, error) {
 	if artifact.openVEX == "" {
-		return observed, nil, nil
+		return observed, nil, nil, nil
 	}
 	document, err := parseOpenVEX(artifact.openVEX, time.Now().UTC())
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if len(document) == 0 {
-		return observed, nil, nil
+		return observed, nil, nil, nil
 	}
 	vexMounts := append(append([]scannerMount{}, mounts...), scannerMount{
 		source: artifact.openVEX, target: "/policy/assessment.openvex.json", readOnly: true,
@@ -162,10 +162,10 @@ func (state *scannerRuntime) applyArtifactOpenVEX(
 		ctx, operation+"-enforced", target.Name, artifact.imageID, outputDirectory, vexMounts, "enforced.json", "/policy/assessment.openvex.json",
 	)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if enforcedImageID != imageID {
-		return nil, nil, errors.New("OpenVEX enforcement changed the scanned image identity")
+		return nil, nil, nil, errors.New("OpenVEX enforcement changed the scanned image identity")
 	}
 	return reconcileOpenVEX(observed, enforced, document)
 }
@@ -205,11 +205,23 @@ func buildScanOutput(
 	sbom []byte,
 	blocking []normalizedFinding,
 	accepted []acceptedFinding,
+	unused []openVEXAssessment,
 ) scanOutput {
 	sortNormalizedFindings(blocking)
 	findings := make([]policy.Finding, 0, len(blocking))
 	for _, finding := range blocking {
 		findings = append(findings, state.policyFinding(target, artifact, finding))
+	}
+	for _, assessment := range unused {
+		path := targetScope(target)
+		if artifact.mode == "scanner" {
+			path = policy.LockFilename
+		}
+		findings = append(findings, policy.Finding{
+			Check: "artifactSecurity.unusedAssessment", Severity: policy.FindingWarning, Path: path,
+			Subject: assessment.Advisory + " " + assessment.Product,
+			Message: "No matching vulnerability was observed; review this unused OpenVEX assessment. It authorized no suppression.",
+		})
 	}
 	return scanOutput{
 		report: artifactReport{
@@ -218,7 +230,7 @@ func buildScanOutput(
 			ScannerVersion: state.policy.TrivyVersion, ScannerPackageSHA256: state.policy.PackageSHA256,
 			SourceImage: state.policy.SourceImage, DatabaseSHA256: database.SHA256,
 			ArchiveSHA256: archiveHash, SBOMSHA256: bytesSHA256(sbom),
-			StartedAt: started, CompletedAt: time.Now().UTC(), Findings: blocking, AcceptedFindings: accepted,
+			StartedAt: started, CompletedAt: time.Now().UTC(), Findings: blocking, AcceptedFindings: accepted, UnusedAssessments: unused,
 		},
 		sbom: sbom, findings: findings,
 	}

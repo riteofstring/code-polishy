@@ -20,6 +20,81 @@ import (
 
 const fixedScannerAssessment = `{"@context":"https://openvex.dev/ns/v0.2.0","@id":"https://example.test/scanner-fixture","author":"Test fixture","timestamp":"2026-01-01T00:00:00Z","version":1,"statements":[{"vulnerability":{"name":"CVE-2026-1000"},"products":[{"@id":"pkg:golang/example.org/scannerdep@v1.0.0"}],"status":"not_affected","justification":"vulnerable_code_not_in_execute_path","impact_statement":"Synthetic fixed advisory fixture exercises authenticated assessment adoption."}]}`
 
+func TestAssessmentSurvivesFindingDisappearanceAndReturn(t *testing.T) {
+	root := t.TempDir()
+	policyRoot := scannerFixture(t, root)
+	lock, _, err := release.ReadLock(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var manifest release.ScannerManifest
+	if err := json.Unmarshal(lock.Scanner.Payload, &manifest); err != nil {
+		t.Fatal(err)
+	}
+	manifest.OpenVEX = json.RawMessage(fixedScannerAssessment)
+	lock.Scanner = signAssessmentFixture(t, policyRoot, manifest)
+	if err := release.WriteLock(root, lock); err != nil {
+		t.Fatal(err)
+	}
+	for name, payload := range map[string]string{"agent.tar": "fixed image", "assessment.json": fixedScannerAssessment} {
+		if err := os.WriteFile(filepath.Join(root, name), []byte(payload), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	repo := repository.Repository{Root: root, PolicyRoot: policyRoot, Config: policy.Config{SupplyChain: policy.SupplyChain{ArtifactSecurity: policy.ArtifactSecurity{OutputDirectory: ".code-polishy-reports/artifact-security", Targets: []policy.ArtifactTarget{{Name: "agent", Mode: "archive", Archive: "agent.tar", OpenVEX: "assessment.json"}}}}}}
+	for _, present := range []bool{true, false, true} {
+		boundary := fixedAdvisoryBoundary(t, manifest.TrivyVersion, "amd64")
+		if !present {
+			boundary.findings = nil
+		}
+		result := Run(t.Context(), repo, boundary)
+		wantWarnings := 1
+		if !present {
+			wantWarnings++
+		}
+		if len(result.ScannedTargets) != 1 || result.ScannedTargets[0] != "agent" || len(result.Findings) != wantWarnings {
+			t.Fatalf("present=%v: %+v", present, result)
+		}
+		for _, finding := range result.Findings {
+			if finding.Check != "artifactSecurity.unusedAssessment" || finding.Severity != policy.FindingWarning {
+				t.Fatalf("present=%v: %+v", present, finding)
+			}
+		}
+	}
+	requireAssessmentTransitionReports(t, root)
+}
+
+func requireAssessmentTransitionReports(t *testing.T, root string) {
+	t.Helper()
+	paths, err := filepath.Glob(filepath.Join(root, ".code-polishy-reports/artifact-security/*/*/report.json"))
+	if err != nil || len(paths) != 6 {
+		t.Fatalf("missing completed reports: %v %v", paths, err)
+	}
+	accepted, unused := 0, 0
+	for _, path := range paths {
+		payload, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var report artifactReport
+		if err := json.Unmarshal(payload, &report); err != nil {
+			t.Fatal(err)
+		}
+		if len(report.Findings) != 0 || len(report.AcceptedFindings)+len(report.UnusedAssessments) != 1 {
+			t.Fatalf("assessment disposition lost: %+v", report)
+		}
+		accepted += len(report.AcceptedFindings)
+		unused += len(report.UnusedAssessments)
+		markdown, err := os.ReadFile(filepath.Join(filepath.Dir(path), "report.md"))
+		if err != nil || strings.Contains(string(markdown), "Unused OpenVEX assessments (warnings)") != (len(report.UnusedAssessments) == 1) {
+			t.Fatalf("missing maintenance warning: %s %v", markdown, err)
+		}
+	}
+	if accepted != 2 || unused != 4 {
+		t.Fatalf("accepted=%d unused=%d", accepted, unused)
+	}
+}
+
 func TestExpiredScannerHasNoTargetObservations(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		root := t.TempDir()
