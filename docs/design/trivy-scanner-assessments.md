@@ -2,7 +2,8 @@
 
 RSA JWK execution paths and current advisory prerequisites rechecked by Codex
 on November 16, 2026 UTC, reusing the November 8 immutable HTML parser binary
-evidence. Reassess by December 7, 2026, or whenever the scanner image, invocation, mounts, environment,
+evidence. HTTP server and containerd referrer-label prerequisites assessed by
+Codex on November 20, 2026 UTC. Reassess by December 7, 2026, or whenever the scanner image, invocation, mounts, environment,
 transport, or advisory evidence changes.
 
 ## Runtime and admission
@@ -315,6 +316,91 @@ binary update without a demonstrated security benefit. New advisory findings
 remain blocking: the protected publication workflow must still run fresh database
 self-scans and scratch-image verification on both native architectures before
 this revision is published.
+
+## CVE-2026-97054: HTTP server body-limit header race
+
+[GO-2026-6859](https://vuln.go.dev/ID/GO-2026-6859.json), last modified
+November 11, identifies a concurrent header-map write in HTTP/1 servers using
+`MaxBytesReader` or `MaxBytesHandler`. A handler must read an oversized request
+body concurrently with writing response headers. The scanner's Go 1.27.3
+runtime is in the affected range; Go 1.27.4 contains the correction.
+
+In the pinned Go runtime,
+[`maxBytesReader.Read`](https://github.com/golang/go/blob/go1.27.3/src/net/http/request.go)
+calls `requestTooLarge` only when its response writer implements that internal
+server interface. The server's
+[`response.requestTooLarge`](https://github.com/golang/go/blob/go1.27.3/src/net/http/server.go)
+sets the `Connection` header without synchronization. Ordinary HTTP client
+response parsing does not construct this server response or invoke that method.
+
+Code Polishy's enabled commands are version reporting, anonymous database
+download and standalone archive scanning. The downloader issues client requests
+through Trivy's `pkg/oci`, `pkg/remote` and `pkg/x/http`; it does not listen for
+HTTP requests. Archive scans create a local scan service, not Trivy's HTTP
+server. Neither registry responses nor archive contents can select server mode,
+install a handler or supply a server response writer. The scanner receives no
+caller environment, server configuration or credential mount. Disabling HTTP/2
+is not the basis for this HTTP/1 assessment; the absent server path is.
+
+The disposition for `pkg:golang/stdlib@v1.27.3` is `not_affected` with
+`vulnerable_code_not_in_execute_path`. The runtime remains present. This finding
+is distinct from the repository's Go 1.26.10 dependency assessment and must be
+authorized by the scanner publisher for this exact image and contract.
+
+## CVE-2026-95839: containerd referrer-label digest panic
+
+[GHSA-vwhp-8p66-mq4f](https://github.com/containerd/containerd/security/advisories/GHSA-vwhp-8p66-mq4f),
+published October 13, describes a daemon panic when containerd's transfer service
+pulls or imports a child descriptor with `io.containerd.manifest.subject` and a
+malformed digest. The scanner bundles containerd v2.4.1; v2.4.2 contains the fix.
+
+The affected
+[`images.SetChildrenMappedLabels`](https://github.com/containerd/containerd/blob/v2.4.1/core/images/handlers.go)
+derives a referrer garbage-collection label with `ch.Digest.Hex()[:12]` before
+validating the digest. The
+[upstream correction](https://github.com/containerd/containerd/commit/a2eb01f667b320b00ec218216f26f7b79197d4cd)
+validates the digest and its encoded length before deriving that label. An
+untrusted descriptor must reach this content-store labeling handler to trigger
+the panic; merely parsing an image archive is not sufficient.
+
+The pinned Trivy
+[`archiveStandaloneScanService`](https://github.com/aquasecurity/trivy/blob/e713f67f7d54decdcd9b3132c9751833dcced698/pkg/commands/artifact/scanner.go)
+calls `NewArchiveImage`. Its
+[Docker archive reader](https://github.com/aquasecurity/trivy/blob/e713f67f7d54decdcd9b3132c9751833dcced698/pkg/fanal/image/docker.go)
+uses `go-containerregistry/pkg/v1/tarball`, and its
+[OCI layout reader](https://github.com/aquasecurity/trivy/blob/e713f67f7d54decdcd9b3132c9751833dcced698/pkg/fanal/image/oci.go)
+uses `go-containerregistry/pkg/v1/layout`. Neither reader imports the archive
+through containerd's transfer service or computes containerd content-store
+labels. The database
+[`Artifact.Download`](https://github.com/aquasecurity/trivy/blob/e713f67f7d54decdcd9b3132c9751833dcced698/pkg/oci/artifact.go)
+uses the registry client and reads a single compressed layer, also without that
+handler. The scanner has no runtime socket, containerd service or configurable
+daemon path. Archive annotations remain input data and cannot enable one.
+
+The disposition for `pkg:golang/github.com/containerd/containerd/v2@v2.4.1`
+is `not_affected` with `vulnerable_code_not_in_execute_path`. This is an
+execution-path assessment, not a claim that containerd code is absent from the
+binary or that a separately installed host Docker/containerd daemon is safe.
+
+## November 20 assessment revision
+
+Scanner package 1.0.2 retains the exact Trivy image, execution contract, two
+existing assessments and December 7 deadline. It adds the two exact advisory
+and package statements above. Codex owns reassessment by that deadline and on
+changes to the image, enabled commands, mounts, environment, transport or
+advisories. New HTTP server operation, containerd transfer or content-store
+labeling requires reassessment before use. The existing immutable binary
+evidence remains applicable to the unchanged image; these additions make no
+new binary-absence claim.
+
+Retaining this image avoids a new scanner binary without a demonstrated
+security benefit for these unreachable paths. Evaluate an admitted official
+Trivy release containing Go 1.27.4 or later and containerd 2.4.2 or later by
+December 7; remove each statement when its affected package leaves the image.
+The existing certificate-fix admission remains bounded to its original date.
+The signed candidate must pass fresh-database scanner and scratch-image checks
+on native Linux amd64 and arm64 before publication. Accepted findings remain
+visible, and unrelated or unmatched findings continue to block.
 
 ## Scanner finding enforcement
 
