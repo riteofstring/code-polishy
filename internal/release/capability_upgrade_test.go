@@ -139,7 +139,7 @@ func assertCapabilityUpgradeChanges(t *testing.T, delta CapabilityDelta, old Loc
 	if delta.Availability != "available" || delta.Outgoing == nil || !sameCapabilityLock(*delta.Outgoing, old) || delta.Incoming.CodePolishyVersion != "9.9.9" {
 		t.Fatalf("upgrade release identities = %+v", delta)
 	}
-	if len(delta.Added) != 1 || delta.Added[0].Name != "task-start" || len(delta.Removed) != 1 || delta.Removed[0].Name != "legacy-command" || len(delta.Changed) != 1 {
+	if len(delta.Added) != 1 || delta.Added[0].Name != "new-command" || len(delta.Removed) != 1 || delta.Removed[0].Name != "legacy-command" || len(delta.Changed) != 1 {
 		t.Fatalf("upgrade changes = %+v", delta)
 	}
 	change := delta.Changed[0]
@@ -340,7 +340,7 @@ func capabilityUpgradeFixture(t *testing.T) (string, string, string, Lock, Lock)
 	check.Description = "Check source and dependencies."
 	stable.Aliases, stable.Enforcement = []string{"stable alpha", "stable beta"}, []string{"gate", "explicit"}
 	added := removed
-	added.Name = "task-start"
+	added.Name = "new-command"
 	catalog.Capabilities = []CapabilityDefinition{check, added, stable}
 	nextRoot, next := installedRelease(t, map[string]string{BinaryPath: "new engine", CapabilityCatalogPath: string(render(t, catalog))}, nil)
 	prefix := t.TempDir()

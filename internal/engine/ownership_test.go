@@ -2,10 +2,7 @@ package engine
 
 import (
 	"encoding/json"
-	"os"
-	"path/filepath"
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
@@ -66,24 +63,4 @@ func TestArchitectureDiagnosesUnmappedTestsFromResolvedProductionImports(t *test
 			}
 		})
 	}
-}
-
-func declareContentTestOwnership(t *testing.T, root, path string) {
-	t.Helper()
-	configPath := filepath.Join(root, policy.ConfigFilename)
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	ownership, err := json.Marshal([]policy.TestOwnership{{Paths: []string{path}, Module: "content", FocusedSuite: "focused"}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	paths, err := json.Marshal([]string{path})
-	if err != nil {
-		t.Fatal(err)
-	}
-	configured := strings.Replace(string(data), `"ownership":[]`, `"ownership":`+string(ownership), 1)
-	configured = strings.Replace(configured, `"name":"focused",`, `"name":"focused","paths":`+string(paths)+`,`, 1)
-	writeEngineFile(t, root, policy.ConfigFilename, configured, 0o600)
 }

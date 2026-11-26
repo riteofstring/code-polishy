@@ -23,7 +23,6 @@ const usage = `Usage: code-polishy [global options] <command> [options]
 Commands:
   version
   capabilities [--query TEXT] [--format human|json]
-  task-start (--files PATH... | --new-path PATH... | --module NAME...) [--intent-file PATH|-] [--feature NAME] [--situation NAME] [--format human|json]
   docs <list|find|read>
   install-rust [--source ARCHIVE]
   pack <install|verify|root>
@@ -52,17 +51,16 @@ Commands:
   test-levels [--base REF]
   test-receipts export --output PATH
   test-receipts import --source PATH --sha256 DIGEST
-  verify [--tests-only]
+  verify
   architecture [--git-changes|--staged|--all|--files PATH...|--module NAME...]
   supply-chain [--offline]
   dependency-review --base REF
   artifact-security
-  doctor [--strict]
-  size [--base REF] [--propose-budget SCOPE=LINES --growth-rationale TEXT]
+  doctor
+  size [--base REF]
   trends [--since DATE] [--branch NAME] [--rewrite-days N]
   design-context (--module NAME... | [--git-changes|--staged|--all|--files PATH...|--new-path PATH...]) [--situation NAME...] [--feature NAME...]
   format [--git-changes|--staged|--all|--files PATH...|--module NAME...]
-  fix [selection options]
   list-files [selection options]
 
 Global options:
@@ -385,7 +383,6 @@ func parseGlobalInvocation(arguments []string) (invocation, int) {
 func commandHandlers() map[string]commandHandler {
 	return map[string]commandHandler{
 		"capabilities":        handleCapabilities,
-		"task-start":          handleTaskStart,
 		"doctor":              handleDoctor,
 		"gate":                handleGate,
 		"checkpoint-gate":     handleCheckpointGate,
@@ -396,7 +393,6 @@ func commandHandlers() map[string]commandHandler {
 		"check":               handleCheck,
 		"architecture":        handleSelectionCommand("architecture"),
 		"format":              handleSelectionCommand("format"),
-		"fix":                 handleSelectionCommand("format"),
 		"list-files":          handleSelectionCommand("list-files"),
 		"test":                handleTest,
 		"test-levels":         handleTestLevels,
@@ -436,8 +432,8 @@ func handleCheck(ctx context.Context, policyEngine *engine.Engine, arguments []s
 }
 
 func handleDoctor(ctx context.Context, policyEngine *engine.Engine, arguments []string) (commandResult, error) {
-	if !onlyAllowed(arguments, "--strict") {
-		return commandResult{}, commandInputError(fmt.Errorf("doctor accepts only --strict"))
+	if len(arguments) != 0 {
+		return commandResult{}, commandInputError(fmt.Errorf("doctor does not accept options"))
 	}
 	report, err := policyEngine.Doctor(ctx)
 	return commandResult{report: report}, err
@@ -481,9 +477,6 @@ func handleSelectionCommand(operation string) commandHandler {
 		}
 		switch operation {
 		case "check":
-			if mode == "changes" || mode == "staged" {
-				return commandResult{report: policyEngine.CheckChangeAware(ctx, selection, "check")}, nil
-			}
 			return commandResult{report: policyEngine.Check(ctx, selection, "check")}, nil
 		case "architecture":
 			return commandResult{report: policyEngine.Architecture(ctx, selection)}, nil
@@ -517,10 +510,10 @@ func handleTestLevels(_ context.Context, policyEngine *engine.Engine, arguments 
 }
 
 func handleVerify(ctx context.Context, policyEngine *engine.Engine, arguments []string) (commandResult, error) {
-	if !onlyAllowed(arguments, "--tests-only") {
-		return commandResult{}, commandInputError(fmt.Errorf("verify accepts only --tests-only"))
+	if len(arguments) != 0 {
+		return commandResult{}, commandInputError(fmt.Errorf("verify does not accept options"))
 	}
-	report, err := policyEngine.Verify(ctx, len(arguments) == 1)
+	report, err := policyEngine.Verify(ctx)
 	return commandResult{report: report}, err
 }
 
@@ -549,11 +542,11 @@ func handleArtifactSecurity(ctx context.Context, policyEngine *engine.Engine, ar
 }
 
 func handleSize(_ context.Context, policyEngine *engine.Engine, arguments []string) (commandResult, error) {
-	base, proposals, err := parseSizeOptions(arguments)
+	base, err := parseSizeBaseOption(arguments)
 	if err != nil {
 		return commandResult{}, commandInputError(err)
 	}
-	report, err := policyEngine.Size(base, proposals...)
+	report, err := policyEngine.Size(base)
 	return commandResult{report: report}, err
 }
 

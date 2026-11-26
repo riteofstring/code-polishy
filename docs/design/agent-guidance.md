@@ -156,7 +156,7 @@ decisions; the repetition is deliberate rather than a substitute for enforcement
 
 The reliability clause makes the same system-level concern concrete for
 defensive controls. Managed guidance supplies the always-visible default;
-repository selectors keep the detailed task-start and gate reminder salient;
+repository selectors keep the detailed gate reminder salient;
 mapped design documents and boundary tests own domain-specific invariants. The
 reminder stays advisory so it does not become more reliability machinery.
 
@@ -173,7 +173,7 @@ valuable broadly applicable rule cannot fit clearly.
 Context retention replaces an unconditional startup sequence. The managed prefix
 names the invalidation boundaries and directs missing scoped context to
 `design-context`, which reports review selection. Required intent capture still
-precedes edits through `task-start`; optional work requires no initialization,
+precedes edits through `behavior-review capture-intent`; optional work requires no initialization,
 journal or acknowledgement. Known context can survive compaction when retained
 accurately. A changed release or policy requires affected guidance to be loaded
 again without a persistent read ledger. This keeps the always-on instruction

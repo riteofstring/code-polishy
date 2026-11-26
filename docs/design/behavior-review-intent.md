@@ -2,14 +2,18 @@
 
 Intent is review evidence, not general task memory. Capturing every request when
 behavior review is optional creates plaintext custody without improving an
-ordinary gate. `design-context` and `task-start` therefore share review selection for existing
-and explicitly planned paths or modules. Context exposes the requirement without
-publishing intent. Only selected review needs the clean initial request boundary;
-optional task packets leave dirty files untouched and record HEAD as a base,
-without certifying a clean candidate. Configured
-merge or checkpoint review and explicitly selected features require capture;
-an optional selection does not. The task packet states whether intent was
-captured and whether the selected review will consume it.
+ordinary gate. `design-context` therefore reports review selection for existing and explicitly
+planned paths or modules without publishing intent. Configured merge or
+checkpoint review and explicitly selected features require a clean initial
+request boundary through `behavior-review capture-intent`; optional work
+requires no journal. Explicit feature operands record only caller-selected
+features, never an invented request for policy-selected features.
+
+Direct capture validates bounded input, acquires the journal lock, validates
+its current entries and request boundary, rechecks the candidate, and publishes
+one append atomically. Initial capture needs a clean base. Later
+artifact-affecting corrections may bind a dirty candidate. No separate
+preparation or publication API is needed by context discovery.
 
 Standard input and regular files are equivalent transports into the same
 bounded UTF-8 validation and journal append. Standard input lets an agent

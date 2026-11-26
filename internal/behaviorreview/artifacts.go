@@ -89,14 +89,6 @@ func existingBehaviorReviewRoot(repo repository.Repository) (*artifactHandle, er
 	return root, nil
 }
 
-func existingCheckpointRoot(repo repository.Repository) (*artifactHandle, error) {
-	root, err := openArtifactRoot(repo.Root, artifactComponents(checkpointDirectory), false)
-	if err != nil {
-		return nil, artifactRootError("checkpoint gate", err, ErrMissingCheckpoint)
-	}
-	return root, nil
-}
-
 func artifactRootError(label string, err, missing error) error {
 	if missing != nil && errors.Is(err, errMissingArtifactRoot) {
 		return fmt.Errorf("%w: %s artifacts are unavailable", missing, label)

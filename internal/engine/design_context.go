@@ -3,6 +3,7 @@ package engine
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
@@ -57,8 +58,7 @@ func (engine *Engine) DesignContext(request ContextRequest) (Report, error) {
 		return Report{}, err
 	}
 	if context != nil {
-		intent := engine.taskStartIntent(selection, features)
-		context.Review = ContextReviewRequirement{Required: intent.WillBeUsed, Reason: intent.Reason, SelectedFeatures: intent.SelectedFeatures}
+		context.Review = engine.contextReviewRequirement(selection, features)
 	}
 	report := engine.designContextReport(findings)
 	report.RepositoryContext = context
@@ -66,6 +66,38 @@ func (engine *Engine) DesignContext(request ContextRequest) (Report, error) {
 		report.RequestedSelection = &selection.Requested
 	}
 	return engine.normalizeReport(report), nil
+}
+
+func (engine *Engine) contextReviewRequirement(selection repository.Selection, explicit []string) ContextReviewRequirement {
+	configured := engine.contextRequiredFeatures(selection)
+	selected := sortedUniqueStrings(append(slices.Clone(explicit), configured...))
+	explicitlySelected := len(explicit) > 0
+	policySelected := len(configured) > 0 || engine.contextRequiresFullReview(selection)
+	reason := "behavior review is optional for the selected scope"
+	if explicitlySelected && policySelected {
+		reason = "behavior review is explicitly requested and required by policy for the selected scope"
+	} else if explicitlySelected {
+		reason = "behavior review is explicitly requested"
+	} else if policySelected {
+		reason = "behavior review is required by policy for the selected scope"
+	}
+	return ContextReviewRequirement{Required: explicitlySelected || policySelected, Reason: reason, SelectedFeatures: selected}
+}
+
+func (engine *Engine) contextRequiredFeatures(selection repository.Selection) []string {
+	impact := engine.Repository.CandidateImpact(selection.Candidate)
+	result := []string{}
+	for _, feature := range behaviorReviewFeatures(engine.Repository.Config) {
+		if behaviorReviewFeatureRequired(engine.Repository.Config, feature, impact, BehaviorReviewMerge) {
+			result = append(result, feature.Name)
+		}
+	}
+	return sortedUniqueStrings(result)
+}
+
+func (engine *Engine) contextRequiresFullReview(selection repository.Selection) bool {
+	return !engine.Repository.ClassifyDocumentationCandidate(selection).Ordinary &&
+		behaviorReviewPersistentRequirement(engine.Repository.Config, BehaviorReviewMerge, true)
 }
 
 func (engine *Engine) designContextReport(findings []policy.Finding) Report {

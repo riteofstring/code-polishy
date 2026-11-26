@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -31,17 +30,18 @@ func TestDesignContextCLIReportsMissingGuidanceWithoutBlocking(t *testing.T) {
 }
 
 func TestDesignContextCLIExplainsModuleMatches(t *testing.T) {
-	root, policyRoot, _ := newTaskStartCLIRepository(t)
+	root, policyRoot := newDesignContextCLIRepository(t)
 	status, stdout, stderr := captureRunOutput(t, []string{"--repo-root", root, "--policy-root", policyRoot, "design-context", "--files", "value.go"})
 	if status != 0 || !strings.Contains(stdout, "DESIGN DOCUMENT: docs/design/current.md\n  SELECTED BY: module application") || strings.Contains(stdout, "NO DESIGN MAPPING: value.go") {
 		t.Fatalf("matched context: status=%d stdout=%q stderr=%q", status, stdout, stderr)
 	}
 }
 
-func TestTaskStartReportsDesignGapsWithoutSchedulingMaintenance(t *testing.T) {
-	root, policyRoot, _ := newTaskStartCLIRepository(t)
-	path := filepath.Join(root, policy.ConfigFilename)
-	data, err := os.ReadFile(path)
+func newDesignContextCLIRepository(t *testing.T) (string, string) {
+	t.Helper()
+	root := newCapabilityCLIRepository(t)
+	configPath := filepath.Join(root, policy.ConfigFilename)
+	data, err := os.ReadFile(configPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,30 +49,21 @@ func TestTaskStartReportsDesignGapsWithoutSchedulingMaintenance(t *testing.T) {
 	if err := json.Unmarshal(data, &config); err != nil {
 		t.Fatal(err)
 	}
-	delete(config["documentation"].(map[string]any), "design")
+	config["documentation"] = map[string]any{
+		"design": []any{map[string]any{"path": "docs/design/current.md", "module": "application"}},
+		"handoffs": []any{
+			map[string]any{"name": "release", "description": "Release procedure.", "path": "docs/release.md", "sourcePaths": []string{"value.go"}, "situations": []string{"release"}},
+			map[string]any{"name": "authentication", "description": "Authentication procedure.", "path": "docs/absent.md", "situations": []string{"authentication"}},
+		},
+	}
 	data, err = json.Marshal(config)
 	if err != nil {
 		t.Fatal(err)
 	}
 	writeBehaviorReviewCLIFile(t, root, policy.ConfigFilename, string(data))
-	gitBehaviorReviewCLI(t, root, "add", policy.ConfigFilename)
-	gitBehaviorReviewCLI(t, root, "commit", "-m", "Adopt without mapped rationale")
-	status, stdout, stderr := captureRunOutput(t, append(taskStartCLIArguments(root, policyRoot, ""), "--files", "value.go"))
-	var packet engine.TaskStartPacket
-	if err := json.Unmarshal([]byte(stdout), &packet); err != nil || status != 0 || packet.RepositoryContext == nil {
-		t.Fatalf("task start: status=%d error=%v stdout=%q stderr=%q", status, err, stdout, stderr)
-	}
-	policyEngine, err := engine.Open(root, policyRoot, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	standalone, err := policyEngine.DesignContext(engine.ContextRequest{Mode: "files", Files: []string{"value.go"}, Workflow: "task-start"})
-	if err != nil || !reflect.DeepEqual(packet.RepositoryContext, standalone.RepositoryContext) || !slices.Equal(packet.RepositoryContext.DesignResolution.UnmappedPaths, []string{"value.go"}) {
-		t.Fatalf("task and standalone context differ: %+v, %+v, %v", packet.RepositoryContext, standalone.RepositoryContext, err)
-	}
-	for _, action := range packet.NextActions {
-		if action.Name == "review-design-coverage" {
-			t.Fatalf("unmapped paths scheduled unrelated maintenance: %+v", action)
-		}
-	}
+	writeBehaviorReviewCLIFile(t, root, "docs/design/current.md", "# Current design\n\nPreserve the application boundary.\n")
+	writeBehaviorReviewCLIFile(t, root, "docs/release.md", "# Release\n\n    touch procedure-must-not-run\n")
+	gitBehaviorReviewCLI(t, root, "add", policy.ConfigFilename, "docs")
+	gitBehaviorReviewCLI(t, root, "commit", "-m", "Prepare task context")
+	return root, behaviorReviewCLIPolicyRoot(t)
 }

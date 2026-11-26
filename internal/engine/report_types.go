@@ -32,7 +32,6 @@ type Report struct {
 	GateRunPolicy           *GateRunPolicy                            `json:"gateRunPolicy,omitempty"`
 	ChangeBoundary          *ChangeBoundary                           `json:"changeBoundary,omitempty"`
 	ChangedTestScope        *ChangedTestScope                         `json:"changedTestScope,omitempty"`
-	TestQualityReminder     *TestQualityReminder                      `json:"testQualityReminder,omitempty"`
 	ReliabilityReminder     *ReliabilityReminder                      `json:"reliabilityReminder,omitempty"`
 	TestCommands            []TestCommandEvidence                     `json:"testCommands"`
 	TestDiagnostics         []TestFailureDiagnostic                   `json:"testDiagnostics"`
@@ -155,12 +154,6 @@ type ChangeBoundary struct {
 	Modules  []string `json:"modules"`
 	Paths    []string `json:"paths"`
 	NewPaths []string `json:"newPaths"`
-}
-
-type TestQualityReminder struct {
-	ChangedTestPaths     []string `json:"changedTestPaths"`
-	TaskBase             string   `json:"taskBase"`
-	TaskChangedTestPaths []string `json:"taskChangedTestPaths"`
 }
 
 type Table struct {

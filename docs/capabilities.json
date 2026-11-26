@@ -151,16 +151,6 @@
       "workflows": ["docs/agent-workflows.md"]
     },
     {
-      "name": "fix",
-      "kind": "command",
-      "description": "Apply governed formatting fixes to selected writable source.",
-      "aliases": ["apply formatting"],
-      "paths": [],
-      "modules": [],
-      "enforcement": ["explicit"],
-      "workflows": ["docs/agent-workflows.md"]
-    },
-    {
       "name": "format",
       "kind": "command",
       "description": "Format selected writable source with governed formatters.",
@@ -270,16 +260,6 @@
         "vulnerability assessment advisories",
         "vulnerable package summary"
       ],
-      "paths": [],
-      "modules": [],
-      "enforcement": ["explicit"],
-      "workflows": ["docs/agent-workflows.md"]
-    },
-    {
-      "name": "task-start",
-      "kind": "command",
-      "description": "Report bounded task context and capture the exact request only when selected review will use it.",
-      "aliases": ["task preparation"],
       "paths": [],
       "modules": [],
       "enforcement": ["explicit"],

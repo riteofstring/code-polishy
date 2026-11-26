@@ -41,10 +41,9 @@ not transitive dependency impact. `sourcePaths` are exact, portable repository
 paths and must belong to one declared module. Code Polishy does not infer a
 match from filenames, request wording, source keywords, or an AI classification.
 
-When a planned `task-start` selection matches, its human and JSON output include
-the fixed reminder, matched selectors, policy path, and four questions. A
-checkpoint or merge gate repeats the reminder when the actual candidate changes
-a configured module or path. Unconfigured and unrelated scopes stay quiet.
+A checkpoint or merge gate includes the fixed reminder, matched selectors,
+policy path and four questions when the actual candidate changes a configured
+module or source path.
 
 ## Apply the decision test
 
@@ -73,11 +72,10 @@ work directly.
 
 ## AI-agent workflow
 
-The managed `AGENTS.md` carries the always-visible default. `task-start` is the
-primary contextual surface because it already receives the agent's planned
-files or modules and returns mapped design context. The agent applies the four
-questions while choosing the implementation; it does not create a questionnaire
-artifact or expose private reasoning.
+The managed `AGENTS.md` carries the always-visible default. The agent applies
+the four questions while choosing the implementation and retrieves missing
+repository rationale through `design-context`. This needs no questionnaire
+artifact or acknowledgement.
 
 If the change establishes or alters a non-local reliability or recovery
 invariant, update the repository's mapped design document. Encode critical

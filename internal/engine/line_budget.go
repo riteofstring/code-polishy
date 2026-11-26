@@ -5,16 +5,7 @@ import (
 	"fmt"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
-	"github.com/riteofstring/code-polishy/internal/repository"
 )
-
-func (engine *Engine) lineBudgetScopes() ([]repository.LineBudgetScope, error) {
-	if engine.Repository.Config.Quality.LineBudget == nil {
-		return nil, nil
-	}
-	lines, err := engine.Repository.CountSourceLines()
-	return lines.Budget, err
-}
 
 func (engine *Engine) lineBudgetChangeFindings(base string) []policy.Finding {
 	if base == "" {

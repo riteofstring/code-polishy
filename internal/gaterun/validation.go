@@ -65,51 +65,6 @@ func ValidateExecutionEvidence(evidence ExecutionEvidence) error {
 	return nil
 }
 
-func LoadPassedExecution(repositoryRoot string, evidence ExecutionEvidence) (Report, error) {
-	if err := ValidateExecutionEvidence(evidence); err != nil {
-		return Report{}, err
-	}
-	root, runDirectory, directory, err := locateExecutionEvidence(repositoryRoot, evidence)
-	if err != nil {
-		return Report{}, err
-	}
-	report, err := readExecutionEvidenceReport(directory, evidence.ExecutionID)
-	if err != nil {
-		return Report{}, err
-	}
-	if !matchesPassedExecution(report, evidence) {
-		return Report{}, fmt.Errorf("%w: gate execution does not match its passed evidence", ErrStaleArtifact)
-	}
-	if err := validateStoredReportArtifacts(root, runDirectory, directory, report); err != nil {
-		return Report{}, err
-	}
-	return cloneReport(report), nil
-}
-
-func locateExecutionEvidence(repositoryRoot string, evidence ExecutionEvidence) (artifactRoot, artifactDirectory, artifactDirectory, error) {
-	root, runDirectory, err := managedRunDirectory(repositoryRoot, evidence.Gate, evidence.IdentitySHA256, false)
-	if err != nil {
-		return artifactRoot{}, artifactDirectory{}, artifactDirectory{}, err
-	}
-	pointer, err := loadLatestReportPointer(runDirectory)
-	if err != nil {
-		return artifactRoot{}, artifactDirectory{}, artifactDirectory{}, err
-	}
-	if pointer.ExecutionID != evidence.ExecutionID || pointer.ReportSHA256 != evidence.ReportSHA256 {
-		return artifactRoot{}, artifactDirectory{}, artifactDirectory{}, fmt.Errorf("%w: gate execution is not the latest report", ErrStaleArtifact)
-	}
-	directory, err := existingExecutionDirectory(runDirectory, evidence.ExecutionID)
-	if err != nil {
-		return artifactRoot{}, artifactDirectory{}, artifactDirectory{}, err
-	}
-	return root, runDirectory, directory, nil
-}
-
-func matchesPassedExecution(report Report, evidence ExecutionEvidence) bool {
-	return report.Identity.Gate == evidence.Gate && report.IdentitySHA256 == evidence.IdentitySHA256 &&
-		report.SHA256 == evidence.ReportSHA256 && report.Status == RunPassed
-}
-
 func loadStoredReport(repositoryRoot string, expected Identity) (loadedReport, error) {
 	if err := validateIdentity(expected); err != nil {
 		return loadedReport{}, err

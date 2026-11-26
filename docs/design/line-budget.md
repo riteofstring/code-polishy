@@ -78,17 +78,17 @@ the budget is exceeded.
 
 ## Visibility
 
-`size` reports counts by language and each scope's remaining lines. `task-start`
-reports the remaining lines so an agent knows its capacity before it writes
-code. The budget is withheld from provider requests because providers do not
-use it and changing it should not invalidate their evidence.
+`size` reports counts by language and each scope's remaining lines. With
+`--base REF`, it also reports base counts and measured growth through batched
+immutable Git blob reads under current scope rules. The budget is withheld from
+provider requests because providers do not use it and changing it should not
+invalidate their evidence.
 
-A growth proposal uses the existing `size` report. Optional proposed ceilings
-and a supplied rationale are presentation inputs, never approval or a write to
-policy. A Git-base comparison counts non-blank source through batched immutable
-blob reads under current scope rules, so a reviewer can compare actual growth
-and proposed headroom together. No advisory threshold, automatic slack or
-approval journal is introduced. One approved ceiling covers its intended work.
+The agent communicates a proposed feature or milestone ceiling, headroom and
+rationale in ordinary prose using those measurements. These are approval
+context, not report inputs or policy writes. No advisory threshold, automatic
+slack or approval journal is introduced. One approved ceiling covers its
+intended work.
 
 Test receipts continue binding the complete configuration. Budget fields can be
 consumed by suites through the sealed input view, while other policy fields

@@ -163,7 +163,6 @@ func (engine *Engine) behaviorReviewGateFailureReport(ctx context.Context, plan 
 	}
 	report := engine.finish([]policy.Finding{*finding}, nil)
 	report = withBehaviorReview(report, status)
-	report = engine.withTestQualityReminder(report, plan.Selection.Candidate)
 	return &report, nil
 }
 
@@ -332,7 +331,6 @@ func (engine *Engine) executeDocumentationCheckpointGate(ctx context.Context, ex
 			gateErr = errors.Join(gateErr, testErr)
 		}
 	}
-	report = engine.withTestQualityReminder(report, execution.selection.Candidate)
 	report = withBehaviorReview(report, execution.controller.behaviorStatus)
 	return engine.finalizeAcceptedCheckpointGate(ctx, execution.controller, report, gateErr, execution.state)
 }
@@ -356,7 +354,6 @@ func (engine *Engine) executeChangedCheckpointGate(ctx context.Context, executio
 		report = withBehaviorReview(report, execution.controller.behaviorStatus)
 		return execution.controller.finalize(engine, checkpointGateReport(report, execution.state), testErr)
 	}
-	report = engine.withTestQualityReminder(report, execution.selection.Candidate)
 	report = withBehaviorReview(report, execution.controller.behaviorStatus)
 	gateErr := checkpointPlannedRunnerError(plannedRunner, report, execution.commands)
 	return engine.finalizeAcceptedCheckpointGate(ctx, execution.controller, report, gateErr, execution.state)

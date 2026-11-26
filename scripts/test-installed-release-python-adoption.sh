@@ -382,7 +382,7 @@ EOF
   cp "${target}/${json_path}" "${json_snapshot}"
   cp "${target}/${yaml_path}" "${yaml_snapshot}"
 
-  expect_pass "${target}" "python-adoption doctor" --verbose doctor --strict
+  expect_pass "${target}" "python-adoption doctor" --verbose doctor
   expect_pass "${target}" "python-adoption check" check --all
   expect_pass "${target}" "python-adoption architecture" architecture --all
   expect_pass "${target}" "python-adoption offline supply chain" supply-chain --offline
@@ -474,13 +474,13 @@ EOF
 
   python_adoption_write_gitlab_deep \
     "${target}" "registry.example.test/fixture/deep:latest" "${alpha_commit}"
-  expect_findings "${target}" "python-adoption mutable GitLab image" --verbose doctor --strict
+  expect_findings "${target}" "python-adoption mutable GitLab image" --verbose doctor
   expect_finding \
     "python-adoption mutable GitLab image" "supplyChain.gitLabImagePin" \
     "ci/includes/deep.yml" "registry.example.test/fixture/deep:latest"
   python_adoption_write_gitlab_deep \
     "${target}" "registry.example.test/fixture/deep@${gitlab_digest}" "main"
-  expect_findings "${target}" "python-adoption mutable GitLab include" --verbose doctor --strict
+  expect_findings "${target}" "python-adoption mutable GitLab include" --verbose doctor
   expect_finding \
     "python-adoption mutable GitLab include" "supplyChain.gitLabIncludePin" \
     "ci/includes/deep.yml" "fixture/secure-templates"

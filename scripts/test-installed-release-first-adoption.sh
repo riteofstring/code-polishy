@@ -77,7 +77,7 @@ EOF
   "exceptions": []
 }
 EOF
-  if run_policy "${target}" doctor --strict; then
+  if run_policy "${target}" doctor; then
     fail "first-adoption: candidate without a release lock was accepted"
   fi
   if ! grep -qi 'lock' "${output}"; then

@@ -12,15 +12,10 @@ repository data into an open prompt surface.
 
 The policy model validates selectors. The repository's existing candidate and
 direct-module facts resolve matches. The engine constructs one structured
-reminder for both task packets and reports, while the CLI owns its bounded human
+reminder for gate reports, while the CLI owns its bounded human
 rendering. No second module or path-matching algorithm belongs in the renderer.
 
 ## Surfaces
-
-`task-start` evaluates its planned selection. A match adds the reminder to the
-complete packet, adds the policy document to workflow documents, and schedules
-one read-only next action before implementation. The ordinary design-context
-payload continues to carry repository-specific rationale.
 
 Checkpoint and merge gates evaluate their actual candidate paths. Normal gate
 reports include the reminder for matching candidates, including passed,

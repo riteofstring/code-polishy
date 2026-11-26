@@ -165,3 +165,24 @@ func assertCanonicalStatusConfirmation(t *testing.T, format, stdout string) {
 		assertBehaviorReviewCLIOutputContains(t, stdout, "TASK-REQUESTED FEATURES: checkout, search")
 	}
 }
+
+func captureRunOutputWithStdin(t *testing.T, arguments []string, input string) (int, string, string) {
+	t.Helper()
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := writer.WriteString(input); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	previous := os.Stdin
+	os.Stdin = reader
+	defer func() {
+		os.Stdin = previous
+		_ = reader.Close()
+	}()
+	return captureRunOutput(t, arguments)
+}

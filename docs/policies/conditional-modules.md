@@ -33,7 +33,7 @@ Code Polishy needs lives in the sealed bundle, so a target's own dependency
 install exists to let those tools read declarations and resolution metadata,
 never to supply an analyzer.
 
-`doctor --strict` prints each active module, exact root, and evidence. A missing
+`doctor` prints each active module, exact root, and evidence. A missing
 tool, unsupported package manager, absent framework rule, or missing behavior
 suite is a finding rather than a skipped check.
 

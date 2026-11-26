@@ -429,7 +429,7 @@ seal_target "${go_only}"
 exercise_versioned_documentation "${go_only}" "go-only"
 exercise_documentation_lane "${go_only}" "go-only"
 expect_pass "${go_only}" "go-only" check --all
-expect_pass "${go_only}" "go-only" --verbose doctor --strict
+expect_pass "${go_only}" "go-only" --verbose doctor
 
 if ! grep -q "conditional policy module: osv at ." "${output}"; then
   fail "go-only: the release activated no dependency scanning: $(excerpt)"
@@ -927,7 +927,7 @@ write_file "${react}/.code-polishy.json" <<'EOF'
 EOF
 seal_target "${react}"
 expect_pass "${react}" "react" check --all
-expect_pass "${react}" "react" --verbose doctor --strict
+expect_pass "${react}" "react" --verbose doctor
 if ! grep -q "conditional policy module: react at ." "${output}"; then
   fail "react: the release activated no React policy: $(excerpt)"
 fi

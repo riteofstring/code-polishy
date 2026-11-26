@@ -234,7 +234,6 @@ func (engine *Engine) withMergeGateMetadata(ctx context.Context, report Report, 
 	if report.BehaviorReview == nil {
 		report = withBehaviorReview(report, plan.BehaviorReview.status)
 	}
-	report = engine.withMergeGateTestQualityReminder(ctx, report, plan.Selection)
 	report = engine.withReliabilityReminder(report, plan.Selection.Candidate)
 	if plan.FirstAdoption {
 		report.Notes = append(report.Notes, firstAdoptionMergeGateReason(plan.BaseConfigurationPath, plan.Selection.Base))
@@ -666,7 +665,7 @@ func (engine *Engine) fullGate(ctx context.Context) (Report, error) {
 	if HasFindings(checked) {
 		return engine.combine(doctor, checked), nil
 	}
-	verified, err := engine.verify(ctx, false, true)
+	verified, err := engine.verify(ctx, true)
 	if err != nil || HasFindings(verified) {
 		return engine.combine(engine.combine(doctor, checked), verified), err
 	}

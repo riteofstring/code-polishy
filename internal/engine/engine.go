@@ -16,7 +16,6 @@ import (
 	agentpolicy "github.com/riteofstring/code-polishy/internal/agents"
 	"github.com/riteofstring/code-polishy/internal/architecture"
 	"github.com/riteofstring/code-polishy/internal/artifactsecurity"
-	"github.com/riteofstring/code-polishy/internal/behaviorreview"
 	"github.com/riteofstring/code-polishy/internal/pack"
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/policymodule"
@@ -228,10 +227,6 @@ func (engine *Engine) Check(ctx context.Context, selection repository.Selection,
 	return report
 }
 
-func (engine *Engine) CheckChangeAware(ctx context.Context, selection repository.Selection, profile string) Report {
-	return engine.withTestQualityReminder(engine.Check(ctx, selection, profile), selection.Candidate)
-}
-
 func (engine *Engine) CheckNamed(ctx context.Context, names []string) (Report, error) {
 	findings, err := quality.RunNamedCommands(ctx, engine.Repository, engine.Runner, names)
 	if err != nil {
@@ -277,14 +272,7 @@ func (engine *Engine) Test(ctx context.Context, request testpolicy.Request) (Rep
 		return report, err
 	}
 	report.ChangedTestScope = NewChangedTestScope(request)
-	if !isChangedScopeTestRequest(request) {
-		return report, nil
-	}
-	return engine.withTestQualityReminder(report, request.Changed.Candidate), nil
-}
-
-func isChangedScopeTestRequest(request testpolicy.Request) bool {
-	return !request.Recommended && usesChangedTestSelection(request)
+	return report, nil
 }
 
 func usesChangedTestSelection(request testpolicy.Request) bool {
@@ -400,7 +388,7 @@ func (engine *Engine) TestPlan(base string) (Report, error) {
 	if err != nil {
 		return Report{}, err
 	}
-	return engine.withTestQualityReminder(report, selection.Candidate), nil
+	return report, nil
 }
 
 func testAggregationNotes(aggregations []testpolicy.SuiteAggregation) []string {
@@ -656,13 +644,13 @@ func suiteCostSummary(suites []policy.TestSuite) string {
 	return fmt.Sprintf("%d (%s)", len(suites), strings.Join(costs, ", "))
 }
 
-func (engine *Engine) Verify(ctx context.Context, testsOnly bool) (Report, error) {
-	return engine.verify(ctx, testsOnly, false)
+func (engine *Engine) Verify(ctx context.Context) (Report, error) {
+	return engine.verify(ctx, false)
 }
 
-func (engine *Engine) verify(ctx context.Context, testsOnly, stopAfterFailure bool) (Report, error) {
+func (engine *Engine) verify(ctx context.Context, stopAfterFailure bool) (Report, error) {
 	report, err := engine.test(ctx, testpolicy.Request{Full: true}, stopAfterFailure)
-	if err != nil || HasFindings(report) || testsOnly {
+	if err != nil || HasFindings(report) {
 		return report, err
 	}
 	files, err := engine.Repository.AllFiles()
@@ -867,53 +855,6 @@ func findingKey(finding policy.Finding) string {
 	return string(finding.VerificationPhase) + "\x00" + finding.Fingerprint
 }
 
-func NewTestQualityReminder(paths []string) *TestQualityReminder {
-	return newTestQualityReminder(paths, "", nil)
-}
-
-func NewTaskAwareTestQualityReminder(paths []string, taskBase string, taskPaths []string) *TestQualityReminder {
-	return newTestQualityReminder(paths, taskBase, taskPaths)
-}
-
-func newTestQualityReminder(paths []string, taskBase string, taskPaths []string) *TestQualityReminder {
-	ordered := orderedReminderPaths(paths)
-	orderedTaskPaths := orderedReminderPaths(taskPaths)
-	if len(ordered) == 0 && taskBase == "" {
-		return nil
-	}
-	return &TestQualityReminder{ChangedTestPaths: ordered, TaskBase: taskBase, TaskChangedTestPaths: orderedTaskPaths}
-}
-
-func orderedReminderPaths(paths []string) []string {
-	ordered := make([]string, 0, len(paths))
-	for _, path := range paths {
-		if path != "" {
-			ordered = append(ordered, path)
-		}
-	}
-	sort.Strings(ordered)
-	return slices.Compact(ordered)
-}
-
-func combineTestQualityReminders(left, right *TestQualityReminder) *TestQualityReminder {
-	paths := []string{}
-	taskBase := ""
-	taskPaths := []string{}
-	if left != nil {
-		paths = append(paths, left.ChangedTestPaths...)
-		taskBase = left.TaskBase
-		taskPaths = append(taskPaths, left.TaskChangedTestPaths...)
-	}
-	if right != nil {
-		paths = append(paths, right.ChangedTestPaths...)
-		if right.TaskBase != "" {
-			taskBase = right.TaskBase
-			taskPaths = append([]string{}, right.TaskChangedTestPaths...)
-		}
-	}
-	return NewTaskAwareTestQualityReminder(paths, taskBase, taskPaths)
-}
-
 func (engine *Engine) combine(left, right Report) Report {
 	report := Report{
 		RequestedSelection:    cmp.Or(right.RequestedSelection, left.RequestedSelection),
@@ -926,7 +867,6 @@ func (engine *Engine) combine(left, right Report) Report {
 		GateRunPolicy:         cmp.Or(right.GateRunPolicy, left.GateRunPolicy),
 		Security:              cmp.Or(right.Security, left.Security),
 		ChangedTestScope:      cmp.Or(right.ChangedTestScope, left.ChangedTestScope),
-		TestQualityReminder:   combineTestQualityReminders(left.TestQualityReminder, right.TestQualityReminder),
 		ReliabilityReminder:   combineReliabilityReminders(left.ReliabilityReminder, right.ReliabilityReminder),
 		SourceDependencyGraph: cmp.Or(right.SourceDependencyGraph, left.SourceDependencyGraph),
 		ArchitectureReview:    cmp.Or(right.ArchitectureReview, left.ArchitectureReview),
@@ -943,25 +883,6 @@ func (engine *Engine) combine(left, right Report) Report {
 		Notes:                 append(append([]string{}, left.Notes...), right.Notes...),
 	}
 	return engine.normalizeReport(report)
-}
-
-func (engine *Engine) withTestQualityReminder(report Report, candidate repository.CandidateDelta) Report {
-	return engine.combine(report, Report{TestQualityReminder: NewTestQualityReminder(testpolicy.ChangedTestPaths(engine.Repository, candidate))})
-}
-
-func (engine *Engine) withMergeGateTestQualityReminder(ctx context.Context, report Report, selection repository.Selection) Report {
-	report = engine.withTestQualityReminder(report, selection.Candidate)
-	receipt, err := behaviorreview.ReadCheckpoint(ctx, engine.Repository)
-	if err != nil {
-		return report
-	}
-	taskSelection, err := engine.Repository.SelectBase(receipt.Base)
-	if err != nil || taskSelection.Base != receipt.Base {
-		return report
-	}
-	return engine.combine(report, Report{TestQualityReminder: NewTaskAwareTestQualityReminder(
-		nil, receipt.Base, testpolicy.ChangedTestPaths(engine.Repository, taskSelection.Candidate),
-	)})
 }
 
 func combineMergePolicy(left, right *MergePolicy) *MergePolicy {

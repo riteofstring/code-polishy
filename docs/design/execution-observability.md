@@ -181,6 +181,12 @@ syntax does not change command identity or the report's argument arrays.
 PowerShell escaping includes its four Unicode single-quote delimiters as well as
 the ASCII apostrophe, keeping paths containing these characters literal.
 
+Test-quality guidance belongs in the verification policy, without per-report
+reminder metadata or advisory-only checkpoint reads. Checkpoint receipts still
+record the accepted base, candidate, review selection and passed gate evidence.
+Receipt publication retains candidate and field validation; report and test
+receipt readers retain their own evidence checks.
+
 Findings also retain their producing verification phase, source or security,
 through report composition and serialization. Coalescing preserves separate
 observations across those phases so a security refresh replaces only its own

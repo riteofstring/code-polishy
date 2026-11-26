@@ -104,7 +104,7 @@ func (repo Repository) inspectSelectionOperand(raw string) (selectionOperand, er
 	info, err := os.Lstat(absolute)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return selectionOperand{}, fmt.Errorf("selection path is missing: %s; for intentional creation use design-context or task-start with --new-path %s", normalized, normalized)
+			return selectionOperand{}, fmt.Errorf("selection path is missing: %s; for intentional creation use design-context with --new-path %s", normalized, normalized)
 		}
 		return selectionOperand{}, fmt.Errorf("inspect selection path %s: %w", normalized, err)
 	}

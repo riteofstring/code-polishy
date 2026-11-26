@@ -387,7 +387,7 @@ a boundary that was never read is not a boundary that was respected.
 ### Built-in Python evidence
 
 Python is a built-in architecture capability. Do not declare an `architecture`
-provider for Python source: `doctor --strict` and the normal architecture pass
+provider for Python source: `doctor` and the normal architecture pass
 already require and run the policy-owned evidence.
 
 Before Python quality or architecture work, Code Polishy builds one inventory
@@ -525,7 +525,7 @@ command through `checks`:
 }
 ```
 
-`doctor --strict` fails if an executable language module lacks that provider.
+`doctor` fails if an executable language module lacks that provider.
 
 What an external package is -- its pin, source, age, license, and known
 vulnerabilities -- remains supply-chain policy; architecture decides only which

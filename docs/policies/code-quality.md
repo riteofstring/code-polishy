@@ -1013,8 +1013,8 @@ outside a sparse checkout count from their indexed content.
 Every `check`, checkpoint gate, and merge gate counts the whole repository,
 whatever the selection, and reports a blocking `quality.lineBudget` error for
 each exceeded scope. The finding cannot be exempted. `code-polishy size` shows
-the counts by language and each scope's remaining lines, and `task-start` shows
-the remaining lines before work begins.
+the counts by language and each scope's remaining lines. `size --base REF` also
+shows measured growth from the base.
 
 Only the caller may change the budget. When a check compares against a base,
 any difference in `quality.lineBudget` produces a `quality.lineBudgetChange`
@@ -1072,7 +1072,7 @@ Empty `paths` means always run. Repository-wide gates still use `--all`.
 - Missing tools fail; they do not silently skip.
 - There is no CLI switch that turns external enforcement off while preserving
   a green result.
-- `doctor --strict` verifies per-language commands, tools, and architecture
+- `doctor` verifies per-language commands, tools, and architecture
   membership; `check` includes the same coverage inspection.
 - `gate` is the one repository-wide merge/release interface.
 - CI and local development use the same checked-in entrypoints.

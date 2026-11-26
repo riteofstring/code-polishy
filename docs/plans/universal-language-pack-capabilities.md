@@ -283,7 +283,7 @@ Keep three certifications distinct:
    supported version and configuration.
 3. Installed integration validates the exact installed identity in representative
    disposable applications through ordinary product commands, including format
-   check and write, idempotence, unrelated-byte protection, `doctor --strict`, and
+   check and write, idempotence, unrelated-byte protection, `doctor`, and
    applicable gates.
 
 Passing one layer never implies another. `pack verify` may orchestrate all three,
@@ -402,7 +402,7 @@ migration plan.
 5. Extend `pack verify` with mode-specific protocol, capability, and installed
    integration certification. Exercise format check and write separately and
    report each layer independently.
-6. Make `doctor --strict` report mode, approval, toolchain, platform, provider
+6. Make `doctor` report mode, approval, toolchain, platform, provider
    conflicts, capability coverage, and bounded discovery summaries.
 
 ### Phase 6: Freeze and cut over the required contract

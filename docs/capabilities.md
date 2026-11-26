@@ -93,54 +93,31 @@ initialization when this context is already available. For missing scoped contex
 ./code-polishyw design-context --files frontend --new-path frontend/new.ts
 ```
 
-Context discovery returns rationale and the scope's pre-edit review requirement
-using the same policy selection as `task-start`. Select an explicit feature only
-when requested by its canonical name or exact alias. Required review still needs
-the exact request captured before editing:
+Context discovery returns rationale and the scope's pre-edit review requirement.
+Select an explicit feature only when requested by its canonical name or exact
+alias. Required review needs the exact original request captured at a clean
+base before editing:
 
 ```sh
-./code-polishyw task-start --intent-file - --module application \
-  --feature checkout --situation deployment
+./code-polishyw behavior-review capture-intent --intent-file -
 ```
 
-`task-start` is also available when its optional packet is useful. It accepts
-existing files plus repeatable `--new-path` operands, or declared modules. Planned
-paths are contained and resolved without creating them; `--files` remains strict.
-Optional packets accept dirty checkouts and record HEAD without asserting that
-uncommitted work was verified. Optional review rejects unused intent and creates
-no journal. Required capture retains a clean initial boundary; later
-artifact-affecting corrections use `behavior-review capture-intent`.
+Add `--feature checkout` only if the caller explicitly requested that configured
+feature. Policy-selected features require no feature operand; they are resolved
+from the applicable policy and scope. Later artifact-affecting corrections use
+the same capture command before acting on them. Optional review needs no journal.
 
-The human packet reports the task base, selection, review requirement, selected
-rationale and handoffs, any selected reliability reminder and useful follow-ups.
-Unmapped paths are facts, not an instruction to start a maintenance task. Inactive
-guard and gate metadata stays in JSON. The ordinary implementation, verification,
-commit and delivery sequence lives in the [workflow entry point](agent-workflows.md).
+Record `git rev-parse HEAD` once for task-scoped verification. Context lookup
+accepts dirty checkouts and never claims that HEAD certifies uncommitted work.
+Existing files and repeatable `--new-path` operands, or declared modules, select
+prospective ownership and rationale. Planned paths stay absent and separate from
+existing paths; `--files` remains strict. Unknown features or invalid selected
+documents fail discovery without publishing intent.
 
-Explicit situations select additional procedures: `dependencies` selects the
-supply-chain guide, `adoption` and `upgrade` select the adoption runbook, and
-`release` selects the release checklist. Matching handoffs select their operating
-guide; selected review and reliability reminders select their own policies.
-A situation selects guidance, not a gate or an external operation. Filenames,
-module names, and request keywords do not infer a lifecycle event.
-
-Use `--format json` when automation needs the complete `task-start/v2` packet,
-which remains bounded to 16 MiB. It contains the task base, locked release and
-catalog identity, any capture identity and canonical features, requested and
-expanded selection, current design documents, selected operational handoffs,
-workflow references, any structured reliability reminder, configured
-guards and verification requirements,
-final-gate owner, and scoped next actions. Ordinary delivery follows the workflow
-entry point. Task-start never selects a merge gate; that requires a separately established
-genuine merge or release checkpoint. Optional tasks omit review-status actions.
-Guard entries preserve capability discovery's availability and enforcement
-facts; listing a guard does not execute or activate it. Document selection uses
-the same context resolver, with `task-start` as its actual workflow situation.
-
-Invalid selection, unknown feature operands, unavailable catalog evidence,
-invalid selected documents, missing or unused intent, and oversized packets
-create no capture. A candidate or intent journal that changes during preparation
-prevents publication of the prepared entry. The command runs no tests, reviews,
-dependency operations, or repository-controlled commands. Follow the packet's
-next actions using the authoritative component commands and the locked
-workflow's event rules.
+Human output identifies rationale, handoffs and review requirements; JSON
+includes the selected document contents. Missing mappings are facts, not a
+maintenance request. Use `--situation NAME` for an actual operational event and
+read its procedure when needed. A situation selects repository handoffs, not a
+gate or an external operation. Filenames, module names and request keywords do
+not infer a lifecycle event. The [workflow entry point](agent-workflows.md)
+owns implementation, verification, commit and delivery.

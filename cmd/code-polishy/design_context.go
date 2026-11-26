@@ -96,7 +96,8 @@ func printRepositoryContext(output io.Writer, context *engine.RepositoryContext)
 		return
 	}
 	if context.Review.Required {
-		fmt.Fprintln(output, "REVIEW: pre-edit intent capture required; use ./code-polishyw task-start with the same selection and --intent-file -")
+		fmt.Fprintln(output, "REVIEW: pre-edit intent capture required; use ./code-polishyw behavior-review capture-intent --intent-file -")
+		fmt.Fprintln(output, "Add --feature only for exact features explicitly requested by the caller.")
 	} else {
 		fmt.Fprintln(output, "REVIEW: optional; no intent capture required")
 	}

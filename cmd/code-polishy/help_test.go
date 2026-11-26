@@ -19,8 +19,8 @@ func TestEveryCommandHelpPageHasCompleteContract(t *testing.T) {
 		"version", "docs", "install-rust", "pack", "agents", "scanner-sign", "scanner-update", "lock", "upgrade", "cleanup", "release-manifest", "change-boundary", "task-session",
 		"check", "gate", "checkpoint-gate", "merge-gate", "behavior-review", "regression-proof",
 		"test", "test-levels", "test-receipts", "verify", "architecture", "supply-chain",
-		"dependency-review", "artifact-security", "doctor", "design-context", "format", "fix", "list-files",
-		"architecture-review", "capabilities", "task-start", "size", "trends",
+		"dependency-review", "artifact-security", "doctor", "design-context", "format", "list-files",
+		"architecture-review", "capabilities", "size", "trends",
 	}
 	for _, command := range publicCommands {
 		t.Run(command, func(t *testing.T) {
@@ -89,7 +89,7 @@ func TestSupplementalHelpRequiresExplicitSelection(t *testing.T) {
 
 func TestEvaluationCommandHelpDistinguishesDirectoriesAndModules(t *testing.T) {
 	t.Parallel()
-	for _, command := range []string{"check", "architecture", "format", "fix", "list-files"} {
+	for _, command := range []string{"check", "architecture", "format", "list-files"} {
 		page, found := commandHelpFor(command)
 		if !found {
 			t.Fatalf("%s help page is missing", command)
@@ -107,7 +107,7 @@ func TestReportCommandHelpDistinguishesEvaluationAndDisplayOptions(t *testing.T)
 	t.Parallel()
 	for _, command := range []string{
 		"change-boundary", "check", "gate", "checkpoint-gate", "merge-gate", "test", "test-levels", "verify", "architecture",
-		"supply-chain", "dependency-review", "artifact-security", "doctor", "format", "fix", "size", "trends",
+		"supply-chain", "dependency-review", "artifact-security", "doctor", "format", "size", "trends",
 	} {
 		page, found := commandHelpFor(command)
 		if !found {

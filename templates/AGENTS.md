@@ -23,10 +23,9 @@
   evidence. Never hash local state for change detection, mirror an authoritative
   digest, or rehash within one trusted operation.
 - Add compatibility, migration, or transitional code only on explicit request.
-- Use `design-context` for missing scoped rationale and review requirements;
-  use `task-start` for required pre-edit capture or a useful packet; otherwise
-  no journal. Record HEAD once; follow
-  `agent-workflows` for review and delivery.
+- Retrieve missing rationale and review requirements with `design-context`.
+  For selected review, use `behavior-review capture-intent --intent-file -`
+  before edits; otherwise no journal. Record HEAD once; follow `agent-workflows`.
 - Honor `quality.allowComments`: when false, omit prose comments and docstrings
   from governed handwritten source; when true, preserve useful accurate comments
   and add only what code cannot convey. Put non-local rationale in mapped design

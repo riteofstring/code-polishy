@@ -13,8 +13,8 @@ func printReliabilityReminder(output io.Writer, reminder *engine.ReliabilityRemi
 	}
 	fmt.Fprintln(output, "============================================================")
 	fmt.Fprintln(output, "END-TO-END RELIABILITY REMINDER")
-	fmt.Fprintln(output, "MATCHED MODULES:", boundedTaskStartValues(reminder.MatchedModules))
-	fmt.Fprintln(output, "MATCHED PATHS:", boundedTaskStartValues(reminder.MatchedPaths))
+	fmt.Fprintln(output, "MATCHED MODULES:", boundedValues(reminder.MatchedModules))
+	fmt.Fprintln(output, "MATCHED PATHS:", boundedValues(reminder.MatchedPaths))
 	fmt.Fprintln(output, "POLICY:", reminder.PolicyDocument)
 	fmt.Fprintln(output)
 	fmt.Fprintln(output, reminder.Principle)

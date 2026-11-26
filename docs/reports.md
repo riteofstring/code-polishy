@@ -18,7 +18,7 @@ For report-producing evaluation commands, exit `0` means success, exit `1`
 means policy or verification failure, and exit `2` means usage or operational
 failure. An operational failure may prevent report publication; inspect the
 exit status and diagnostic rather than assuming a missing report passed.
-Other command-specific protocols, such as `task-start/v2`, have their own
+Other command-specific protocols, such as `capabilities/v1`, have their own
 documented fields and do not claim an evaluation verdict.
 
 ```python

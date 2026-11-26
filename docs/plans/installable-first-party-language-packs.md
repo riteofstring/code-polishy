@@ -408,7 +408,7 @@ Certification has three distinct evidence layers:
    declared supported version and configuration.
 3. Installed product integration exercises the exact pack identity in
    representative disposable applications through ordinary checks, format check,
-   format write, `doctor --strict`, and applicable gates. Format write also proves
+   format write, `doctor`, and applicable gates. Format write also proves
    edits, idempotence, and byte preservation outside write authority.
 
 The existing SQLite proof remains one executable example, not the authoring kit
@@ -457,7 +457,7 @@ code-polishy pack list
 ```
 
 Update previews show capability, authority, toolchain, provenance, and policy
-changes. `pack list` and `doctor --strict` distinguish installed, selected,
+changes. `pack list` and `doctor` distinguish installed, selected,
 missing, incompatible, and corrupt releases. Removing a selected pack does not
 rewrite repositories; their next run fails clearly for its coverage while other
 packs and repository services retain useful diagnostics.
@@ -657,7 +657,7 @@ owner of test scheduling, artifacts, receipts, and gate reuse.
 
 At each task boundary, use the then-current locked agent workflow, design context,
 and event-selected verification. This plan fixes outcomes and gates, not a stale
-copy of evolving task-start, checkpoint, upgrade, or release commands.
+copy of evolving context, checkpoint, upgrade, or release commands.
 
 Checkpoint task-owned progress at meaningful milestones. For completed code work
 on the implementation branch, use the locked workflow's checkpoint gate against

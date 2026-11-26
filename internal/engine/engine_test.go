@@ -15,8 +15,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/riteofstring/code-polishy/internal/behaviorreview"
-	"github.com/riteofstring/code-polishy/internal/gaterun"
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
 	"github.com/riteofstring/code-polishy/internal/runner"
@@ -158,53 +156,6 @@ func TestCombinedReportsCanonicalizeWarnings(t *testing.T) {
 	}
 }
 
-func TestNewTestQualityReminderOrdersAndDeduplicatesPaths(t *testing.T) {
-	t.Parallel()
-	reminder := NewTestQualityReminder([]string{"internal/engine/engine_test.go", "", "cmd/code-polishy/main_test.go", "internal/engine/engine_test.go"})
-	if reminder == nil {
-		t.Fatal("reminder = nil")
-	}
-	want := []string{"cmd/code-polishy/main_test.go", "internal/engine/engine_test.go"}
-	if !slices.Equal(reminder.ChangedTestPaths, want) {
-		t.Fatalf("paths = %v, want %v", reminder.ChangedTestPaths, want)
-	}
-}
-
-func TestNewTestQualityReminderOmitsEmptyEvidence(t *testing.T) {
-	t.Parallel()
-	if reminder := NewTestQualityReminder([]string{""}); reminder != nil {
-		t.Fatalf("reminder = %+v", reminder)
-	}
-}
-
-func TestCombinedReportsDeduplicateTestQualityReminder(t *testing.T) {
-	t.Parallel()
-	report := (&Engine{}).combine(
-		Report{TestQualityReminder: &TestQualityReminder{ChangedTestPaths: []string{"internal/engine/engine_test.go", "cmd/code-polishy/main_test.go"}}},
-		Report{TestQualityReminder: &TestQualityReminder{ChangedTestPaths: []string{"cmd/code-polishy/main_test.go", "internal/testing/quality_test.go"}}},
-	)
-	if report.TestQualityReminder == nil {
-		t.Fatal("reminder = nil")
-	}
-	want := []string{"cmd/code-polishy/main_test.go", "internal/engine/engine_test.go", "internal/testing/quality_test.go"}
-	if !slices.Equal(report.TestQualityReminder.ChangedTestPaths, want) {
-		t.Fatalf("paths = %v, want %v", report.TestQualityReminder.ChangedTestPaths, want)
-	}
-}
-
-func TestTaskAwareTestQualityReminderPreservesMergeWideAndTaskSlices(t *testing.T) {
-	t.Parallel()
-	reminder := NewTaskAwareTestQualityReminder(
-		[]string{"internal/engine/engine_test.go", "cmd/code-polishy/main_test.go"}, "task-base",
-		[]string{"internal/engine/engine_test.go"},
-	)
-	if reminder == nil || reminder.TaskBase != "task-base" ||
-		!slices.Equal(reminder.ChangedTestPaths, []string{"cmd/code-polishy/main_test.go", "internal/engine/engine_test.go"}) ||
-		!slices.Equal(reminder.TaskChangedTestPaths, []string{"internal/engine/engine_test.go"}) {
-		t.Fatalf("reminder = %+v", reminder)
-	}
-}
-
 func TestAttachTestCommandLogPathKeepsDiagnosticEvidenceInSync(t *testing.T) {
 	t.Parallel()
 	retry := TestCommandEvidence{Name: "focused", Attempt: 2}
@@ -220,149 +171,6 @@ func TestAttachTestCommandLogPathKeepsDiagnosticEvidenceInSync(t *testing.T) {
 	}
 	if AttachTestCommandLogPath(&report, "absent", 1, "log") {
 		t.Fatalf("unexpected match: %+v", report)
-	}
-}
-
-func TestMergeReminderAddsOnlyAValidCurrentCheckpointTaskSlice(t *testing.T) {
-	root := contentRepository(t, nil)
-	initializeEngineGitRepository(t, root)
-	writeEngineFile(t, root, "content/previous_test.go", "package content\n", 0o600)
-	commitEngineCandidate(t, root, "previous task")
-	checkpointBase := gitEngineOutput(t, root, "rev-parse", "HEAD")
-	writeEngineFile(t, root, "content/latest_test.go", "package content\n", 0o600)
-	gitBehaviorReview(t, root, "add", "--all")
-	gitBehaviorReview(t, root, "commit", "-m", "latest task")
-	policyEngine, err := Open(root, root, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	candidate, err := policyEngine.Repository.CleanHead()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := behaviorreview.RecordCheckpoint(t.Context(), policyEngine.Repository, behaviorreview.RecordCheckpointOptions{
-		Base: checkpointBase, Candidate: candidate, Scope: behaviorreview.CheckpointScopeChanged, BehaviorReview: testGateRunBehaviorReview(),
-		GateRun: finalizedCheckpointGateEvidence(t, policyEngine.Repository, checkpointBase, candidate),
-	}); err != nil {
-		t.Fatal(err)
-	}
-	selection, err := policyEngine.SelectBase("main")
-	if err != nil {
-		t.Fatal(err)
-	}
-	report := policyEngine.withMergeGateTestQualityReminder(t.Context(), Report{}, selection)
-	reminder := report.TestQualityReminder
-	if reminder == nil || reminder.TaskBase != checkpointBase ||
-		!slices.Equal(reminder.ChangedTestPaths, []string{"content/latest_test.go", "content/previous_test.go"}) ||
-		!slices.Equal(reminder.TaskChangedTestPaths, []string{"content/latest_test.go"}) {
-		t.Fatalf("reminder = %+v", reminder)
-	}
-
-	writeEngineFile(t, root, behaviorreview.CheckpointReceiptPath, "{\"version\":1}\n", 0o600)
-	report = policyEngine.withMergeGateTestQualityReminder(t.Context(), Report{}, selection)
-	reminder = report.TestQualityReminder
-	if reminder == nil || reminder.TaskBase != "" || len(reminder.TaskChangedTestPaths) != 0 ||
-		!slices.Equal(reminder.ChangedTestPaths, []string{"content/latest_test.go", "content/previous_test.go"}) {
-		t.Fatalf("malformed receipt reminder = %+v", reminder)
-	}
-}
-
-func finalizedCheckpointGateEvidence(t *testing.T, repo repository.Repository, base, candidate string) gaterun.ExecutionEvidence {
-	t.Helper()
-	identity, err := gaterun.NewIdentity(gaterun.IdentityInput{
-		Gate: gaterun.CheckpointGate, RequestedBase: "main", ExactBase: base, Candidate: candidate, PolicyLevel: behaviorreview.CheckpointScopeChanged,
-		Release: gaterun.ReleaseIdentity{Version: "test", Digest: strings.Repeat("a", 64)}, ConfigurationSHA256: strings.Repeat("b", 64),
-		Platform: gaterun.Platform{OS: "test", Arch: "test"}, Commands: []gaterun.CommandSpec{}, Environment: []gaterun.EnvironmentInput{}, AmbientEnvironment: []gaterun.EnvironmentInput{}, BehaviorReview: testGateRunBehaviorReview(),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	run, err := gaterun.Start(gaterun.StartOptions{RepositoryRoot: repo.Root, Identity: identity})
-	if err != nil {
-		t.Fatal(err)
-	}
-	report, err := run.Finalize(gaterun.FinalizeOptions{Status: gaterun.RunPassed, Findings: []policy.Finding{}, Notes: []string{}, BehaviorReview: testGateRunBehaviorReview()})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return gaterun.ExecutionEvidence{
-		Gate: gaterun.CheckpointGate, IdentitySHA256: report.IdentitySHA256, ExecutionID: report.ExecutionID, ReportSHA256: report.SHA256,
-	}
-}
-
-func TestChangeAwareCheckAddsTestQualityReminderFromItsCandidate(t *testing.T) {
-	t.Parallel()
-	root := contentRepository(t, nil)
-	path := "content/reminder_test.go"
-	writeEngineFile(t, root, path, "package content\n\nimport \"testing\"\n\nfunc TestReminder(t *testing.T) {\n\tif t.Name() == \"\" {\n\t\tt.Fatal(\"missing test name\")\n\t}\n}\n", 0o600)
-	policyEngine, err := Open(root, root, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	policyEngine.Runner = &recordingEngineRunner{}
-	selection := repository.Selection{Candidate: repository.CandidateDelta{AddedOrModified: []string{path}}, Files: []string{path}}
-	changeAware := policyEngine.CheckChangeAware(t.Context(), selection, "check")
-	ordinary := policyEngine.Check(t.Context(), selection, "check")
-	assertTestQualityReminderPaths(t, changeAware, []string{path})
-	assertTestQualityReminderPaths(t, ordinary, nil)
-}
-
-func TestDirectChangedTestAddsReminderAndExplicitScopesStayQuiet(t *testing.T) {
-	t.Parallel()
-	for name, testCase := range map[string]struct {
-		request func(repository.Selection) testpolicy.Request
-		want    bool
-	}{
-		"changed scope": {
-			request: func(selection repository.Selection) testpolicy.Request { return testpolicy.Request{Changed: selection} },
-			want:    true,
-		},
-		"recommended": {
-			request: func(selection repository.Selection) testpolicy.Request {
-				return testpolicy.Request{Recommended: true, Changed: selection}
-			},
-		},
-		"full": {
-			request: func(selection repository.Selection) testpolicy.Request {
-				return testpolicy.Request{Full: true, Changed: selection}
-			},
-		},
-		"supplemental": {
-			request: func(selection repository.Selection) testpolicy.Request {
-				return testpolicy.Request{Supplemental: true, Changed: selection}
-			},
-		},
-		"module": {
-			request: func(selection repository.Selection) testpolicy.Request {
-				return testpolicy.Request{Modules: []string{"content"}, Changed: selection}
-			},
-		},
-		"suite": {
-			request: func(selection repository.Selection) testpolicy.Request {
-				return testpolicy.Request{Suites: []string{"focused"}, Changed: selection}
-			},
-		},
-	} {
-		t.Run(name, func(t *testing.T) {
-			root := contentRepository(t, nil)
-			path := "content/reminder_test.go"
-			writeEngineFile(t, root, path, "package content\n", 0o600)
-			policyEngine, err := Open(root, root, "")
-			if err != nil {
-				t.Fatal(err)
-			}
-			policyEngine.Runner = &recordingEngineRunner{}
-			selection := repository.Selection{Candidate: repository.CandidateDelta{AddedOrModified: []string{path}}, Files: []string{path}}
-			report, err := policyEngine.Test(t.Context(), testCase.request(selection))
-			if err != nil {
-				t.Fatal(err)
-			}
-			if testCase.want {
-				assertTestQualityReminderPaths(t, report, []string{path})
-				return
-			}
-			assertTestQualityReminderPaths(t, report, nil)
-		})
 	}
 }
 
@@ -562,107 +370,6 @@ func TestGateStyleFailureUsesConfiguredFocusedRetry(t *testing.T) {
 	want := [][]string{{"go", "test", "./..."}, {"go", "test", "./...", "-run", "TestFailed"}}
 	if !reflect.DeepEqual(commandRunner.commands, want) {
 		t.Fatalf("commands = %v, want %v", commandRunner.commands, want)
-	}
-}
-
-func TestTestPlanAddsReminderForCurrentAndTrustedBaseCandidates(t *testing.T) {
-	t.Parallel()
-	root := contentRepository(t, nil)
-	initializeEngineGitRepository(t, root)
-	path := "content/reminder_test.go"
-	writeEngineFile(t, root, path, "package content\n", 0o600)
-	policyEngine, err := Open(root, root, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, base := range []string{"", "main"} {
-		report, err := policyEngine.TestPlan(base)
-		if err != nil {
-			t.Fatal(err)
-		}
-		assertTestQualityReminderPaths(t, report, []string{path})
-	}
-}
-
-func TestMergeGateAddsReminderFromTrustedBaseCandidateAtEveryLevel(t *testing.T) {
-	t.Parallel()
-	for _, testCase := range []struct {
-		name   string
-		level  string
-		root   func(*testing.T) string
-		change func(*testing.T, string) string
-	}{
-		{
-			name:  "documentation",
-			level: testpolicy.MergeLevelDocumentation,
-			root:  documentationRepository,
-			change: func(t *testing.T, root string) string {
-				path := "tests/reminder.md"
-				writeEngineFile(t, root, path, "# Reminder\n", 0o600)
-				return path
-			},
-		},
-		{
-			name:  "recommended",
-			level: testpolicy.MergeLevelRecommended,
-			root:  func(t *testing.T) string { return contentRepository(t, nil) },
-			change: func(t *testing.T, root string) string {
-				path := "content/reminder_test.go"
-				writeEngineFile(t, root, path, "package content\n", 0o600)
-				return path
-			},
-		},
-		{
-			name:  "full",
-			level: testpolicy.MergeLevelFull,
-			root:  func(t *testing.T) string { return contentRepository(t, nil) },
-			change: func(t *testing.T, root string) string {
-				path := "content/reminder_test.go"
-				writeEngineFile(t, root, path, "package content\n", 0o600)
-				configPath := filepath.Join(root, policy.ConfigFilename)
-				contents, err := os.ReadFile(configPath)
-				if err != nil {
-					t.Fatal(err)
-				}
-				writeEngineFile(t, root, policy.ConfigFilename, string(contents)+"\n", 0o600)
-				return path
-			},
-		},
-	} {
-		t.Run(testCase.name, func(t *testing.T) {
-			root := testCase.root(t)
-			if testCase.level != testpolicy.MergeLevelDocumentation {
-				declareContentTestOwnership(t, root, "content/reminder_test.go")
-				installRequiredBehaviorReviewPolicy(t, root, "checkpoint")
-				installBehaviorReviewTestGuidance(t, root)
-			}
-			initializeEngineGitRepository(t, root)
-			if testCase.level != testpolicy.MergeLevelDocumentation {
-				captureEngineBehaviorIntent(t, root)
-			}
-			path := testCase.change(t, root)
-			policyRoot := root
-			if testCase.level != testpolicy.MergeLevelDocumentation {
-				commitEngineCandidate(t, root, "candidate")
-				policyRoot = enginePolicyRoot(t)
-			}
-			policyEngine, err := Open(root, policyRoot, "")
-			if err != nil {
-				t.Fatal(err)
-			}
-			if testCase.level != testpolicy.MergeLevelDocumentation {
-				prepareValidBehaviorReviewReceipt(t, policyEngine, root)
-			}
-			policyEngine.Runner = &recordingEngineRunner{}
-			report, err := policyEngine.MergeGate(t.Context(), "main")
-			if err != nil {
-				t.Fatal(err)
-			}
-			if report.MergePolicy == nil || report.MergePolicy.Level != testCase.level {
-				t.Fatalf("merge policy = %+v, want level %q", report.MergePolicy, testCase.level)
-			}
-			assertTestQualityReminderPaths(t, report, []string{path})
-		})
 	}
 }
 
@@ -871,20 +578,28 @@ func tableWidth(table Table) int {
 	return width
 }
 
-func TestVerifyDoesNotRunSupplementalSuites(t *testing.T) {
+func TestVerifyRunsFullTestsThenBuildWithoutSupplementalSuites(t *testing.T) {
 	t.Parallel()
-	root := t.TempDir()
+	root := contentRepository(t, nil)
 	config := policy.Config{Version: policy.ConfigVersion, Tests: policy.Testing{Suites: []policy.TestSuite{
 		{Name: "full", Kind: "contract", Scope: "repository", Cost: "standard", RunOn: []string{"full"}},
 		{Name: "mutation", Kind: "mutation", Scope: "repository", Cost: "expensive", RunOn: []string{"supplemental"}},
 	}}}
+	config.Checks = []policy.Command{{Name: "build", Provides: []string{"build"}, Argv: []string{"true"}, RunOn: []string{"build"}}}
 	commandRunner := &recordingEngineRunner{}
 	policyEngine := Engine{Repository: repository.Repository{Root: root, PolicyRoot: root, Config: config}, Runner: commandRunner}
-	if _, err := policyEngine.Verify(context.Background(), true); err != nil {
+	if _, err := policyEngine.Verify(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Contains(commandRunner.commands, "full") || slices.Contains(commandRunner.commands, "mutation") {
+	if !slices.Equal(commandRunner.commands, []string{"full", "build"}) {
 		t.Fatalf("verify commands = %v", commandRunner.commands)
+	}
+	commandRunner.commands = nil
+	if _, err := policyEngine.Test(t.Context(), testpolicy.Request{Full: true}); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(commandRunner.commands, []string{"full"}) {
+		t.Fatalf("full test profile commands = %v", commandRunner.commands)
 	}
 }
 
@@ -1278,7 +993,6 @@ func TestCheckNamedRunsOnlyTheExactConfiguredCheck(t *testing.T) {
 	if err != nil || len(report.Findings) != 0 {
 		t.Fatalf("report=%+v error=%v", report, err)
 	}
-	assertTestQualityReminderPaths(t, report, nil)
 	if len(commandRunner.commands) != 1 || !slices.Contains(commandRunner.commands, "content-check") {
 		t.Fatalf("commands = %v", commandRunner.commands)
 	}
@@ -1465,19 +1179,6 @@ func writeEngineFile(t *testing.T, root, path, contents string, mode os.FileMode
 	}
 	if err := os.WriteFile(absolute, []byte(contents), mode); err != nil {
 		t.Fatal(err)
-	}
-}
-
-func assertTestQualityReminderPaths(t *testing.T, report Report, want []string) {
-	t.Helper()
-	if len(want) == 0 {
-		if report.TestQualityReminder != nil {
-			t.Fatalf("test quality reminder = %+v", report.TestQualityReminder)
-		}
-		return
-	}
-	if report.TestQualityReminder == nil || !slices.Equal(report.TestQualityReminder.ChangedTestPaths, want) {
-		t.Fatalf("test quality reminder = %+v, want paths %v", report.TestQualityReminder, want)
 	}
 }
 

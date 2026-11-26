@@ -10,15 +10,12 @@ import (
 
 const repositorySizeTableLimit = 10
 
-func (engine *Engine) Size(base string, proposals ...BudgetProposal) (Report, error) {
-	if err := validateBudgetProposals(proposals); err != nil {
-		return Report{}, err
-	}
+func (engine *Engine) Size(base string) (Report, error) {
 	analysis, err := engine.Repository.AnalyzeSize(base)
 	if err != nil {
 		return Report{}, err
 	}
-	if err := engine.prepareBudgetGrowth(&analysis, proposals); err != nil {
+	if err := engine.addBaseLineCounts(&analysis); err != nil {
 		return Report{}, err
 	}
 	notes := []string{
@@ -117,17 +114,13 @@ func appendLineBudgetTable(tables []Table, scopes []repository.LineBudgetScope) 
 		if scope.BaseLines != nil {
 			base, growth = strconv.Itoa(*scope.BaseLines), fmt.Sprintf("%+d", scope.Lines-*scope.BaseLines)
 		}
-		proposed, headroom := "-", "-"
-		if scope.ProposedCeiling > 0 {
-			proposed, headroom = strconv.Itoa(scope.ProposedCeiling), strconv.Itoa(scope.ProposedCeiling-scope.Lines)
-		}
 		remaining := "-"
 		if scope.Budget > 0 {
 			remaining = strconv.Itoa(scope.Budget - scope.Lines)
 		}
-		rows = append(rows, []string{scope.Scope, strconv.Itoa(scope.Lines), base, growth, lineBudgetLabel(scope.Budget), remaining, proposed, headroom, scope.GrowthRationale})
+		rows = append(rows, []string{scope.Scope, strconv.Itoa(scope.Lines), base, growth, lineBudgetLabel(scope.Budget), remaining})
 	}
-	return append(tables, Table{Title: "LINE BUDGET", Columns: []string{"SCOPE", "LINES", "BASE", "GROWTH", "BUDGET", "REMAINING", "PROPOSED", "HEADROOM", "RATIONALE"}, Rows: rows})
+	return append(tables, Table{Title: "LINE BUDGET", Columns: []string{"SCOPE", "LINES", "BASE", "GROWTH", "BUDGET", "REMAINING"}, Rows: rows})
 }
 
 func appendSizeFileTable(tables []Table, title string, files []repository.SizeFile) []Table {
@@ -236,4 +229,30 @@ func FormatSizeBytes(bytes int64) string {
 		}
 	}
 	return fmt.Sprintf("%s%.1f %s", sign, amount, unit)
+}
+
+func (engine *Engine) addBaseLineCounts(analysis *repository.SizeAnalysis) error {
+	if analysis.Comparison == nil || len(analysis.SourceLines.Budget) == 0 {
+		return nil
+	}
+	base, err := engine.Repository.CountSourceLinesAt(analysis.Comparison.MergeBase)
+	if err != nil {
+		return err
+	}
+	for index := range analysis.SourceLines.Budget {
+		count := sourceLinesForScope(base, analysis.SourceLines.Budget[index].Scope)
+		analysis.SourceLines.Budget[index].BaseLines = &count
+	}
+	return nil
+}
+
+func sourceLinesForScope(lines repository.SourceLines, scope string) int {
+	switch scope {
+	case "production":
+		return lines.Production
+	case "test":
+		return lines.Test
+	default:
+		return lines.Production + lines.Test
+	}
 }

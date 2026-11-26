@@ -415,7 +415,7 @@ jobs:
           & git.exe -C $target update-ref refs/remotes/origin/main HEAD
           & git.exe -C $target symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
 
-          & $launcher --repo-root $target doctor --strict
+          & $launcher --repo-root $target doctor
           if ($LASTEXITCODE -ne 0) { throw 'Installed launcher doctor failed.' }
           & $launcher --repo-root $target task-session --module application -- pwsh -NoProfile -NonInteractive -Command 'exit 0'
           if ($LASTEXITCODE -ne 0) { throw 'Installed native task session failed.' }

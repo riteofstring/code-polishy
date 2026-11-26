@@ -26,12 +26,10 @@ type SourceLineGroup struct {
 }
 
 type LineBudgetScope struct {
-	Scope           string `json:"scope"`
-	Lines           int    `json:"lines"`
-	Budget          int    `json:"budget"`
-	BaseLines       *int   `json:"baseLines,omitempty"`
-	ProposedCeiling int    `json:"proposedCeiling,omitempty"`
-	GrowthRationale string `json:"growthRationale,omitempty"`
+	Scope     string `json:"scope"`
+	Lines     int    `json:"lines"`
+	Budget    int    `json:"budget"`
+	BaseLines *int   `json:"baseLines,omitempty"`
 }
 
 func (scope LineBudgetScope) Exceeded() bool {

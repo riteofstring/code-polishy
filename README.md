@@ -70,7 +70,7 @@ policy and scope remain applicable. Retrieve missing guidance once:
 
 Known scope with optional review needs no initialization command. Record Git
 HEAD once for task-scoped verification. When context selects review, capture the
-exact request with `task-start --intent-file -` before editing. Planned files use
+exact request with `behavior-review capture-intent --intent-file -` before editing. Planned files use
 `--new-path PATH`; optional context works in an ordinary dirty checkout.
 
 After useful focused tests during editing, a completed source task uses
@@ -81,7 +81,7 @@ review and supplemental suites remain conditional on their own events.
 Read the saved report to inspect warnings or omitted findings without rerunning
 verification. The [report guide](docs/reports.md#capture-once-inspect-the-saved-report)
 shows how to preserve the original exit status. The locked
-[agent workflow](docs/agent-workflows.md) covers long-lived branch checkpoints,
+[agent workflow](docs/agent-workflows.md) covers selected checkpoints,
 behavior review, failed-gate recovery and CI evidence transfer.
 
 ## Languages

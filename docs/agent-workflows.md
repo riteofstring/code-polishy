@@ -18,11 +18,12 @@ Read the conditional procedures only when their stated trigger applies.
    `./code-polishyw design-context --files PATH...` or repeated `--module NAME`.
    Use repeatable `--new-path PATH` for intentional creation, alone or with
    `--files`; do not create placeholders or select the repository to obtain context.
-3. Use `task-start` when policy or an explicitly requested feature requires a
-   pre-edit request boundary, or when its optional task packet is useful. For
-   required review, supply the exact request with `--intent-file -` at a clean
-   task base before edits. Never recapture an already captured request. Optional
-   work needs no journal, task identifier, clean checkout or acknowledgement.
+3. When policy or an explicitly requested feature selects review, capture the
+   exact request with `behavior-review capture-intent --intent-file -` at a clean
+   task base before edits. Add `--feature` only for exact caller-requested
+   features, never to restate policy-selected features. Never recapture an
+   already captured request. Optional work needs no journal, task identifier,
+   clean checkout or acknowledgement.
    Record `git rev-parse HEAD` once when a task base is needed for changed-scope
    verification. HEAD does not certify a clean candidate; existing dirty changes
    remain visible. Read selected rationale and handoffs, refreshing only context
@@ -42,9 +43,7 @@ Read the conditional procedures only when their stated trigger applies.
    uncommitted handoff. Public API cutovers must be coherent at merge or release.
    Push, publish, and pull-request operations require explicit authorization.
 
-`task-start` prints scope-specific follow-ups rather than repeating this sequence.
-Its complete packet remains available with `--format json`. It does not infer
-features from prose or decide that an ordinary task is a merge checkpoint.
+Context discovery is read-only and never captures intent or initializes a task.
 Select a behavior feature only by the caller's intended canonical name or exact
 alias. See [task selection and intent](capabilities.md#start-a-task).
 
@@ -71,9 +70,13 @@ changing display flags on an evaluation command executes verification again.
 | Ordinary prose-only Markdown change                                                                  | Format and documentation checks                                                 |
 | Coherent runnable source change or manually resolved source conflict                                 | One affected exact test                                                         |
 | Completed source task with no final gate immediately next                                            | `check --git-changes` before committing, then `test --changed --base TASK_BASE` |
-| Completed source task on a long-lived branch                                                         | `checkpoint-gate --base PREVIOUS_CHECKPOINT` after commit and selected review   |
+| Selected checkpoint review or accepted verification record needed                                    | `checkpoint-gate --base PREVIOUS_CHECKPOINT` after commit and selected review   |
 | Genuine merge or release checkpoint                                                                  | One `merge-gate --base MERGE_TARGET` through its configured owner               |
 | Stable release candidate                                                                             | Only explicitly selected supplemental suites                                    |
+
+A checkpoint is selected when checkpoint review or an accepted verification
+record is needed; branch longevity alone does not select one. It replaces the
+same completion checks and changed-scope tests.
 
 Control Markdown and product-input Markdown follow source verification. A
 prose-only conflict remains documentation-only. Do not test after every edit or
@@ -102,8 +105,10 @@ catalogue topics or exact document paths in one invocation. Use
 `./code-polishyw docs read verification --section 'Reusable test evidence'`
 for one section and its subsections. Retained context needs no reread as proof.
 `docs find QUERY...` locates other policy references. Add `--situation NAME` to
-`task-start` when the named situation actually applies; it selects guidance and
-matching repository handoffs without authorizing their operations.
+`design-context` when the named situation actually applies; it selects
+matching repository handoffs without authorizing their operations. The table
+below identifies the corresponding release-owned procedure to read only when
+its context is missing.
 
 Published Python libraries use the [library dependency policy](policies/supply-chain.md#published-python-libraries):
 declare exact manifests in `supplyChain.pythonLibraries`, keep consumer

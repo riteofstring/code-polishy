@@ -4,26 +4,11 @@ The repository module owns selection and mapping resolution because it already
 owns path containment, governed inventory, and module ownership. The engine
 composes those facts with bounded document content and operational handoffs.
 The CLI renders the result; it must not implement a second mapping algorithm.
-Task-start uses the same engine operation so an agent receives the same rationale
-and coverage information whether it starts a task or performs a separate lookup.
-It composes that context with behavior-review selection, while request custody
-and cleanup follow the separately mapped behavior-review intent design.
-
-The interactive task-start view is bounded independently of the complete
-engine packet. It exposes selection and mapping counts, selected document and
-handoff identities, review status, and next actions without rendering complete
-path inventories, document contents, or guard definitions. Explicit JSON output
-preserves the exact packet for machine consumers. Both views derive from the
-same packet; the CLI performs no separate selection or mapping.
-
-Task-start owns a selected request boundary or a useful optional packet, not a
-merge decision. Its next actions contain selected context, reliability guidance
-and required review status. Mapping gaps remain facts without default maintenance
-follow-ups. The reusable workflow
-owns the default implementation, verification, commit, and delivery sequence;
-neither view repeats it or schedules a merge gate. The configured final-gate owner
-remains a packet fact for a separately established genuine merge or release
-checkpoint, whose workflow supplies the trusted merge target.
+Context discovery reports policy and caller-selected review requirements without
+capturing intent. Required review uses `behavior-review capture-intent`, whose request custody
+and cleanup follow the mapped
+behavior-review intent design. Context carries scoped rationale and handoffs;
+the workflow owns implementation, verification and delivery.
 
 Module and source mappings are additive. A source-specific decision can explain
 a local exception or boundary without replacing the module's wider constraints.
@@ -54,12 +39,12 @@ anything. Planned paths participate in prospective ownership, rationale and revi
 selection but remain separate from expanded existing paths in the report.
 They never imply analysis or trigger a fallback to repository-wide selection.
 
-Context discovery and task packets use the same review selection. Missing context
-is retrieved before edits, then reused until its release, policy, scope, mappings
-or relevant documents change. Optional packets record HEAD without a clean-state
-assertion or candidate digest. Required review alone acquires a clean snapshot
-and atomic intent custody. An invalid initial boundary cannot be repaired by
-mislabeling it a correction.
+Missing context is retrieved before edits, then reused until its release,
+policy, scope, mappings or relevant documents change. Lookup accepts ordinary
+dirty work without hashing candidate state or writing a request journal. Agents
+record Git HEAD separately when a task base is needed. Required review alone
+needs a clean initial request boundary; an invalid boundary cannot be repaired
+by mislabeling it a correction.
 
 Declared modules may need rationale before their first source file exists, so
 context selection supports them. Execution-oriented module selection continues
@@ -67,13 +52,13 @@ to require governed files. Document digests identify the retrieved contents;
 agents reuse context while the scope, mappings, and relevant contents remain
 unchanged. Progress commits and test runs alone do not make context stale.
 
-Workflow references follow actual selection. Explicit situation identifiers
-select dependency, adoption, upgrade, or release procedures. Matching handoffs
-and configured review/reminders add their respective guidance. Module names,
-source filenames, and request keywords do not infer those events. The release
-capability catalog retains command and feature references, while the engine
-uses the context resolver's existing situation facts. Optional review collapses
-to one human line; JSON retains complete intent and guard facts.
+Operational handoffs follow actual selection. Explicit situation identifiers
+match declared handoffs; the agent workflow identifies release-owned procedures
+for dependency, adoption, upgrade or release work. Module names, source filenames
+and request keywords do not infer those events. The capability catalog retains
+command and feature references. Human context output states the review
+requirement; JSON retains selected features, selection reasons and document
+contents.
 
 A single complete `docs read` returns release-owned bytes unchanged. Batched
 reads resolve every topic through the authenticated catalogue before writing,

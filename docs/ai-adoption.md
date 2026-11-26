@@ -54,7 +54,7 @@ Adoption is complete only when:
 - declared local supplemental suites are configured as separate hardening
   evidence, with status `NOT RUN` unless an explicit hardening trigger selects
   them;
-- strict doctor and the ordinary gate pass, or a genuine blocker is reported
+- doctor and the ordinary gate pass, or a genuine blocker is reported
   precisely;
 - completed task-owned changes are committed unless the caller explicitly
   requests an uncommitted handoff;
@@ -321,7 +321,7 @@ command really selects and executes the evidence it claims.
 
 ### Bootstrap a clean policy base
 
-First adoption has two phases because task-start and design-context need a
+First adoption has two phases because design-context and intent capture need a
 configuration, while original intent capture needs a clean committed base.
 
 1. Record the original clean Git commit before creating policy files. Preserve
@@ -339,7 +339,8 @@ configuration, while original intent capture needs a clean committed base.
    incomplete. This commit does not assert a green doctor or gate.
 4. Discover scoped rationale and review requirements with
    `./code-polishyw design-context --files PATH... --situation adoption`.
-   If review requires intent, use `task-start --intent-file -` at the clean
+   If review requires intent, use
+   `behavior-review capture-intent --intent-file -` at the clean
    bootstrap base and supply the exact original caller request. Do not fabricate a correction or claim capture at the unmanaged
    base. Optional review needs no intent journal. If a required merge review
    will use an upstream target, establish the bootstrap as that target's base
@@ -380,7 +381,7 @@ Run early and repeatedly:
 
 ```sh
 code-polishy list-files --all
-code-polishy doctor --strict
+code-polishy doctor
 ```
 
 Use their exact findings to refine ownership and coverage.
@@ -528,7 +529,7 @@ principles byte-for-byte, and repairs missing report or artifact ignore rules
 and stale managed wrappers. Code Polishy no longer creates or requires
 `CLAUDE.md`; install and sync remove only the exact obsolete managed import or
 redirect and leave any custom file untouched. `agents check` and
-`doctor --strict` reject a missing rule or invalid principles section. Do not
+`doctor` reject a missing rule or invalid principles section. Do not
 hand-copy or duplicate the canonical policy text.
 
 Keep canonical guidance compact and limited to durable rules used across tasks.
@@ -545,15 +546,16 @@ The resulting guidance should make these execution boundaries clear:
   coherent verified commit; task sessions are for requested isolation or
   unattended work;
 - `test-levels` is read-only;
-- after each completed committed task on a long-lived branch, agents run
-  `checkpoint-gate --base <previous-checkpoint>`; conversational and read-only
-  requests do not create checkpoints, and an unchanged invocation is a no-op;
+- when checkpoint review or an accepted verification record is needed, agents
+  run `checkpoint-gate --base <previous-checkpoint>` after commit; it replaces
+  the same completion checks and changed-scope tests. Branch longevity alone
+  does not select a checkpoint;
 - at a separately established genuine merge or release checkpoint, agents
   resolve a trusted merge target and run `merge-gate --base <merge-target>` so
   Code Polishy selects documentation, recommended, or full execution without a
   user choice, and they do not immediately precede it with `test --changed` for
   the same candidate;
-- non-documentation candidates use a review subagent with no inherited
+- candidates with selected behavior review use a review subagent with no inherited
   conversation, red/green proofs, and a receipt before either checkpoint or
   merge gate; both gates independently rerun cited proofs, and the primary agent
   or harness keeps the subagent packet-only and preserves report custody;
@@ -598,7 +600,7 @@ gate. When adoption work changes only ordinary Markdown, run
 `code-polishy format --git-changes` and skip the application commands below:
 
 ```sh
-code-polishy doctor --strict
+code-polishy doctor
 code-polishy check --all
 code-polishy test --changed
 code-polishy supply-chain --offline

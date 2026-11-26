@@ -216,7 +216,7 @@ or another verification run.
 An exact test is the smallest named suite or module suite that can observe the
 changed behavior. Run it after a coherent runnable slice, not after every edit.
 `test --changed` is broader task-boundary feedback. Skip it when a final merge
-gate immediately follows over the same candidate because that gate already
+or checkpoint gate immediately follows over the same candidate because it
 selects the required changed-impact tests. One genuine merge or release
 checkpoint has one final-gate owner; local and CI gates are both required only
 when independent evidence was explicitly requested.
@@ -239,7 +239,7 @@ code-polishy test --all
 code-polishy test --supplemental [--resume]
 code-polishy test-receipts export --output PATH
 code-polishy test-receipts import --source PATH --sha256 DIGEST
-code-polishy verify [--tests-only]
+code-polishy verify
 code-polishy gate
 code-polishy checkpoint-gate --base PREVIOUS_CHECKPOINT
 code-polishy merge-gate --base MERGE_TARGET
@@ -284,7 +284,8 @@ code-polishy merge-gate --base MERGE_TARGET
 - `gate` adds strict coverage, repository-wide code health, and online
   supply-chain enforcement. Neither `verify` nor `gate` silently runs
   supplemental suites, even when they are declared or their kinds are required.
-- `checkpoint-gate` accepts one clean committed task on a long-lived branch.
+- `checkpoint-gate` accepts one clean committed candidate when checkpoint review
+  or an accepted verification record is needed.
   It no-ops when the supplied base yields no governed candidate paths, runs the
   documentation contract for ordinary Markdown, and runs affected checks and
   focused changed-scope tests. It reports behavior review as optional, required,
@@ -492,35 +493,7 @@ are configuration errors. Code Polishy never infers coverage from command text.
 Plans and gate reports show each requirement, the suite that executed for it,
 and whether the reason was `covered` or `duplicate-command`.
 
-## Test-quality reminder
-
-When a candidate contains an added or modified test file, Code Polishy prints
-one prominent, non-blocking reminder once per invocation at high-signal change
-checkpoints:
-
-- the default `check`, `check --git-changes`, and `check --staged`;
-- the default changed-scope `test` command and `test --changed`;
-- `test-levels`; and
-- `checkpoint-gate` and `merge-gate`.
-
-The reminder says: “Make sure none of the tests (new or old) are tautological
-or change-detector tests.” A tautological test derives its expected result from
-the same production implementation being tested. A change-detector test mirrors
-private source spelling, extracted helper text, or collaborator choreography and
-therefore breaks under a behavior-preserving implementation change.
-
-The reminder does not alter selection or exit status, run additional tests or
-checks, request authorization, or need configuration. It stays quiet for
-deleted-only test paths, production-only or other unrelated changes,
-`check --all`, `check --files`, or `check --name`, and explicit suite, module,
-full, recommended, or supplemental test runs.
-
-For a checkpoint gate, the changed-test count is the slice since its explicit
-previous checkpoint. A merge gate always keeps its merge-target-wide changed
-test count. When a valid checkpoint receipt is bound to the current candidate,
-the merge reminder also identifies the latest task slice and its base. Missing,
-stale, or malformed checkpoint evidence is ignored for this advisory display;
-it never changes merge selection or gate scope.
+## Diagnostic planning
 
 Without a base, the diagnostic planner advises full when an application
 selection expands to the whole repository, when at least 20 governed paths
@@ -567,7 +540,7 @@ targets are deterministic findings.
 The merge gate is read-only. An agent runs
 `code-polishy format --git-changes`, fixes any remaining documentation finding,
 and repeats the final gate without asking the user for authorization. The level
-runs no strict doctor, application test, build, configured target command,
+runs no doctor, application test, build, configured target command,
 supply-chain provider, artifact target, supplemental suite, or live probe.
 
 Default output is:
@@ -576,11 +549,12 @@ Default output is:
 MERGE GATE: DOCUMENTATION against origin/main
 ```
 
-## Long-lived branch checkpoint gate
+## Checkpoint gate
 
-`checkpoint-gate --base REF` is the task boundary for a branch that will keep
-receiving AI changes before merge. `REF` is the previous accepted commit, and
-the candidate must be one clean committed HEAD. The command accepts no file,
+`checkpoint-gate --base REF` provides selected checkpoint review or an accepted
+verification record. Branch longevity alone does not select it. The gate
+replaces the same completion checks and changed-scope tests. `REF` is the
+previous accepted commit, and the candidate must be one clean committed HEAD. The command accepts no file,
 module, suite, or profile downscope.
 
 An unchanged candidate prints `CHECKPOINT GATE: UNCHANGED` and performs no
@@ -603,8 +577,7 @@ binds the requested and exact base, candidate, selected policy level, release
 and configuration identity, command outcomes, failure evidence, log paths, and
 final status. The checkpoint receipt records the exact merge base, accepted
 candidate, scope, full behavior-review status and selection digest, and the
-exact passed run identity, execution, and report digest. Readers require that
-report to remain the current validated passed checkpoint report. It is an audit
+exact passed run identity, execution, and report digest. It is an audit
 record, not an implicit base: the next invocation still supplies the accepted
 commit explicitly.
 
@@ -715,7 +688,7 @@ manifests, lockfiles, workflows, container inputs, and supported policy-tool
 configuration. Thus changing the allowlist cannot make its own pull request
 use the narrow lane.
 
-The recommended execution profile consists of strict doctor, applicable gate
+The recommended execution profile consists of doctor, applicable gate
 checks for the derived selection, recommended tests for changed modules and
 reverse dependents, applicable build providers, and online supply-chain and
 artifact verification. The full decision adds repository-wide checks, full
@@ -829,13 +802,14 @@ REVIEW` and `FINAL STATE`. Optional review reads no packet, proof, or receipt
 and does not change ordinary command selection or runtime.
 
 When scoped context is missing, `design-context` reports the review requirement
-using the same policy selection as `task-start`. Retain that context while release,
-policy and scope remain applicable. Use `task-start` for required pre-edit capture
-or a useful optional packet. Optional work needs neither initialization nor a request journal. When checked-in
-policy or an explicit feature selects review, the agent harness supplies the
+without capturing intent. Retain that context while release, policy and scope
+remain applicable. Optional work needs neither initialization nor a request
+journal. When checked-in policy or an explicit feature selects review, the agent harness supplies the
 user's exact original request and acceptance criteria at the task base,
-preferably through bounded standard input. The harness repeats capture before
-acting on a later message only when it changes final artifacts, observable
+through `behavior-review capture-intent --intent-file -`. Add `--feature` only
+for exact caller-requested features; policy-selected features need no operand.
+The harness repeats capture before acting on a later message only when it
+changes final artifacts, observable
 behavior, or acceptance criteria; status questions, approvals, authentication
 or publication directions, and operational coordination are not review intent.
 Correction capture may bind a dirty candidate-state digest; it invokes no tests
@@ -867,7 +841,8 @@ An AI collaborator should treat the levels differently:
    scope, mappings and relevant documents remain unchanged. Retrieve only missing
    or invalidated context with `design-context`; it also reports review selection.
    When review is selected, capture the exact harness-provided request at the
-   clean task base before editing through `task-start --intent-file -`. Optional
+   clean task base before editing through
+   `behavior-review capture-intent --intent-file -`. Optional
    work needs no initialization or journal. Record Git HEAD once when task-scoped
    verification needs a base; this does not assert a clean candidate. Capture later
    artifact-affecting corrections before acting on them. During implementation,
@@ -877,10 +852,11 @@ An AI collaborator should treat the levels differently:
    approval.
 3. While iterating on application source, run `test --changed` for affected modules and reverse
    dependents when exact focused tests are no longer enough.
-4. After a completed code-changing task on a long-lived branch, commit the
-   candidate, complete behavior review only when status selects it, and run
-   `checkpoint-gate --base PREVIOUS_CHECKPOINT`. Start the next task only after
-   it records the accepted HEAD.
+4. When checkpoint review or an accepted verification record is needed, commit
+   the candidate, complete any selected review, and run
+   `checkpoint-gate --base PREVIOUS_CHECKPOINT`. This replaces the same
+   completion checks and changed-scope tests. Branch longevity alone does not
+   select a checkpoint.
 5. At a completed source task with no selected gate immediately next, run
    `check --git-changes` before committing, then `test --changed --base TASK_BASE`.
    `test-levels --base TASK_BASE` is optional inspection and executes no tests. At an ordinary merge checkpoint,
@@ -902,9 +878,8 @@ Do not run a checkpoint after every edit or chat turn, and do not turn focused
 feedback, documentation, checkout, branch synchronization, conflict-free merge
 or rebase, tagging, lock update, or push preparation into `verify`, `gate`, or a
 checkpoint. After manually resolving a source conflict, run one affected exact
-test; ordinary Markdown still follows the documentation rule. A checkpoint
-closes a completed committed source task. Credentialed, destructive, and
-live-provider checks remain typed external gates. CI may own the one checked-in
+test; ordinary Markdown still follows the documentation rule. Credentialed,
+destructive, and live-provider checks remain typed external gates. CI may own the one checked-in
 merge workflow for a genuine merge or release candidate.
 
 ## Test stable interfaces

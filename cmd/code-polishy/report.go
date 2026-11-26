@@ -97,11 +97,11 @@ func printReportSelection(output io.Writer, report engine.Report) {
 	}
 	fmt.Fprintf(output, "SELECTION: %s; %d expanded path(s)", selection.Mode, len(selection.Expanded))
 	if len(selection.Operands) > 0 {
-		fmt.Fprint(output, "; ", boundedTaskStartValues(selection.Operands))
+		fmt.Fprint(output, "; ", boundedValues(selection.Operands))
 	}
 	fmt.Fprintln(output)
 	if len(selection.Planned) > 0 {
-		fmt.Fprintln(output, "PLANNED PATHS (not yet present):", boundedTaskStartValues(selection.Planned))
+		fmt.Fprintln(output, "PLANNED PATHS (not yet present):", boundedValues(selection.Planned))
 	}
 }
 
@@ -565,4 +565,16 @@ func tableCell(row []string, index int) string {
 		return ""
 	}
 	return strings.NewReplacer("\n", " ", "\r", " ", "\t", " ").Replace(row[index])
+}
+
+func boundedValues(values []string) string {
+	if len(values) == 0 {
+		return "none"
+	}
+	displayed := values[:min(12, len(values))]
+	result := strings.Join(displayed, ", ")
+	if len(displayed) < len(values) {
+		result += fmt.Sprintf(", ... (%d more)", len(values)-len(displayed))
+	}
+	return result
 }

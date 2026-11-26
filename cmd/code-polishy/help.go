@@ -45,23 +45,6 @@ var commandHelpPages = []commandHelpPage{
 		examples:    []string{"code-polishy capabilities", "code-polishy capabilities --query 'purchase behavior' --format json"},
 	},
 	{
-		name:    "task-start",
-		summary: "Validate task context and capture intent only when behavior review is selected.",
-		syntax:  []string{"./code-polishyw task-start (--files PATH... | --new-path PATH... | --module NAME...) [--intent-file PATH|-] [--feature NAME...] [--situation NAME...] [--format human|json]"},
-		selectors: []string{
-			"Choose one or more contained files or directories, or repeat --module for every declared module in scope. File and module selectors cannot be mixed; change-aware and repository-wide selectors are not accepted.",
-			"Repeat --new-path PATH for intended creation, alone or alongside --files. Planned paths remain absent; optional packets accept dirty checkouts and record HEAD without asserting a clean candidate. Required intent capture still needs a clean initial boundary.",
-			"Repeat --feature only for exact canonical names or aliases explicitly requested by the caller; repeat --situation for exact operational contexts.",
-			"Situations dependencies, adoption, upgrade, and release select their workflow documents; matching repository handoffs and review requirements add their own guidance. They do not select a merge gate.",
-			"Intent is required only when configured policy or an explicit feature selects behavior review. Use --intent-file - for bounded UTF-8 standard input.",
-			"Do not supply intent when review is optional; human output gives one review summary while JSON retains captured and willBeUsed separately.",
-			"Human output is the bounded default. Use --format json for the complete task-start/v2 packet and configured guard catalog.",
-		},
-		sideEffects: []string{"Emits a bounded human summary by default or one complete task-start/v2 JSON document with --format json. It atomically appends the intent journal only when selected review will consume that intent, and runs no tests, reviews, package operations, or repository commands."},
-		exits:       []string{"0 packet produced and any selected intent captured", "2 invalid usage, unavailable context, or operational failure"},
-		examples:    []string{"code-polishy task-start --module application", "code-polishy task-start --module application --module tooling", "code-polishy task-start --intent-file - --module application --feature checkout", "code-polishy task-start --files frontend scripts/release --situation deployment"},
-	},
-	{
 		name:    "version",
 		summary: "Print the running Code Polishy release version.",
 		syntax:  []string{"code-polishy version"},
@@ -412,13 +395,13 @@ var commandHelpPages = []commandHelpPage{
 	{
 		name:    "verify",
 		summary: "Run the configured verification workflow.",
-		syntax:  []string{"code-polishy verify [--tests-only]"},
+		syntax:  []string{"code-polishy verify"},
 		selectors: []string{
-			"--tests-only limits verification to configured test commands.",
+			"Runs all ordinary test suites followed by the full build profile. Use test --all for tests alone.",
 		},
 		sideEffects: []string{"Runs configured verification commands and reads their declared project inputs."},
 		exits:       []string{"0 verification passed", "1 policy findings or verification failure", "2 invalid usage or operational failure"},
-		examples:    []string{"code-polishy verify --tests-only"},
+		examples:    []string{"code-polishy verify"},
 	},
 	{
 		name:    "architecture",
@@ -468,13 +451,13 @@ var commandHelpPages = []commandHelpPage{
 	{
 		name:    "doctor",
 		summary: "Inspect the configured policy environment and command discovery.",
-		syntax:  []string{"code-polishy doctor [--strict]"},
+		syntax:  []string{"code-polishy doctor"},
 		selectors: []string{
-			"--strict enables the stricter environment checks.",
+			"No command options or positional arguments.",
 		},
 		sideEffects: []string{"Reads configuration and environment state; does not write project files."},
 		exits:       []string{"0 no findings", "1 environment findings", "2 invalid usage or operational failure"},
-		examples:    []string{"code-polishy doctor --strict"},
+		examples:    []string{"code-polishy doctor"},
 	},
 	{
 		name:    "design-context",
@@ -510,18 +493,6 @@ var commandHelpPages = []commandHelpPage{
 		examples:    []string{"code-polishy format --git-changes", "code-polishy format --files cmd/code-polishy/main.go"},
 	},
 	{
-		name:    "fix",
-		summary: "Apply configured formatting fixes over one evaluation selection.",
-		syntax:  []string{"code-polishy fix [--git-changes|--staged|--all|--files PATH...|--module NAME...]"},
-		selectors: []string{
-			"Evaluation selectors are mutually exclusive; --git-changes is the default.",
-			"--files accepts contained regular files and directories; --module accepts declared module names.",
-		},
-		sideEffects: []string{"Runs configured formatters and may rewrite selected files."},
-		exits:       []string{"0 fixes completed without findings", "1 remaining findings", "2 invalid usage or operational failure"},
-		examples:    []string{"code-polishy fix --git-changes"},
-	},
-	{
 		name:    "list-files",
 		summary: "List the files in one resolved evaluation selection.",
 		syntax:  []string{"code-polishy list-files [--git-changes|--staged|--all|--files PATH...|--module NAME...]"},
@@ -536,7 +507,7 @@ var commandHelpPages = []commandHelpPage{
 	{
 		name:    "size",
 		summary: "Measure repository footprint and produce bounded evidence for human or agent interpretation.",
-		syntax:  []string{"./code-polishyw size [--base REF] [--propose-budget SCOPE=LINES --growth-rationale TEXT]"},
+		syntax:  []string{"./code-polishyw size [--base REF]"},
 		selectors: []string{
 			"Without --base, measures the current workspace and governed content.",
 			"--base compares current governed content with the merge base of one Git reference.",

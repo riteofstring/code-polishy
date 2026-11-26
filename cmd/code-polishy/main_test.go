@@ -74,22 +74,17 @@ func TestReportOutputOptionsAreSeparateFromEvaluationSelection(t *testing.T) {
 	}
 }
 
-func TestPrintReportLeadsWithSavedVerdictWithoutRoutineTestBanner(t *testing.T) {
+func TestPrintReportLeadsWithSavedVerdict(t *testing.T) {
 	t.Parallel()
 	var output bytes.Buffer
 	report := engine.Report{
-		ReportPath:          ".code-polishy-reports/check/result/report.json",
-		MergePolicy:         &engine.MergePolicy{Level: "recommended", Base: "origin/main"},
-		TestQualityReminder: engine.NewTestQualityReminder([]string{"cmd/code-polishy/main_test.go"}),
+		ReportPath:  ".code-polishy-reports/check/result/report.json",
+		MergePolicy: &engine.MergePolicy{Level: "recommended", Base: "origin/main"},
 	}
 	printReportTo(&output, &output, report)
 	want := "PASS errors=0 warnings=0 information=0\nCOMPLETE REPORT: " + report.ReportPath + "\n"
-	if !strings.HasPrefix(output.String(), want) || strings.Contains(strings.ToLower(output.String()), "test quality reminder") || engine.HasFindings(report) {
+	if !strings.HasPrefix(output.String(), want) || engine.HasFindings(report) {
 		t.Fatalf("report output = %q", output.String())
-	}
-	data, err := json.Marshal(report)
-	if err != nil || !bytes.Contains(data, []byte("cmd/code-polishy/main_test.go")) {
-		t.Fatalf("saved test-quality scope missing: %s, %v", data, err)
 	}
 }
 
@@ -309,7 +304,7 @@ func TestParseChangeBoundaryOptionsSeparatesNewArtifactPaths(t *testing.T) {
 
 func TestFirstCommandIndexSkipsGlobalValues(t *testing.T) {
 	t.Parallel()
-	arguments := []string{"--verbose", "--repo-root", "/tmp/example", "--config=policy.json", "doctor", "--strict"}
+	arguments := []string{"--verbose", "--repo-root", "/tmp/example", "--config=policy.json", "doctor"}
 	if got := firstCommandIndex(arguments); got != 4 {
 		t.Fatalf("index = %d", got)
 	}
@@ -317,7 +312,7 @@ func TestFirstCommandIndexSkipsGlobalValues(t *testing.T) {
 
 func TestParseGlobalInvocationAcceptsVerboseMode(t *testing.T) {
 	t.Parallel()
-	parsed, status := parseGlobalInvocation([]string{"--verbose", "doctor", "--strict"})
+	parsed, status := parseGlobalInvocation([]string{"--verbose", "doctor"})
 	if status != 0 || !parsed.verbose || parsed.command != "doctor" {
 		t.Fatalf("invocation=%+v status=%d", parsed, status)
 	}
@@ -535,16 +530,13 @@ func TestPrintReportSummarizesAcceptedCheckpointForHumans(t *testing.T) {
 	}
 }
 
-func TestPrintReportShowsGateArtifactWithoutRoutineTestBanner(t *testing.T) {
+func TestPrintReportShowsGateArtifact(t *testing.T) {
 	t.Parallel()
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
 	report := engine.Report{
 		GateRunPolicy: &engine.GateRunPolicy{
 			Status: "failed", ReportPath: ".code-polishy-reports/merge-gate/run/report.json", ReusedPhases: []string{"unit"},
-		},
-		TestQualityReminder: &engine.TestQualityReminder{
-			ChangedTestPaths: []string{"tests/all_test.go"}, TaskBase: "checkpoint-sha", TaskChangedTestPaths: []string{"tests/task_test.go"},
 		},
 		Findings: []policy.Finding{{Check: "test.unit", Path: "repository", Subject: "unit", Message: "failed"}},
 	}

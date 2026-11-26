@@ -448,10 +448,7 @@
           "internal/repository/design_context.go",
           "internal/repository/selection.go",
           "internal/engine/design_context.go",
-          "internal/engine/task_start.go",
-          "internal/engine/task_start_actions.go",
           "cmd/code-polishy/design_context.go",
-          "cmd/code-polishy/task_start_output.go",
           "internal/documentation/sections.go"
         ]
       },
@@ -463,8 +460,7 @@
           "internal/behaviorreview/types.go",
           "internal/engine/behavior_review.go",
           "cmd/code-polishy/behavior_review.go",
-          "cmd/code-polishy/behavior_review_output.go",
-          "cmd/code-polishy/task_start.go"
+          "cmd/code-polishy/behavior_review_output.go"
         ]
       },
       {
@@ -561,9 +557,7 @@
         "sourcePaths": [
           "internal/repository/source_lines.go",
           "internal/quality/line_budget.go",
-          "internal/engine/line_budget.go",
-          "internal/engine/budget_proposal.go",
-          "cmd/code-polishy/size.go"
+          "internal/engine/line_budget.go"
         ]
       },
       {

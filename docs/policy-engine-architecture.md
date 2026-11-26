@@ -330,7 +330,7 @@ every behavior proof, and forces its ordinary feature suites into the
 deduplicated test plan before later commands. Both decisions and the review
 status are bound into the gate-run identity and report. Report artifacts are excluded
 from the candidate delta so they cannot change either decision. The recommended
-branch runs strict doctor, applicable gate checks and builds, recommended tests,
+branch runs doctor, applicable gate checks and builds, recommended tests,
 and offline supply-chain verification. For non-documentation candidates, any
 repository-wide expansion,
 path-ownership failure, non-allowlisted module, broad planner impact, or missing
@@ -365,7 +365,7 @@ provenance.
 
 ## Fail-closed planning
 
-`doctor --strict` builds a coverage matrix from actual governed files:
+`doctor` builds a coverage matrix from actual governed files:
 
 ```text
 executable file -> exactly one module

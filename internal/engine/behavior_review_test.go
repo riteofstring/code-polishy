@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -753,10 +752,6 @@ func TestCheckpointGateRunsChangedScopeWithoutDeclaredSupplementalAndRecordsAcce
 		receipt.BehaviorReview.State != gaterun.BehaviorReviewPassed || receipt.BehaviorReview.ReviewID == "" {
 		t.Fatalf("checkpoint receipt = %+v", receipt)
 	}
-	accepted, err := behaviorreview.ReadCheckpoint(t.Context(), policyEngine.Repository)
-	if err != nil || !reflect.DeepEqual(accepted, receipt) {
-		t.Fatalf("ReadCheckpoint() receipt = %+v, error = %v, want %+v", accepted, err, receipt)
-	}
 }
 
 func TestCheckpointGateReplaysRegressionProofsBeforeChangedChecks(t *testing.T) {
@@ -824,9 +819,6 @@ func TestCheckpointGateDoesNotRecordWhenGateArtifactFinalizationFails(t *testing
 	if _, statErr := os.Stat(filepath.Join(root, filepath.FromSlash(behaviorreview.CheckpointReceiptPath))); statErr != nil {
 		t.Fatalf("bound receipt is unavailable: %v", statErr)
 	}
-	if _, readErr := behaviorreview.ReadCheckpoint(t.Context(), policyEngine.Repository); !errors.Is(readErr, behaviorreview.ErrStaleCheckpoint) {
-		t.Fatalf("ReadCheckpoint() error = %v, want stale checkpoint", readErr)
-	}
 }
 
 func TestCheckpointGateFinalizesOperationalWhenReceiptPublicationFails(t *testing.T) {
@@ -848,9 +840,6 @@ func TestCheckpointGateFinalizesOperationalWhenReceiptPublicationFails(t *testin
 	if report.CheckpointPolicy == nil || report.CheckpointPolicy.ReceiptPath != "" || report.GateRunPolicy == nil ||
 		report.GateRunPolicy.Status != string(gaterun.RunOperational) || report.GateRunPolicy.ReportPath == "" {
 		t.Fatalf("report = %+v, error = %v", report, err)
-	}
-	if _, readErr := behaviorreview.ReadCheckpoint(t.Context(), policyEngine.Repository); !errors.Is(readErr, behaviorreview.ErrStaleCheckpoint) {
-		t.Fatalf("ReadCheckpoint() error = %v, want stale checkpoint", readErr)
 	}
 }
 

@@ -1,7 +1,7 @@
 # Adopting Code Polishy
 
 Adoption is complete when the target config describes real project facts and
-`doctor --strict` can prove that shared conditional policy modules plus the
+`doctor` can prove that shared conditional policy modules plus the
 remaining project-specific providers cover every executable module.
 
 For agent-driven setup, including exact-tag selection, source installation, and
@@ -70,12 +70,13 @@ Subsequent commands go through the same wrapper and do not require a global
 `PATH` entry. `setup --source PATH` may recover the exact release already named
 by the lock from a local checkout.
 
-For a first installation, commit this minimal policy scaffold before
-task-start. Follow the [two-phase bootstrap](ai-adoption.md#bootstrap-a-clean-policy-base)
-to retain the unmanaged comparison base and capture any selected original
+For a first installation, follow the
+[two-phase bootstrap](ai-adoption.md#bootstrap-a-clean-policy-base) to retain the
+unmanaged comparison base and capture any selected original
 intent from the clean bootstrap commit before completing ownership or changing
 product source. A bootstrap commit may have incomplete coverage; adoption is
-complete only after the final required checks pass.
+complete only after the final required checks pass. Context discovery itself
+needs only a parseable configuration, not a clean or committed checkout.
 
 Python's runtime minimum and the analysis runtime are separate. The pinned
 Ruff accepts targets through Python 3.15, including projects declaring
@@ -388,7 +389,7 @@ needed, preserving existing rules, line endings, and file mode. It creates no
 custom file is left untouched. On policy upgrades, `agents sync` requires an
 existing `AGENTS.md`, replaces only a stale canonical prefix, preserves valid
 project principles byte-for-byte, and repairs the other managed adoption files
-in the same transaction. `doctor --strict` rejects a missing, stale, malformed,
+in the same transaction. `doctor` rejects a missing, stale, malformed,
 or conflicting adoption surface.
 
 ## 6. Inspect conditional policy modules
@@ -396,7 +397,7 @@ or conflicting adoption surface.
 Do not copy standard quality commands into every target. Run:
 
 ```sh
-code-polishy doctor --strict
+code-polishy doctor
 ```
 
 The inventory notes show which shared modules were detected and why. The
@@ -796,7 +797,7 @@ check, path, subject, reason, owner, and expiry. Exceptions cannot suppress
 policy coverage or tool prerequisites.
 
 ```sh
-code-polishy doctor --strict
+code-polishy doctor
 code-polishy check --all
 code-polishy test --all
 code-polishy supply-chain --offline
@@ -886,12 +887,12 @@ This workflow is experimental; its installed-release Unix and native Windows
 acceptance contracts and real multi-repository dogfood must meet the release
 checklist.
 
-At the start of a source task, use `task-start` to determine whether checked-in
-policy or an explicit feature selects behavior review. Optional review retains
-no request. When review is selected, the agent harness must pass the user's
+Retrieve missing scoped review requirements with `design-context` to determine
+whether checked-in policy or an explicit feature selects behavior review.
+Optional review retains no request. When review is selected, the agent harness must pass the user's
 exact original request and supplied acceptance criteria at the task-base commit,
-preferably through `--intent-file -` so no duplicate plaintext transport file
-remains. Repeat capture before acting on a later message only when it changes
+through `behavior-review capture-intent --intent-file -` so no duplicate
+plaintext transport file remains. Repeat capture before acting on a later message only when it changes
 final artifacts, observable behavior, or acceptance criteria. Do not capture
 status questions, approvals, authentication or publication directions, or
 other operational coordination. Correction capture accepts staged, unstaged,
@@ -923,7 +924,7 @@ gate discards evidence that gate requires.
 
 The runner must either have the locked release installed or execute its exact
 digest-pinned OCI image; Code Polishy is never downloaded during a check.
-Bootstrap target dependencies from frozen inputs before strict doctor, because
+Bootstrap target dependencies from frozen inputs before doctor, because
 doctor verifies that declared executables exist.
 
 Agents can inspect the exact installed operating contract with
@@ -934,16 +935,16 @@ release and the commands perform no network access.
 A repository may reserve direct profile commands for explicit non-merge
 workflows. Install the guidance from `templates/AGENTS.md`: routine focused or
 changed tests during source work; `test --changed --base TASK_BASE` for a
-task-bound comparison; `checkpoint-gate --base PREVIOUS_CHECKPOINT` after each
-completed committed source task on a long-lived branch; documentation formatting
+task-bound comparison; `checkpoint-gate --base PREVIOUS_CHECKPOINT` when
+checkpoint review or an accepted verification record is needed, replacing the
+same completion checks and tests; documentation formatting
 without application tests for ordinary Markdown; then one
 `merge-gate --base MERGE_TARGET` at a separately established genuine merge or
 release checkpoint. A checkpoint gate
 runs changed-scope verification and records the accepted HEAD. A merge gate
 selects and executes documentation, recommended, or full ordinary verification
-without making the selection a human approval prompt. Its test reminder keeps
-the merge-wide count and, when the current candidate has a valid checkpoint
-receipt, also shows the latest task slice and its base.
+without making the selection a human approval prompt. Branch longevity alone
+does not select a checkpoint.
 `test-levels` remains a read-only diagnostic, and it lists supplemental quality
 separately without selecting it. Credentialed, destructive, production-mutating,
 and live-provider probes remain typed external approval gates. Direct profile

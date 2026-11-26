@@ -413,13 +413,7 @@
           "scope": { "enum": ["production", "test", "total"] },
           "lines": { "type": "integer", "minimum": 0 },
           "budget": { "type": "integer", "minimum": 0 },
-          "baseLines": { "type": "integer", "minimum": 0 },
-          "proposedCeiling": { "type": "integer", "minimum": 1 },
-          "growthRationale": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 2000
-          }
+          "baseLines": { "type": "integer", "minimum": 0 }
         }
       }
     },

@@ -4,8 +4,8 @@
 
 - Make ordinary workflow context reusable and initialization conditional; expose
   review requirements in scoped context, support explicit planned paths, and
-  allow optional task packets in dirty checkouts while preserving required
-  pre-edit intent boundaries.
+  preserve dirty checkouts during discovery and required pre-edit intent
+  boundaries through direct behavior-review capture.
 - Batch catalogue documentation reads and retrieve named sections with source
   identification, exact path aliases, atomic errors and one wrapper verification.
 - Put verdicts, saved-report paths, selection and five principal blockers first;
@@ -14,8 +14,15 @@
   while retaining write protection, syntax checks and applicable exceptions.
 - Show observed suite cost and reuse reasons, separate historical receipt duration
   from current execution, and document focused-suite and eligible-reuse adoption.
-- Preview deliberate budget headroom with current growth and rationale in `size`;
-  retain explicit approval, hard ceilings and complete receipt invalidation.
+- Measure current and base source counts with `size --base REF`; propose
+  milestone headroom in ordinary prose while retaining explicit approval, hard
+  ceilings and complete receipt invalidation.
+- Retire `task-start` and the `fix` alias, `verify --tests-only`, `doctor --strict`,
+  and budget-proposal options. Use read-only scoped context, direct intent
+  capture, `format`, `test --all`, and plain `doctor`.
+- Remove test-reminder metadata and its checkpoint-reading machinery. Select
+  checkpoint gates only for checkpoint review or an accepted verification record;
+  they replace the same completion checks and changed-scope tests.
 
 ## 0.34.1 - 2026-11-20
 

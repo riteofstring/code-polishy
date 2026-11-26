@@ -44,7 +44,7 @@ func TestSizePublishesIncompleteWorkspaceWithoutLosingLineBudget(t *testing.T) {
 	for title, row := range map[string][]string{
 		"UNREADABLE WORKSPACE PATHS": {"node_modules/private"},
 		"SOURCE LINES":               {"all", "2", "0"},
-		"LINE BUDGET":                {"production", "2", "unknown", "unknown", "10", "8", "-", "-", ""},
+		"LINE BUDGET":                {"production", "2", "unknown", "unknown", "10", "8"},
 	} {
 		if !slices.ContainsFunc(report.Tables, func(table Table) bool {
 			return table.Title == title && len(table.Rows) > 0 && slices.Equal(table.Rows[0], row)

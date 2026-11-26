@@ -97,20 +97,18 @@ after every small addition. Work within an approved ceiling needs no further
 budget edit or approval. Exceeding it still requires reducing code or the caller's
 explicit permission to raise it; agents receive no automatic slack.
 
-Preview the decision without changing configuration:
+Measure the current size and growth without changing configuration:
 
 ```sh
-./code-polishyw size --base TASK_BASE \
-  --propose-budget production=45000 \
-  --growth-rationale 'Add the importer and its recovery paths for the next milestone.'
+./code-polishyw size --base TASK_BASE
 ```
 
-Repeat `--propose-budget` for `test` or `total` if needed. The existing line-budget
-report puts current size, base size, actual growth, current ceiling, proposed
-ceiling, resulting headroom and rationale together. It records a proposal, not
-approval. With no base, growth remains unknown. Historical non-blank lines use
-current scope and ownership policy. Capture the report once for the approval;
-change `.code-polishy.json` only after explicit authorization.
+The existing line-budget report includes current size, base size, actual growth,
+current ceiling and remaining lines. Explain the proposed ceiling, resulting
+headroom and rationale in ordinary prose. With no base, growth remains unknown.
+Historical non-blank lines use current scope and ownership policy. Capture the
+report once for the approval; change `.code-polishy.json` only after explicit
+authorization.
 
 Budget-only configuration edits still participate in complete test-receipt
 identity. A suite can consume that file, and selection or coverage can change
