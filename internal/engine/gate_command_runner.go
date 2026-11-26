@@ -149,7 +149,7 @@ func (commandRunner *gateArtifactRunner) ReuseSuite(suite policy.TestSuite, atte
 	}
 	if _, err := commandRunner.run.RecordSuiteReuse(index, gaterun.SuiteReuse{
 		IdentitySHA256: identitySHA256, ReceiptPath: execution.ReceiptPath,
-		ReceiptSHA256: execution.ReceiptSHA256, DurationMillis: execution.Result.ExecutionDuration.Milliseconds(),
+		ReceiptSHA256: execution.ReceiptSHA256, DurationMillis: execution.PriorDuration.Milliseconds(),
 	}); err != nil {
 		commandRunner.err = err
 		return testpolicy.SuiteExecution{}, false, err

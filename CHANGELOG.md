@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+- Make ordinary workflow context reusable and initialization conditional; expose
+  review requirements in scoped context, support explicit planned paths, and
+  allow optional task packets in dirty checkouts while preserving required
+  pre-edit intent boundaries.
+- Batch catalogue documentation reads and retrieve named sections with source
+  identification, exact path aliases, atomic errors and one wrapper verification.
+- Put verdicts, saved-report paths, selection and five principal blockers first;
+  summarize nonblocking findings and inspect saved JSON without rerunning checks.
+- Isolate formatting from unrelated security assessment and exception expiry
+  while retaining write protection, syntax checks and applicable exceptions.
+- Show observed suite cost and reuse reasons, separate historical receipt duration
+  from current execution, and document focused-suite and eligible-reuse adoption.
+- Preview deliberate budget headroom with current growth and rationale in `size`;
+  retain explicit approval, hard ceilings and complete receipt invalidation.
+
 ## 0.34.1 - 2026-11-20
 
 - Keep scanner and application verification working when advisory data stops

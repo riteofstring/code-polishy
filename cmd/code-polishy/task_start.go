@@ -48,8 +48,8 @@ func parseTaskStartOptions(arguments []string) (taskStartOptions, error) {
 		}
 		arguments = arguments[consumed:]
 	}
-	if seen["--files"] == seen["--module"] {
-		return options, fmt.Errorf("task-start requires one or more --files PATH operands or --module NAME options")
+	if (seen["--files"] || seen["--new-path"]) == seen["--module"] {
+		return options, fmt.Errorf("task-start requires --files and/or --new-path paths, or --module names")
 	}
 	return options, nil
 }
@@ -63,7 +63,7 @@ func parseTaskStartOption(options *taskStartOptions, seen map[string]bool, argum
 	if err != nil {
 		return 0, err
 	}
-	if seen[name] && !slices.Contains([]string{"--files", "--module", "--feature", "--situation"}, name) {
+	if seen[name] && !slices.Contains([]string{"--files", "--new-path", "--module", "--feature", "--situation"}, name) {
 		return 0, errorsDuplicateOption("task-start", name)
 	}
 	seen[name] = true
@@ -88,6 +88,9 @@ func applyTaskStartOption(options *taskStartOptions, name, value string) error {
 	case "--files":
 		options.request.Context.Mode = "files"
 		options.request.Context.Files = append(options.request.Context.Files, value)
+	case "--new-path":
+		options.request.Context.Mode = "files"
+		options.request.Context.NewPaths = append(options.request.Context.NewPaths, value)
 	case "--module":
 		options.request.Context.Mode = "modules"
 		options.request.Context.Modules = append(options.request.Context.Modules, value)

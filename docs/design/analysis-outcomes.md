@@ -17,9 +17,10 @@ available as optional investigation aids and do not select extra verification.
 
 The quality boundary marks these candidates with
 `fields.analysisOutcome: advisory-candidate` in the existing finding metadata.
-The terminal summarizes only warnings carrying that classification; it does not
-infer optionality from rule names, paths or remediation prose. Other warnings,
-including security coverage and dependency-maintenance notices, stay visible.
+The terminal identifies optionality only from that classification, never from
+rule names, paths or remediation prose. Other warnings, including security
+coverage and dependency-maintenance notices, retain compact summaries. Full
+occurrences remain in saved reports and explicit inspection.
 Complete diagnostics and guidance remain in machine reports and explicit
 terminal inspection. No acknowledgement history or repository setting is needed.
 

@@ -54,6 +54,7 @@ type TestCommandEvidence struct {
 	LogPath               string                 `json:"logPath,omitempty"`
 	Artifacts             []testartifact.Record  `json:"artifacts"`
 	Reused                bool                   `json:"reused"`
+	PriorDurationMillis   int64                  `json:"priorDurationMilliseconds,omitempty"`
 	Diagnostic            bool                   `json:"diagnostic"`
 	ReceiptPath           string                 `json:"receiptPath,omitempty"`
 	ReceiptSHA256         string                 `json:"receiptSha256,omitempty"`
@@ -101,7 +102,8 @@ func (engine *Engine) testCommandEvidence(plan testpolicy.Plan, selection reposi
 			Attempt:   execution.Attempt,
 			Artifacts: append([]testartifact.Record{}, execution.Artifacts...),
 			Reused:    execution.Reused, Diagnostic: target != "working-tree",
-			ReceiptPath: execution.ReceiptPath, ReceiptSHA256: execution.ReceiptSHA256,
+			PriorDurationMillis: execution.PriorDuration.Milliseconds(),
+			ReceiptPath:         execution.ReceiptPath, ReceiptSHA256: execution.ReceiptSHA256,
 		}
 		result = append(result, evidence)
 	}

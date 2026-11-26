@@ -99,9 +99,12 @@ func (library *Library) Read(name string) (Document, error) {
 }
 
 func (library *Library) resolve(name string) (int, error) {
+	if index, found := library.byPath[name]; found {
+		return index, nil
+	}
 	normalized := strings.ToLower(strings.TrimSpace(name))
 	if !identifierPattern.MatchString(normalized) {
-		return 0, failure(ErrorUnknown, name, errors.New("use a topic identifier from `code-polishy docs list`"))
+		return 0, failure(ErrorUnknown, name, errors.New("use a topic identifier or exact catalogued path from `./code-polishyw docs list`"))
 	}
 	matches := library.byName[normalized]
 	switch len(matches) {

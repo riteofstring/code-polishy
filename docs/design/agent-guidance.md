@@ -169,3 +169,12 @@ for repository-owned guidance; they are not empirical performance thresholds.
 Do not game either budget with cryptic prose. Remove lower-value or duplicated
 material first. Raise a budget only through a deliberate reviewed change when a
 valuable broadly applicable rule cannot fit clearly.
+
+Context retention replaces an unconditional startup sequence. The managed prefix
+names the invalidation boundaries and directs missing scoped context to
+`design-context`, which reports review selection. Required intent capture still
+precedes edits through `task-start`; optional work requires no initialization,
+journal or acknowledgement. Known context can survive compaction when retained
+accurately. A changed release or policy requires affected guidance to be loaded
+again without a persistent read ledger. This keeps the always-on instruction
+small while preserving the review boundary mechanically.

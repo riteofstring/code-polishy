@@ -59,7 +59,8 @@ changes could prove it, but would add key management and history verification
 to every adopting repository. The control is instead:
 
 - the over-budget remedy tells the agent to reduce the code or ask the caller
-  for a specific increase, and to change the budget only at the caller's
+  for a specific feature or milestone ceiling with useful headroom, and to change
+  the budget only at the caller's
   explicit request;
 - every check with a base compares the candidate budget with the base
   configuration and reports a `quality.lineBudgetChange` warning for each
@@ -81,3 +82,17 @@ the budget is exceeded.
 reports the remaining lines so an agent knows its capacity before it writes
 code. The budget is withheld from provider requests because providers do not
 use it and changing it should not invalidate their evidence.
+
+A growth proposal uses the existing `size` report. Optional proposed ceilings
+and a supplied rationale are presentation inputs, never approval or a write to
+policy. A Git-base comparison counts non-blank source through batched immutable
+blob reads under current scope rules, so a reviewer can compare actual growth
+and proposed headroom together. No advisory threshold, automatic slack or
+approval journal is introduced. One approved ceiling covers its intended work.
+
+Test receipts continue binding the complete configuration. Budget fields can be
+consumed by suites through the sealed input view, while other policy fields
+control execution and required coverage. There is no demonstrated dependency
+boundary that would permit removing the file from identity. Narrower invalidation
+remains a separate change requiring evidence about all consumers; budget checks
+must still evaluate the new ceiling.

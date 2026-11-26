@@ -14,6 +14,8 @@ type StoredTestOutcome struct {
 	StartedAt time.Time
 	Candidate string
 	Command   CommandOutcome
+	Spec      CommandSpec
+	Platform  Platform
 }
 
 type StoredTestHistory struct {
@@ -89,7 +91,8 @@ func storedTestOutcomes(report Report) []StoredTestOutcome {
 	outcomes := []StoredTestOutcome{}
 	for _, command := range report.Commands {
 		if command.Category == OrdinaryTest && !command.Reused && len(command.Attempts) > 0 {
-			outcomes = append(outcomes, StoredTestOutcome{StartedAt: report.StartedAt, Candidate: report.Identity.Candidate, Command: command})
+			outcomes = append(outcomes, StoredTestOutcome{StartedAt: report.StartedAt, Candidate: report.Identity.Candidate, Command: command,
+				Spec: report.Identity.Commands[command.CommandIndex], Platform: report.Identity.Platform})
 		}
 	}
 	return outcomes

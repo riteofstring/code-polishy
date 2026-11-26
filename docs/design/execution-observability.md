@@ -132,17 +132,27 @@ agent-owned decisions, without implying human sign-off. Assessed findings stay
 visible with their disposition and expiry. See
 [Dependency assessment decisions](dependency-assessments.md).
 
-The default terminal view summarizes optional analysis candidates by count and
-points to the complete report. The quality boundary records their classification
-in `fields.analysisOutcome`; warning severity alone does not establish optional
-investigation. The renderer aggregates only warnings classified as
-`advisory-candidate`, leaving other warnings and informational evidence visible.
-Aggregated candidates consume no finding-display slots, and blocking findings
-come first in the default view. Counts by rule, module and selection relation
-appear during explicit inspection through verbose output, unlimited display,
-filters or grouping. Those inspection modes also show individual advisories,
-respect their selected display bound and preserve the requested ordering.
-Presentation never changes the verdict, exit status or complete machine report.
+The final terminal result groups verdict, saved-report path, selection and at
+most five actionable blockers first. Nonblocking findings and accepted outcomes
+receive compact summaries. The quality boundary's `fields.analysisOutcome`
+classification alone identifies optional candidates; generic warning severity
+does not imply optionality. The complete managed report retains every occurrence,
+remedy and assessment. Explicit filters, grouping, unlimited display and verbose
+inspection retain detailed output and its requested bounds. Re-rendering saved
+JSON needs no analyzer execution. Presentation never changes verdict or exit
+status, and a missing report after operational failure is not success.
+
+Formatting finalizes only its own findings and exact matching exceptions.
+Configuration composition, data syntax and protected-write checks still guard
+writes, but unrelated vulnerability/release-age assessments and exception
+housekeeping belong to checks and gates. Policy-module and pack resolution remain
+formatting prerequisites; unrelated GitLab dependency inspection does not.
+
+Suite reuse carries original duration separately from zero current execution.
+Plans expose cost, scope, comparable executed duration and age, resource wait,
+and exact reuse or non-reuse reasons. Timing observations reuse validated gate
+history or an exact receipt, never authorize reuse, and remain unknown without
+suitable history. No new telemetry store or cache-maintenance step is needed.
 
 When listing findings, the terminal renderer preserves individual facts while
 referencing shared remedy, next-command, and producer blocks. These components

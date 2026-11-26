@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/quality"
@@ -38,13 +39,13 @@ func (engine *Engine) Format(ctx context.Context, selection repository.Selection
 	if err != nil {
 		return engine.formatFailure(selection, "repository", err)
 	}
-	findings := append([]policy.Finding{}, engine.PolicyModuleFindings...)
+	findings := append([]policy.Finding{}, engine.formatPrerequisites...)
 	findings = append(findings, quality.DataSyntaxFindings(ctx, engine.Repository, writeSelection.Files)...)
 	if engine.Repository.HasGeneratedExecutable(writeSelection.Files) {
 		findings = append(findings, inventory.Findings...)
 	}
 	if len(findings) != 0 {
-		return engine.withSelection(engine.finish(findings, nil), selection)
+		return engine.withSelection(engine.finishFormat(findings), selection)
 	}
 	before := map[string]string{}
 	engine.executionPhase(ctx, "format-input-snapshot", func(context.Context) {
@@ -64,7 +65,7 @@ func (engine *Engine) Format(ctx context.Context, selection repository.Selection
 	findings = append(findings, protectionFindings...)
 	report := Report{}
 	engine.executionPhase(ctx, "report-assembly", func(context.Context) {
-		report = engine.withSelection(engine.finish(findings, nil), selection)
+		report = engine.withSelection(engine.finishFormat(findings), selection)
 		report.Formatting = &outcome
 	})
 	return report
@@ -82,7 +83,23 @@ func formatWriteSelection(selection repository.Selection) repository.Selection {
 
 func (engine *Engine) formatFailure(selection repository.Selection, subject string, err error) Report {
 	finding := policy.Finding{Check: "policy.formatEvidence", Path: "repository", Subject: subject, Message: err.Error()}
-	return engine.withSelection(engine.finish([]policy.Finding{finding}, nil), selection)
+	return engine.withSelection(engine.finishFormat([]policy.Finding{finding}), selection)
+}
+
+func (engine *Engine) finishFormat(findings []policy.Finding) Report {
+	exceptions := []policy.Exception{}
+	for _, exception := range engine.Repository.Config.Exceptions {
+		if slices.ContainsFunc(findings, func(finding policy.Finding) bool {
+			return exception.Check == finding.Check && exception.Path == finding.Path && exception.Subject == finding.Subject
+		}) {
+			exceptions = append(exceptions, exception)
+		}
+	}
+	kept, suppressed := policy.ApplyExceptions(findings, exceptions, time.Now().UTC())
+	for index := range suppressed {
+		suppressed[index].Finding.Status = policy.FindingSuppressed
+	}
+	return engine.normalizeReport(Report{Findings: kept, Suppressed: suppressed})
 }
 
 func (engine *Engine) formatSnapshot(files []string) (map[string]string, error) {

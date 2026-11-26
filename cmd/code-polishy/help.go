@@ -47,9 +47,10 @@ var commandHelpPages = []commandHelpPage{
 	{
 		name:    "task-start",
 		summary: "Validate task context and capture intent only when behavior review is selected.",
-		syntax:  []string{"code-polishy task-start (--files PATH... | --module NAME...) [--intent-file PATH|-] [--feature NAME...] [--situation NAME...] [--format human|json]"},
+		syntax:  []string{"./code-polishyw task-start (--files PATH... | --new-path PATH... | --module NAME...) [--intent-file PATH|-] [--feature NAME...] [--situation NAME...] [--format human|json]"},
 		selectors: []string{
 			"Choose one or more contained files or directories, or repeat --module for every declared module in scope. File and module selectors cannot be mixed; change-aware and repository-wide selectors are not accepted.",
+			"Repeat --new-path PATH for intended creation, alone or alongside --files. Planned paths remain absent; optional packets accept dirty checkouts and record HEAD without asserting a clean candidate. Required intent capture still needs a clean initial boundary.",
 			"Repeat --feature only for exact canonical names or aliases explicitly requested by the caller; repeat --situation for exact operational contexts.",
 			"Situations dependencies, adoption, upgrade, and release select their workflow documents; matching repository handoffs and review requirements add their own guidance. They do not select a merge gate.",
 			"Intent is required only when configured policy or an explicit feature selects behavior review. Use --intent-file - for bounded UTF-8 standard input.",
@@ -77,12 +78,14 @@ var commandHelpPages = []commandHelpPage{
 		syntax: []string{
 			"code-polishy docs list",
 			"code-polishy docs find QUERY...",
-			"code-polishy docs read TOPIC",
+			"./code-polishyw docs read TOPIC...",
+			"./code-polishyw docs read TOPIC --section HEADING",
 		},
 		selectors: []string{
 			"list accepts no arguments and prints public topic identifiers in stable order.",
 			"find requires one or more query terms and returns a bounded deterministic result list.",
-			"read requires one exact topic identifier or documented alias.",
+			"read accepts exact topic identifiers, documented aliases or exact catalogued paths; resolves every topic before output, preserves order and prints each topic once.",
+			"--section selects one topic's exact ATX heading and subsections; use 'Parent > Child' heading ancestry for repeated names. Missing or ambiguous headings fail with concrete reads.",
 		},
 		sideEffects: []string{"After the launcher selects the repository's locked release, reads only its documentation; no project files or network access."},
 		exits:       []string{"0 requested documentation printed or no search results", "2 invalid usage or unavailable documentation"},
@@ -479,11 +482,13 @@ var commandHelpPages = []commandHelpPage{
 		syntax: []string{
 			"code-polishy design-context --module NAME... [--situation NAME...]",
 			"code-polishy design-context [--git-changes|--staged|--all|--files PATH...] [--situation NAME...]",
+			"./code-polishyw design-context --new-path PATH [--new-path PATH...] [--files PATH...] [--feature NAME...]",
 		},
 		selectors: []string{
 			"Choose either one or more --module NAME selectors or one file selector.",
 			"File selectors are mutually exclusive; --git-changes is the default.",
 			"Use --files PATH... for explicit paths; positional paths are not accepted.",
+			"Use repeatable --new-path PATH for prospective ownership, rationale and review selection without creating a file. It may be combined with --files, not module or change selectors. Review requirements are returned by the same lookup; --feature selects only an exact caller-requested feature or alias.",
 			"Module and exact-source design mappings are additive. Output explains each match and reports uncovered selected modules and paths; missing mappings alone do not fail the command.",
 			"Repeat --situation NAME for exact operational situations such as authentication, release, or deployment. Situations alone select no files; a file or module selector may be added explicitly.",
 			"Handoffs match a selected situation, exact source, or module; the actual design-context workflow situation also applies. Only selected documents are loaded, with their SHA-256 identities and selection reasons.",
@@ -531,7 +536,7 @@ var commandHelpPages = []commandHelpPage{
 	{
 		name:    "size",
 		summary: "Measure repository footprint and produce bounded evidence for human or agent interpretation.",
-		syntax:  []string{"code-polishy size [--base REF]"},
+		syntax:  []string{"./code-polishyw size [--base REF] [--propose-budget SCOPE=LINES --growth-rationale TEXT]"},
 		selectors: []string{
 			"Without --base, measures the current workspace and governed content.",
 			"--base compares current governed content with the merge base of one Git reference.",

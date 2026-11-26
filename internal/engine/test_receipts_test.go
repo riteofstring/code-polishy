@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/repository"
@@ -229,7 +230,7 @@ func TestExactSuitePassComposesWithMergeGate(t *testing.T) {
 	examples.Argv = []string{"go", "test", "./examples/..."}
 	examples.Reusable = false
 	policyEngine.Repository.Config.Tests.Suites = append(policyEngine.Repository.Config.Tests.Suites, examples)
-	commandRunner := &recordingEngineRunner{}
+	commandRunner := &recordingEngineRunner{duration: 90 * time.Second}
 	policyEngine.Runner = commandRunner
 	policyEngine.Output = io.Discard
 	first, err := policyEngine.Test(t.Context(), testpolicy.Request{Suites: []string{"focused"}})
@@ -245,6 +246,32 @@ func TestExactSuitePassComposesWithMergeGate(t *testing.T) {
 	if !slices.Equal(commandRunner.commands, []string{"content-check", "examples-unit", "content-build", "offline-supply"}) ||
 		!slices.Contains(second.GateRunPolicy.ReusedPhases, "focused") {
 		t.Fatalf("exact suite receipt was not reused: commands = %v, policy = %+v", commandRunner.commands, second.GateRunPolicy)
+	}
+	assertReusedSuiteDuration(t, second, "focused", 90000)
+	third, err := policyEngine.Test(t.Context(), testpolicy.Request{Suites: []string{"focused"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFreshSuiteDuration(t, third, "focused", 90*time.Second)
+}
+
+func assertReusedSuiteDuration(t *testing.T, report Report, name string, milliseconds int64) {
+	t.Helper()
+	index := slices.IndexFunc(report.TestCommands, func(command TestCommandEvidence) bool { return command.Name == name })
+	if index < 0 {
+		t.Fatalf("gate omitted reused test evidence: %+v", report.TestCommands)
+	}
+	command := report.TestCommands[index]
+	if !command.Reused || command.Result.ExecutionDuration != 0 || command.Result.ResourceWait != 0 || command.PriorDurationMillis != milliseconds {
+		t.Fatalf("reused evidence misreported current cost: %+v", command)
+	}
+
+}
+
+func assertFreshSuiteDuration(t *testing.T, report Report, name string, duration time.Duration) {
+	t.Helper()
+	if len(report.TestCommands) != 1 || report.TestCommands[0].Name != name || report.TestCommands[0].Reused || report.TestCommands[0].Result.ExecutionDuration != duration {
+		t.Fatalf("direct test did not execute freshly: %+v", report.TestCommands)
 	}
 }
 

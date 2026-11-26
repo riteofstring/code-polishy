@@ -52,7 +52,7 @@ func TestReportConsolidatesGuidanceAcrossRulesAndKeepsEveryDiagnostic(t *testing
 					t.Fatalf("diagnostic lost its facts or shared guidance: %s", text)
 				}
 			}
-			if !strings.Contains(text, "remedy: Repair the selected source.") || !strings.Contains(text, "next: "+hostReportCommand("'code-polishy' 'check' '--files' 'src/app.go'", "& 'code-polishy' 'check' '--files' 'src/app.go'")) {
+			if !strings.Contains(text, "remedy: Repair the selected source.") || !strings.Contains(text, "next: "+hostReportCommand("'./code-polishyw' 'check' '--files' 'src/app.go'", "& '.\\code-polishyw.ps1' 'check' '--files' 'src/app.go'")) {
 				t.Fatalf("missing repair instructions: %s", text)
 			}
 		})
@@ -109,7 +109,7 @@ func TestReportGuidanceStaysWithItsOutputStream(t *testing.T) {
 	var output, diagnostics bytes.Buffer
 	printFindings(&output, &diagnostics, findings)
 	for _, stream := range []struct{ text, commandRole string }{{output.String(), "optional"}, {diagnostics.String(), "next"}} {
-		if strings.Count(stream.text, "remedy: Repair imports.") != 1 || strings.Count(stream.text, stream.commandRole+": "+hostReportCommand("'code-polishy' 'doctor'", "& 'code-polishy' 'doctor'")) != 1 {
+		if strings.Count(stream.text, "remedy: Repair imports.") != 1 || strings.Count(stream.text, stream.commandRole+": "+hostReportCommand("'./code-polishyw' 'doctor'", "& '.\\code-polishyw.ps1' 'doctor'")) != 1 {
 			t.Fatalf("stream is missing its own guidance: %s", stream.text)
 		}
 	}
@@ -174,7 +174,7 @@ func TestReportRemediationCommandUsesPlatformInvocationAndLiteralArguments(t *te
 		posix string
 		power string
 	}{
-		{"recovery", []string{"code-polishy", "check", "--files", "src/app.go"}, "'code-polishy' 'check' '--files' 'src/app.go'", "& 'code-polishy' 'check' '--files' 'src/app.go'"},
+		{"recovery", []string{"code-polishy", "check", "--files", "src/app.go"}, "'./code-polishyw' 'check' '--files' 'src/app.go'", "& '.\\code-polishyw.ps1' 'check' '--files' 'src/app.go'"},
 		{"literal arguments", []string{"tools/it's a tool", "a'b", "", "$HOME; `echo hi`", `C:\src\file name.go`, `a"b`},
 			"'tools/it'\\''s a tool' 'a'\\''b' '' '$HOME; `echo hi`' 'C:\\src\\file name.go' 'a\"b'",
 			"& 'tools/it''s a tool' 'a''b' '' '$HOME; `echo hi`' 'C:\\src\\file name.go' 'a\"b'"},
@@ -404,11 +404,8 @@ func TestOptionalAdvisoriesDoNotCrowdOutBlockersOrHideOtherWarnings(t *testing.T
 			strings.Contains(output.String(), "unused candidate") || strings.Contains(output.String(), "PASS") {
 			t.Fatalf("advisories obscured the failure: stdout=%s stderr=%s", output.String(), diagnostics.String())
 		}
-		if limit == 1 && !strings.Contains(output.String(), "OMITTED 2 finding(s)") {
-			t.Fatalf("collapsed advisories consumed the display budget: %s", output.String())
-		}
-		if limit == 20 && (!strings.Contains(output.String(), "WARN supplyChain.gitSourceCoverage") || !strings.Contains(output.String(), "INFO quality.typecheckEnvironment")) {
-			t.Fatalf("other warnings or evidence were hidden: %s", output.String())
+		if strings.Contains(output.String(), "OMITTED") || !strings.Contains(output.String(), "NONBLOCKING: supplyChain.gitSourceCoverage: coverage is unverified") || !strings.Contains(output.String(), "quality.typecheckEnvironment: runtime evidence") {
+			t.Fatalf("nonblocking summary lost evidence or consumed the blocker budget: %s", output.String())
 		}
 	}
 }

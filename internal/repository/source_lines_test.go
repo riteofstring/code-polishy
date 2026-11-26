@@ -9,6 +9,38 @@ import (
 	"github.com/riteofstring/code-polishy/internal/policy"
 )
 
+func TestCountSourceLinesAtUsesCommittedContentAndModes(t *testing.T) {
+	t.Parallel()
+	repo := newGitRepository(t)
+	repo.Config.Scope.Generated = []string{"generated/**"}
+	writeFile(t, repo.Root, "app.go", "package app\n\nconst Value = 1\n")
+	writeFile(t, repo.Root, "app_test.go", "package app\n")
+	writeFile(t, repo.Root, "tools/run", "#!/bin/sh\necho ready\n")
+	writeFile(t, repo.Root, "tools/data", "ordinary data\n")
+	writeFile(t, repo.Root, "generated/app.go", "package generated\n")
+	git(t, repo.Root, "add", ".")
+	git(t, repo.Root, "commit", "-m", "base")
+	base, err := repo.Head()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(repo.Root, "app.go")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(t.TempDir(), "missing"), filepath.Join(repo.Root, "app.go")); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, repo.Root, "tools/run", "ordinary data\n")
+	writeFile(t, repo.Root, "tools/data", "#!/bin/sh\necho changed\n")
+	lines, err := repo.CountSourceLinesAt(base)
+	if err != nil || lines.Production != 4 || lines.Test != 1 {
+		t.Fatalf("committed lines changed with working tree: %+v, %v", lines, err)
+	}
+	if !slices.Equal(lines.Languages, []SourceLineGroup{{Name: "go", Production: 2, Test: 1}, {Name: "shell", Production: 2}}) {
+		t.Fatalf("committed language groups = %+v", lines.Languages)
+	}
+}
+
 func TestCountSourceLinesCountsHandwrittenNonBlankLinesByScope(t *testing.T) {
 	t.Parallel()
 	repo := newGitRepository(t)

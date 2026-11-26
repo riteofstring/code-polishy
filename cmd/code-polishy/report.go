@@ -79,18 +79,56 @@ func terminalReportFindings(findings []policy.Finding, detailed bool) ([]policy.
 				continue
 			}
 		}
-		visible = append(visible, finding)
-	}
-	if !detailed {
-		sort.SliceStable(visible, func(left, right int) bool {
-			return blockingReportFinding(visible[left]) && !blockingReportFinding(visible[right])
-		})
+		if detailed || blockingReportFinding(finding) {
+			visible = append(visible, finding)
+		}
 	}
 	return visible, advisories
 }
 
 func blockingReportFinding(finding policy.Finding) bool {
 	return finding.Severity != policy.FindingWarning && finding.Severity != policy.FindingInformation
+}
+
+func printReportSelection(output io.Writer, report engine.Report) {
+	selection := report.RequestedSelection
+	if selection == nil {
+		return
+	}
+	fmt.Fprintf(output, "SELECTION: %s; %d expanded path(s)", selection.Mode, len(selection.Expanded))
+	if len(selection.Operands) > 0 {
+		fmt.Fprint(output, "; ", boundedTaskStartValues(selection.Operands))
+	}
+	fmt.Fprintln(output)
+	if len(selection.Planned) > 0 {
+		fmt.Fprintln(output, "PLANNED PATHS (not yet present):", boundedTaskStartValues(selection.Planned))
+	}
+}
+
+func printNonblockingSummary(output io.Writer, report engine.Report) {
+	seen, summaries := map[string]bool{}, []string{}
+	for _, finding := range report.Findings {
+		if blockingReportFinding(finding) || finding.Fields["analysisOutcome"] == "advisory-candidate" || seen[finding.Check] {
+			continue
+		}
+		seen[finding.Check] = true
+		if len(summaries) < 5 {
+			message := strings.Join(strings.Fields(finding.Message), " ")
+			if len([]rune(message)) > 200 {
+				message = string([]rune(message)[:200]) + "…"
+			}
+			summaries = append(summaries, finding.Check+": "+message)
+		}
+	}
+	if len(summaries) > 0 {
+		fmt.Fprintln(output, "NONBLOCKING:", strings.Join(summaries, "; "))
+	}
+	if len(report.Suppressed)+len(report.Assessed)+len(report.ReleaseAges) > 0 {
+		fmt.Fprintf(output, "ACCEPTED: %d exception(s), %d vulnerability assessment(s), %d release-age assessment(s); details in complete report\n", len(report.Suppressed), len(report.Assessed), len(report.ReleaseAges))
+	}
+	if report.Security != nil {
+		fmt.Fprintln(output, "SECURITY:", report.Security.Status, "(online dependency security; details in complete report)")
+	}
 }
 
 func printGenerationRemediation(output io.Writer, generation *policy.GenerationRemediation) {
@@ -132,6 +170,12 @@ var powerShellQuoteEscapes = strings.NewReplacer(
 func platformRemediationCommand(argv []string, goos string) string {
 	quoted := make([]string, 0, len(argv))
 	for _, argument := range argv {
+		if len(quoted) == 0 && (argument == "code-polishy" || argument == "./code-polishyw") {
+			argument = "./code-polishyw"
+			if goos == "windows" {
+				argument = `.\code-polishyw.ps1`
+			}
+		}
 		if goos == "windows" {
 			argument = powerShellQuoteEscapes.Replace(argument)
 		} else {
@@ -343,7 +387,6 @@ func printReportCompletion(stdout, stderr io.Writer, report engine.Report, advis
 	} else {
 		fmt.Fprintln(stdout, "PASS errors=0 warnings=0 information=0")
 	}
-	printAdvisorySummary(stdout, advisories)
 }
 
 func printAdvisorySummary(stdout io.Writer, advisories int) {

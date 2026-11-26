@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	DefaultFindingDisplayLimit = 20
+	DefaultFindingDisplayLimit = 5
 	MaximumFindingDisplayLimit = 100
 )
 

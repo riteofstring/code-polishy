@@ -17,7 +17,7 @@ func handleDesignContext(_ context.Context, policyEngine *engine.Engine, argumen
 		return commandResult{}, commandInputError(err)
 	}
 	report, err := policyEngine.DesignContext(engine.ContextRequest{
-		Mode: options.mode, Files: options.files, Modules: options.modules, Situations: options.situations, Workflow: "design-context",
+		Mode: options.mode, Files: options.files, NewPaths: options.newPaths, Modules: options.modules, Features: options.features, Situations: options.situations, Workflow: "design-context",
 	})
 	return commandResult{report: report}, err
 }
@@ -25,7 +25,9 @@ func handleDesignContext(_ context.Context, policyEngine *engine.Engine, argumen
 type designContextOptions struct {
 	mode              string
 	files             []string
+	newPaths          []string
 	modules           []string
+	features          []string
 	situations        []string
 	selectionSelected bool
 }
@@ -39,13 +41,17 @@ func parseDesignContextOptions(arguments []string) (designContextOptions, error)
 		}
 		index += consumed
 	}
-	if len(options.situations) > 0 && !options.selectionSelected && len(options.modules) == 0 {
+	if len(options.situations) > 0 && !options.selectionSelected && len(options.modules)+len(options.newPaths) == 0 {
 		options.mode = "none"
 	}
 	return options, policy.ValidateHandoffSituations(options.situations)
 }
 
 func parseDesignContextOption(options *designContextOptions, arguments []string) (int, error) {
+	name, _, _ := strings.Cut(arguments[0], "=")
+	if name == "--new-path" || name == "--feature" {
+		return parseDesignContextPlannedOrFeature(options, arguments, name)
+	}
 	if arguments[0] == "--situation" || strings.HasPrefix(arguments[0], "--situation=") {
 		value, consumed, err := designContextSituationValue(arguments)
 		if err == nil {
@@ -57,6 +63,22 @@ func parseDesignContextOption(options *designContextOptions, arguments []string)
 		return parseDesignContextModule(options, arguments)
 	}
 	return parseDesignContextSelection(options, arguments)
+}
+
+func parseDesignContextPlannedOrFeature(options *designContextOptions, arguments []string, name string) (int, error) {
+	value, consumed, _, err := namedOptionValue(arguments, name)
+	if err != nil {
+		return 0, err
+	}
+	if name == "--feature" {
+		options.features = append(options.features, value)
+		return consumed, nil
+	}
+	if len(options.modules) > 0 || options.selectionSelected && options.mode != "files" {
+		return 0, errors.New("--new-path can be combined only with --files")
+	}
+	options.mode, options.newPaths = "files", append(options.newPaths, value)
+	return consumed, nil
 }
 
 func designContextSituationValue(arguments []string) (string, int, error) {
@@ -72,6 +94,11 @@ func designContextSituationValue(arguments []string) (string, int, error) {
 func printRepositoryContext(output io.Writer, context *engine.RepositoryContext) {
 	if context == nil {
 		return
+	}
+	if context.Review.Required {
+		fmt.Fprintln(output, "REVIEW: pre-edit intent capture required; use ./code-polishyw task-start with the same selection and --intent-file -")
+	} else {
+		fmt.Fprintln(output, "REVIEW: optional; no intent capture required")
 	}
 	for _, match := range context.DesignResolution.Matches {
 		fmt.Fprintln(output, "DESIGN DOCUMENT:", match.Path)
@@ -96,7 +123,7 @@ func isDesignContextModuleOption(argument string) bool {
 }
 
 func parseDesignContextModule(options *designContextOptions, arguments []string) (int, error) {
-	if options.selectionSelected {
+	if options.selectionSelected || len(options.newPaths) > 0 {
 		return 0, errors.New("choose only one of file selection or --module")
 	}
 	value, consumed, err := designContextModuleValue(arguments)
@@ -128,6 +155,9 @@ func parseDesignContextSelection(options *designContextOptions, arguments []stri
 	}
 	if options.selectionSelected || len(options.modules) > 0 {
 		return 0, errors.New("choose only one of file selection or --module")
+	}
+	if len(options.newPaths) > 0 && mode != "files" {
+		return 0, errors.New("--new-path can be combined only with --files")
 	}
 	options.mode = mode
 	options.selectionSelected = true
@@ -167,8 +197,5 @@ func printDesignCoverage(output io.Writer, context *engine.RepositoryContext) {
 	}
 	if len(resolution.UnmappedPaths) > 10 {
 		fmt.Fprintf(output, "  %d more unmapped paths; use --format json for complete coverage.\n", len(resolution.UnmappedPaths)-10)
-	}
-	if len(resolution.UnmappedModules)+len(resolution.UnmappedPaths) > 0 {
-		fmt.Fprintln(output, "  Review existing rationale; create or update mappings for consequential design decisions. Missing mappings alone do not block routine work.")
 	}
 }

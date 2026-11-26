@@ -34,6 +34,7 @@ type Engine struct {
 	Output               io.Writer
 	Verbose              bool
 	PolicyModuleFindings []policy.Finding
+	formatPrerequisites  []policy.Finding
 	PolicyModuleNotes    []string
 	PackDataRoot         string
 	execution            *executionRecorder
@@ -94,6 +95,7 @@ func openRepository(repoRoot, policyRoot, configPath, outgoingRoot string) (*Eng
 	return &Engine{
 		Repository: repo, Runner: commandRunner, Output: os.Stdout,
 		PolicyModuleFindings: append(append(moduleResolution.Findings, packResolution.Findings...), gitLabInspection.Findings...),
+		formatPrerequisites:  append(append([]policy.Finding{}, moduleResolution.Findings...), packResolution.Findings...),
 		PolicyModuleNotes:    append(policymodule.Notes(moduleResolution.Active), packResolution.Notes...),
 		PackDataRoot:         dataRoot,
 		gitLabInspection:     gitLabInspection,
@@ -300,6 +302,7 @@ func (engine *Engine) test(ctx context.Context, request testpolicy.Request, stop
 	}
 	receiptEngine := *engine
 	receiptEngine.Runner = &testReceiptRunner{delegate: engine.Runner, controller: controller}
+	controller.RenderPlan()
 	return receiptEngine.testExactPlan(ctx, plan, request.Changed, stopAfterFailure)
 }
 
@@ -445,11 +448,11 @@ func testPlanSuites(advice testpolicy.Advice, level string) []policy.TestSuite {
 func testReceiptPlanTable(decisions []testReceiptDecision) Table {
 	rows := make([][]string, 0, len(decisions))
 	for _, decision := range decisions {
-		rows = append(rows, []string{decision.Suite, decision.Action, decision.Prior, decision.Reason})
+		rows = append(rows, []string{decision.Suite, decision.Cost, decision.Scope, decision.Observed, decision.Action, decision.Reason})
 	}
 	return Table{
 		Title:   "TEST RECEIPT PLAN",
-		Columns: []string{"SUITE", "ACTION", "PRIOR", "REASON"},
+		Columns: []string{"SUITE", "COST", "SCOPE", "LAST EXECUTED", "ACTION", "REASON"},
 		Rows:    rows,
 	}
 }

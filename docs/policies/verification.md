@@ -113,6 +113,81 @@ unexpected test skips. Code Polishy treats an exit-zero suite command as
 successful and does not infer executed or skipped counts from human-readable
 output.
 
+## Worked focused-suite split
+
+Suppose `records` parses records and loads a file. Its quick boundary suite checks
+parsing through the public API; its integration suite loads real temporary files.
+Move the integration tests into their own execution path while preserving their
+production owner and keeping a real boundary test in focused execution:
+
+```json
+{
+  "modules": [{ "name": "records", "paths": ["src/records/**"] }],
+  "tests": {
+    "suites": [
+      {
+        "name": "records-boundary",
+        "kind": "unit",
+        "scope": "module",
+        "modules": ["records"],
+        "cost": "quick",
+        "paths": ["tests/records/boundary.test.mjs"],
+        "argv": ["node", "--test", "tests/records/boundary.test.mjs"],
+        "runOn": ["focused", "recommended", "full"]
+      },
+      {
+        "name": "records-integration",
+        "kind": "integration",
+        "scope": "repository",
+        "cost": "standard",
+        "paths": ["tests/records/files.test.mjs"],
+        "argv": ["node", "--test", "tests/records/files.test.mjs"],
+        "runOn": ["recommended", "full"]
+      }
+    ],
+    "ownership": [
+      {
+        "paths": ["tests/records/boundary.test.mjs"],
+        "module": "records",
+        "focusedSuite": "records-boundary"
+      },
+      {
+        "paths": ["tests/records/files.test.mjs"],
+        "module": "records",
+        "focusedSuite": "records-boundary",
+        "executionSuite": "records-integration"
+      }
+    ]
+  }
+}
+```
+
+This is a configuration fragment for that boundary; other modules and tests keep
+their own coverage. The boundary test uses real inputs and externally specified
+expected values, for example:
+
+```js
+import assert from "node:assert/strict";
+import test from "node:test";
+import { parseRecord } from "../../src/records/parse.mjs";
+
+test("parses an ID and label", () => {
+  assert.deepEqual(parseRecord("42,ready"), { id: "42", label: "ready" });
+});
+
+test("rejects a missing ID", () => {
+  assert.throws(() => parseRecord(",ready"), /missing ID/);
+});
+```
+
+The integration test calls the loader with a file created under `mkdtemp`, checks
+parsed output and missing-file behavior, and removes its temporary directory.
+Shared helpers belong to the executing suite's paths and ownership declaration.
+Keep every governed test owned and executed by its declared ordinary suite.
+Renaming the former full suite `quick`, or moving every test out of the focused
+suite, does not establish focused coverage. Optional `test-levels` explains
+selection without executing tests; it is not a required preliminary step.
+
 ## Verification checkpoints
 
 Verification follows changed risk, not the number of edits, commits, or chat
@@ -299,6 +374,63 @@ reusable receipt.
 the same failed gate identity while all other phases rerun. If no matching run
 exists, it executes the complete gate instead of failing on a nonexistent
 suite artifact. Existing incomplete or damaged evidence still fails closed.
+
+### Worked eligible-reuse migration
+
+First establish that `records-boundary` reads only its owned source/tests,
+control inputs and declared fixtures; uses the pinned Node tool; needs no network,
+credentials, external service or exclusive resource; and writes only managed
+artifacts. If that evidence does not hold, retain fresh execution. Reuse is an
+explicit adoption decision, never inferred from similar command text.
+
+For an eligible suite, replace its declaration with:
+
+```json
+{
+  "name": "records-boundary",
+  "kind": "unit",
+  "scope": "module",
+  "modules": ["records"],
+  "cost": "quick",
+  "paths": ["tests/records/boundary.test.mjs"],
+  "extraInputs": ["fixtures/records/**"],
+  "environment": ["TZ"],
+  "reusable": true,
+  "argv": [
+    "node",
+    "--test",
+    "--test-reporter=junit",
+    "--test-reporter-destination={artifactDir}/junit.xml",
+    "tests/records/boundary.test.mjs"
+  ],
+  "artifacts": [{ "path": "junit.xml", "type": "junit", "required": true }],
+  "runOn": ["focused", "recommended", "full"]
+}
+```
+
+Declare actual fixture inputs and environment names; the example's `TZ` value
+and presence are bound to receipt identity. Node's approved version, policy,
+module dependency closure, owned tests, control files, artifact contract and
+selected inputs are also bound. The sealed view contains only those repository
+inputs, is read-only, and gives the runner its separate managed artifact location.
+An undeclared read or a write into the view must be repaired before claiming
+eligibility; do not add ambient path fallbacks.
+
+Run `./code-polishyw test --suite records-boundary` as useful development
+verification. It deliberately executes fresh and writes an eligible receipt.
+At the next genuine gate, the same complete identity reuses that receipt; an
+input, environment or tool change invalidates it. Non-reusable suites and
+additional gate coverage still execute. The normal plan/report distinguishes
+not opted in, ineligible, missing, expired or invalid evidence, deliberate fresh
+direct execution and exact reuse. Its original execution duration is historical,
+not time spent by the current gate. No extra acknowledgement or cache-maintenance
+step is required.
+
+The plan also shows the last comparable executed duration beside declared cost,
+with observation age and scope. It uses retained gate executions with matching
+command/scope/host or an exact matching receipt; absent suitable evidence is
+`unknown`. Observations of at least one minute for a `quick` suite are highlighted
+as slow feedback. This advisory never skips required tests or adds cost approval.
 
 CI can move reusable evidence through one bounded bundle:
 
@@ -694,8 +826,10 @@ request selects it. Base-aware plans and both gates disclose both `BEHAVIOR
 REVIEW` and `FINAL STATE`. Optional review reads no packet, proof, or receipt
 and does not change ordinary command selection or runtime.
 
-Before implementation, `task-start` projects the selected scope through current
-behavior-review policy. Optional review retains no request. When checked-in
+When scoped context is missing, `design-context` reports the review requirement
+using the same policy selection as `task-start`. Retain that context while release,
+policy and scope remain applicable. Use `task-start` for required pre-edit capture
+or a useful optional packet. Optional work needs neither initialization nor a request journal. When checked-in
 policy or an explicit feature selects review, the agent harness supplies the
 user's exact original request and acceptance criteria at the task base,
 preferably through bounded standard input. The harness repeats capture before
@@ -727,12 +861,15 @@ limits.
 
 An AI collaborator should treat the levels differently:
 
-1. Before implementing a non-documentation request, run `task-start` for the
-   planned scope. When it reports that intent will be used, supply the exact
-   harness-provided request at the task base through task-start or
-   `behavior-review capture-intent --intent-file -`. Capture only later
+1. Reuse applicable workflow, review and design context while release, policy,
+   scope, mappings and relevant documents remain unchanged. Retrieve only missing
+   or invalidated context with `design-context`; it also reports review selection.
+   When review is selected, capture the exact harness-provided request at the
+   clean task base before editing through `task-start --intent-file -`. Optional
+   work needs no initialization or journal. Record Git HEAD once when task-scoped
+   verification needs a base; this does not assert a clean candidate. Capture later
    artifact-affecting corrections before acting on them. During implementation,
-   run exact named or module tests as useful.
+   run useful exact named or module tests.
 2. For ordinary Markdown-only work, run `format --git-changes`, fix the built-in
    documentation findings, and run no application tests. This needs no user
    approval.
@@ -742,9 +879,9 @@ An AI collaborator should treat the levels differently:
    candidate, complete behavior review only when status selects it, and run
    `checkpoint-gate --base PREVIOUS_CHECKPOINT`. Start the next task only after
    it records the accepted HEAD.
-5. During a task, use `test --changed --base TASK_BASE` or
-   `test-levels --base TASK_BASE` to
-   inspect changes since the task boundary. At an ordinary merge checkpoint,
+5. At a completed source task with no selected gate immediately next, run
+   `check --git-changes` before committing, then `test --changed --base TASK_BASE`.
+   `test-levels --base TASK_BASE` is optional inspection and executes no tests. At an ordinary merge checkpoint,
    resolve a trusted merge target separately.
 6. At a genuine merge checkpoint, run `merge-gate --base MERGE_TARGET` without
    asking the user to choose a level. It subsumes changed-impact

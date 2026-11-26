@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/riteofstring/code-polishy/internal/behaviorreview"
 	"github.com/riteofstring/code-polishy/internal/gaterun"
@@ -1481,6 +1482,7 @@ func assertTestQualityReminderPaths(t *testing.T, report Report, want []string) 
 }
 
 type recordingEngineRunner struct {
+	duration time.Duration
 	commands []string
 }
 
@@ -1553,7 +1555,7 @@ func (double *failingEngineRunner) Execute(ctx context.Context, invocation runne
 }
 
 func (double *recordingEngineRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {
-	return runner.Result{}, runner.Output{}, double.runPlain(ctx, invocation.Root, invocation.Command)
+	return runner.Result{ExecutionDuration: double.duration}, runner.Output{}, double.runPlain(ctx, invocation.Root, invocation.Command)
 }
 
 func (double *focusedRetryEngineRunner) Execute(ctx context.Context, invocation runner.Invocation) (runner.Result, runner.Output, error) {

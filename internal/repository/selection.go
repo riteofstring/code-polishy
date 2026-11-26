@@ -16,6 +16,7 @@ type RequestedSelection struct {
 	Operands []string `json:"operands"`
 	Modules  []string `json:"modules,omitempty"`
 	Expanded []string `json:"expanded"`
+	Planned  []string `json:"planned,omitempty"`
 }
 
 type selectionOperand struct {
@@ -103,7 +104,7 @@ func (repo Repository) inspectSelectionOperand(raw string) (selectionOperand, er
 	info, err := os.Lstat(absolute)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return selectionOperand{}, fmt.Errorf("selection path is missing: %s", normalized)
+			return selectionOperand{}, fmt.Errorf("selection path is missing: %s; for intentional creation use design-context or task-start with --new-path %s", normalized, normalized)
 		}
 		return selectionOperand{}, fmt.Errorf("inspect selection path %s: %w", normalized, err)
 	}
@@ -117,6 +118,63 @@ func (repo Repository) inspectSelectionOperand(raw string) (selectionOperand, er
 		return selectionOperand{}, fmt.Errorf("selection path is outside governed scope: %s", normalized)
 	}
 	return selectionOperand{path: normalized, directory: info.IsDir()}, nil
+}
+
+func (repo Repository) ContextPathSelection(files, planned []string) (Selection, error) {
+	selection := Selection{Requested: RequestedSelection{Mode: "files", Operands: []string{}, Expanded: []string{}}}
+	if len(files) > 0 {
+		var err error
+		selection, err = repo.Select("files", files)
+		if err != nil {
+			return Selection{}, err
+		}
+	}
+	for _, raw := range planned {
+		path, err := repo.plannedSelectionPath(raw)
+		if err != nil {
+			return Selection{}, err
+		}
+		if slices.Contains(selection.Requested.Planned, path) {
+			return Selection{}, fmt.Errorf("planned path is repeated: %s", path)
+		}
+		selection.Requested.Planned = append(selection.Requested.Planned, path)
+		selection.Files = append(selection.Files, path)
+		selection.Candidate.AddedOrModified = append(selection.Candidate.AddedOrModified, path)
+	}
+	return selection, nil
+}
+
+func (repo Repository) plannedSelectionPath(raw string) (string, error) {
+	path, err := repo.normalizeSelectionOperand(raw)
+	if err != nil {
+		return "", err
+	}
+	if path == "." || strings.ContainsAny(path, "\\\x00:") || repo.IsExcluded(path) {
+		return "", fmt.Errorf("planned path must name a contained governed file: %s", path)
+	}
+	return repo.inspectPlannedPath(path)
+}
+
+func (repo Repository) inspectPlannedPath(path string) (string, error) {
+	root, err := os.OpenRoot(repo.Root)
+	if err != nil {
+		return "", err
+	}
+	defer root.Close()
+	parts := strings.Split(path, "/")
+	for index := range parts {
+		info, err := root.Lstat(filepath.FromSlash(strings.Join(parts[:index+1], "/")))
+		if os.IsNotExist(err) {
+			return path, nil
+		}
+		if err != nil {
+			return "", fmt.Errorf("inspect planned path %s: %w", path, err)
+		}
+		if info.Mode()&os.ModeSymlink != 0 || index < len(parts)-1 && !info.IsDir() {
+			return "", fmt.Errorf("planned path cannot contain a symbolic link or non-directory parent: %s", path)
+		}
+	}
+	return "", fmt.Errorf("planned path already exists: %s; use --files", path)
 }
 
 func (repo Repository) normalizeSelectionOperand(raw string) (string, error) {

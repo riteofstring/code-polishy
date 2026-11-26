@@ -372,11 +372,12 @@ the source at all produces coverage failure rather than an implicit allowance.
 Put durable non-local rationale in a current Markdown document selected through
 the optional `documentation.design` index. Each entry maps a file under
 `docs/design/` to exactly one module or bounded list of concrete source paths;
-direct source ownership replaces module ownership for that file. Before editing
-source, run `code-polishy design-context --files <path...>` or
-`code-polishy design-context --module <name...>`. The command prints stable
-repository-relative paths only and returns no more than one current document
-per selected file. It deliberately excludes plans, historical evidence, and
+module and source mappings are additive. Retrieve missing or invalidated context
+before editing with `./code-polishyw design-context --files PATH...` or repeated
+`--module NAME`. Retain it while release, policy, scope, mappings and relevant
+documents remain unchanged. Use `--new-path PATH` for intentional creation.
+The command returns selected rationale and review requirements without requiring
+a task packet or journal for optional work. It deliberately excludes plans, historical evidence, and
 superseded decisions; see [Adopting Code Polishy](../adoption.md#map-current-design-rationale)
 for the mapping schema. Its JSON report's `repositoryContext.designResolution`
 contains the complete matches, selection counts, and coverage gaps; human output
@@ -1024,7 +1025,13 @@ review where that matters.
 When the budget is exceeded, remove unnecessary code, duplication, and
 speculative machinery. Compressing formatting, deleting valuable tests, or
 moving logic into configuration only hides the growth. If the code is needed,
-ask the caller for a specific increase and explain why.
+ask the caller for a specific ceiling with useful headroom for a coherent feature
+or milestone, explaining current size, growth from the task base, the proposed
+ceiling and rationale together. Use the read-only
+[`size` proposal](../repository-size.md#propose-deliberate-headroom) to present those
+facts. Do not reset the cap to the exact count after every small overrun. Work
+within the approved ceiling needs no new approval for each addition; exceeding
+it still blocks. No automatic slack is granted.
 
 ## Test source quality
 

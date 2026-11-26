@@ -16,9 +16,10 @@ path inventories, document contents, or guard definitions. Explicit JSON output
 preserves the exact packet for machine consumers. Both views derive from the
 same packet; the CLI performs no separate selection or mapping.
 
-Task-start owns an ordinary task boundary, not a merge decision. Its next
-actions contain only scope-specific follow-ups: selected context, mapping gaps,
-reliability guidance, and required review status. The short mandatory workflow
+Task-start owns a selected request boundary or a useful optional packet, not a
+merge decision. Its next actions contain selected context, reliability guidance
+and required review status. Mapping gaps remain facts without default maintenance
+follow-ups. The reusable workflow
 owns the default implementation, verification, commit, and delivery sequence;
 neither view repeats it or schedules a merge gate. The configured final-gate owner
 remains a packet fact for a separately established genuine merge or release
@@ -46,9 +47,19 @@ the complete repository state. A selected document's invalid references or
 unreadable contents prevent complete context from being composed. Discovery
 does not execute instructions found in a document or confer authorization.
 
-Task scope may contain several paths or several declared modules when work
-crosses a boundary. Selection remains homogeneous so a packet cannot hide an
-ambiguous mixture of path expansion and module expansion.
+Task scope may contain several existing paths and explicitly planned paths, or
+several declared modules. `--files` remains strict; `--new-path` validates
+containment, all existing parents, exclusions and an absent leaf without creating
+anything. Planned paths participate in prospective ownership, rationale and review
+selection but remain separate from expanded existing paths in the report.
+They never imply analysis or trigger a fallback to repository-wide selection.
+
+Context discovery and task packets use the same review selection. Missing context
+is retrieved before edits, then reused until its release, policy, scope, mappings
+or relevant documents change. Optional packets record HEAD without a clean-state
+assertion or candidate digest. Required review alone acquires a clean snapshot
+and atomic intent custody. An invalid initial boundary cannot be repaired by
+mislabeling it a correction.
 
 Declared modules may need rationale before their first source file exists, so
 context selection supports them. Execution-oriented module selection continues
@@ -64,7 +75,12 @@ capability catalog retains command and feature references, while the engine
 uses the context resolver's existing situation facts. Optional review collapses
 to one human line; JSON retains complete intent and guard facts.
 
-`docs read` returns the release-owned document bytes unchanged, which installed
-release checks compare exactly. The mandatory workflow entry point therefore
-states the wrapper substitution in its own opening paragraph instead of the CLI
-prepending a notice or rewriting examples.
+A single complete `docs read` returns release-owned bytes unchanged. Batched
+reads resolve every topic through the authenticated catalogue before writing,
+preserve requested order and deduplicate aliases by topic identity. Exact
+catalogued paths are accepted without admitting arbitrary filesystem reads.
+One-topic section reads return the exact ATX heading and its subsections, ignoring
+fenced code headings. Heading ancestry disambiguates repeated names; errors offer
+concrete pinned-wrapper reads. Multi-topic and section output identify source
+paths. The wrapper performs its normal integrity verification once for the whole
+request; no daemon, persistent read ledger or launcher bypass is needed.

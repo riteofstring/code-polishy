@@ -34,7 +34,7 @@
   },
   "quality": {
     "allowComments": false,
-    "lineBudget": { "production": 101000 }
+    "lineBudget": { "production": 103000 }
   },
   "documentation": {
     "productInputs": ["docs/bug-review.md"],
@@ -451,7 +451,8 @@
           "internal/engine/task_start.go",
           "internal/engine/task_start_actions.go",
           "cmd/code-polishy/design_context.go",
-          "cmd/code-polishy/task_start_output.go"
+          "cmd/code-polishy/task_start_output.go",
+          "internal/documentation/sections.go"
         ]
       },
       {
@@ -530,7 +531,8 @@
           "internal/runner/runner.go",
           "internal/supplychain/osv.go",
           "cmd/code-polishy/main.go",
-          "cmd/code-polishy/report.go"
+          "cmd/code-polishy/report.go",
+          "internal/engine/test_duration.go"
         ]
       },
       {
@@ -559,7 +561,9 @@
         "sourcePaths": [
           "internal/repository/source_lines.go",
           "internal/quality/line_budget.go",
-          "internal/engine/line_budget.go"
+          "internal/engine/line_budget.go",
+          "internal/engine/budget_proposal.go",
+          "cmd/code-polishy/size.go"
         ]
       },
       {
@@ -2280,8 +2284,8 @@
         "impact": "Repository-controlled arrays of invalid elements cannot reach Zod's issue-accumulating array validator through the sealed native analyzer.",
         "evidence": "https://github.com/riteofstring/code-polishy/blob/main/docs/security/dependency-assessments.md",
         "owner": "Codex",
-        "reviewed": "2026-11-08",
-        "expires": "2026-11-22"
+        "reviewed": "2026-11-26",
+        "expires": "2026-12-10"
       },
       {
         "id": "provider-zod-configuration-unreachable",
@@ -2297,8 +2301,8 @@
         "impact": "Repository-controlled arrays of invalid elements cannot reach Zod's issue-accumulating array validator through the provider's configuration boundary.",
         "evidence": "https://github.com/riteofstring/code-polishy/blob/main/docs/security/dependency-assessments.md",
         "owner": "Codex",
-        "reviewed": "2026-11-08",
-        "expires": "2026-11-22"
+        "reviewed": "2026-11-26",
+        "expires": "2026-12-10"
       }
     ]
   }

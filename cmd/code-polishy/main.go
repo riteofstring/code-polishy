@@ -23,7 +23,7 @@ const usage = `Usage: code-polishy [global options] <command> [options]
 Commands:
   version
   capabilities [--query TEXT] [--format human|json]
-  task-start (--files PATH... | --module NAME...) [--intent-file PATH|-] [--feature NAME] [--situation NAME] [--format human|json]
+  task-start (--files PATH... | --new-path PATH... | --module NAME...) [--intent-file PATH|-] [--feature NAME] [--situation NAME] [--format human|json]
   docs <list|find|read>
   install-rust [--source ARCHIVE]
   pack <install|verify|root>
@@ -58,9 +58,9 @@ Commands:
   dependency-review --base REF
   artifact-security
   doctor [--strict]
-  size [--base REF]
+  size [--base REF] [--propose-budget SCOPE=LINES --growth-rationale TEXT]
   trends [--since DATE] [--branch NAME] [--rewrite-days N]
-  design-context (--module NAME... | [--git-changes|--staged|--all|--files PATH...]) [--situation NAME...]
+  design-context (--module NAME... | [--git-changes|--staged|--all|--files PATH...|--new-path PATH...]) [--situation NAME...] [--feature NAME...]
   format [--git-changes|--staged|--all|--files PATH...|--module NAME...]
   fix [selection options]
   list-files [selection options]
@@ -549,11 +549,11 @@ func handleArtifactSecurity(ctx context.Context, policyEngine *engine.Engine, ar
 }
 
 func handleSize(_ context.Context, policyEngine *engine.Engine, arguments []string) (commandResult, error) {
-	base, err := parseSizeBaseOption(arguments)
+	base, proposals, err := parseSizeOptions(arguments)
 	if err != nil {
 		return commandResult{}, commandInputError(err)
 	}
-	report, err := policyEngine.Size(base)
+	report, err := policyEngine.Size(base, proposals...)
 	return commandResult{report: report}, err
 }
 
@@ -773,60 +773,54 @@ func printReportWithMode(stdout, stderr io.Writer, report engine.Report, verbose
 	detailed := detailedReportFindings(report.Display, verbose)
 	visible, advisories := terminalReportFindings(report.Findings, detailed)
 	printReportCompletion(stdout, stderr, report, advisories)
+	if report.ReportPath != "" {
+		fmt.Fprintln(stdout, "COMPLETE REPORT:", report.ReportPath)
+	}
+	printReportSelection(stdout, report)
+	remaining := report.Display.FindingLimit()
+	findings := boundedReportItems(visible, &remaining)
+	printFindings(stdout, stderr, findings)
+	if omitted := len(visible) - len(findings); omitted > 0 {
+		fmt.Fprintf(stdout, "OMITTED %d finding(s) from the bounded terminal view; complete report retains all findings\n", omitted)
+	}
+	printAdvisorySummary(stdout, advisories)
 	if detailed {
 		printReportSummaryGroups(stdout, report.Summary)
+		printSecurityEvidence(stdout, report.Security)
+	} else {
+		printNonblockingSummary(stdout, report)
 	}
 	printFormattingOutcome(stdout, report.Formatting)
 	printGitEvidence(stdout, report)
-	printSecurityEvidence(stdout, report.Security)
 	printReliabilityReminder(stdout, report.ReliabilityReminder)
-	printTestQualityReminder(stdout, report.TestQualityReminder)
 	printReportHeaders(stdout, report, verbose)
 	printExecutionTelemetry(stdout, report.Execution, verbose)
 	printRepositoryContext(stdout, report.RepositoryContext)
 	printAssessedSevereFindings(stdout, report.Assessed)
-	limit := report.Display.FindingLimit()
-	remaining := limit
-	findings := boundedReportItems(visible, &remaining)
-	suppressed := boundedReportItems(report.Suppressed, &remaining)
-	assessed := boundedReportItems(report.Assessed, &remaining)
-	releaseAges := boundedReportItems(report.ReleaseAges, &remaining)
-	printFindings(stdout, stderr, findings)
 	printTestFailureEvidence(stderr, report.TestCommands, report.TestDiagnostics)
-	printSuppressedFindings(stdout, suppressed)
-	printVulnerabilityAssessments(stdout, assessed)
-	printReleaseAgeAssessments(stdout, releaseAges)
-	displayed := len(findings) + len(suppressed) + len(assessed) + len(releaseAges)
-	total := len(visible) + len(report.Suppressed) + len(report.Assessed) + len(report.ReleaseAges)
-	if omitted := total - displayed; omitted > 0 {
-		fmt.Fprintf(stdout, "OMITTED %d finding(s) from the bounded terminal view\n", omitted)
+	if detailed {
+		printReportAcceptedFindings(stdout, report, remaining)
+		printVulnerabilitySummary(stdout, report, report.Display.FindingLimit())
 	}
-	printVulnerabilitySummary(stdout, report, limit)
 	printReportTables(stdout, report.Tables)
 	printReportNotes(stdout, report.Notes, verbose || report.Command == "dependency-review")
-	if report.ReportPath != "" {
-		fmt.Fprintln(stdout, "COMPLETE REPORT:", report.ReportPath)
-	}
 	if report.Display != nil && report.Display.Omitted > 0 {
 		fmt.Fprintf(stdout, "FILTERED %d occurrence(s); displayed %d of %d\n", report.Display.Omitted, report.Display.Displayed, report.Display.Total)
 	}
 }
 
-func printTestQualityReminder(output io.Writer, reminder *engine.TestQualityReminder) {
-	if reminder == nil || len(reminder.ChangedTestPaths) == 0 && reminder.TaskBase == "" {
-		return
+func printReportAcceptedFindings(stdout io.Writer, report engine.Report, remaining int) {
+	suppressed := boundedReportItems(report.Suppressed, &remaining)
+	assessed := boundedReportItems(report.Assessed, &remaining)
+	releaseAges := boundedReportItems(report.ReleaseAges, &remaining)
+	printSuppressedFindings(stdout, suppressed)
+	printVulnerabilityAssessments(stdout, assessed)
+	printReleaseAgeAssessments(stdout, releaseAges)
+	displayed := len(suppressed) + len(assessed) + len(releaseAges)
+	total := len(report.Suppressed) + len(report.Assessed) + len(report.ReleaseAges)
+	if omitted := total - displayed; omitted > 0 {
+		fmt.Fprintf(stdout, "OMITTED %d finding(s) from the bounded terminal view\n", omitted)
 	}
-	fmt.Fprintln(output, "============================================================")
-	fmt.Fprintln(output, "TEST QUALITY REMINDER")
-	fmt.Fprintf(output, "MERGE-TARGET CHANGED TEST FILES: %d\n", len(reminder.ChangedTestPaths))
-	if reminder.TaskBase != "" {
-		fmt.Fprintf(output, "LATEST TASK CHANGED TEST FILES: %d since %s\n", len(reminder.TaskChangedTestPaths), reminder.TaskBase)
-	}
-	fmt.Fprintln(output, "")
-	fmt.Fprintln(output, "Make sure none of the tests (new or old) are tautological or change-detector tests.")
-	fmt.Fprintln(output, "Tautological: derives its expected result from the same production implementation being tested.")
-	fmt.Fprintln(output, "Change-detector: mirrors private source spelling, extracted helper text, or collaborator choreography and therefore breaks under a behavior-preserving implementation change.")
-	fmt.Fprintln(output, "============================================================")
 }
 
 func printReportHeaders(output io.Writer, report engine.Report, verbose bool) {

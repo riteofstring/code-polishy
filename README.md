@@ -60,19 +60,29 @@ See the [agent setup guide](docs/ai-adoption.md) or the
 
 ## How agents use it
 
-A coding agent uses the repository wrapper to read the locked workflow, start a
-scoped task, check the change, and run the final gate at a merge checkpoint:
+A coding agent uses the pinned wrapper and retains context while its release,
+policy and scope remain applicable. Retrieve missing guidance once:
 
 ```sh
-./code-polishyw docs read agent-workflows
-./code-polishyw task-start --module MODULE
-./code-polishyw test --changed
-./code-polishyw dependency-review --base origin/main
-./code-polishyw merge-gate --base origin/main
+./code-polishyw docs read agent-workflows verification
+./code-polishyw design-context --module MODULE
 ```
 
-The locked [agent workflow](docs/agent-workflows.md) covers long-lived branch
-checkpoints, behavior review, failed-gate recovery, and CI evidence transfer.
+Known scope with optional review needs no initialization command. Record Git
+HEAD once for task-scoped verification. When context selects review, capture the
+exact request with `task-start --intent-file -` before editing. Planned files use
+`--new-path PATH`; optional context works in an ordinary dirty checkout.
+
+After useful focused tests during editing, a completed source task uses
+`check --git-changes` and `test --changed --base TASK_BASE`. A genuine merge gate
+subsumes that final sequence; run it once through the configured owner. Dependency
+review and supplemental suites remain conditional on their own events.
+
+Read the saved report to inspect warnings or omitted findings without rerunning
+verification. The [report guide](docs/reports.md#capture-once-inspect-the-saved-report)
+shows how to preserve the original exit status. The locked
+[agent workflow](docs/agent-workflows.md) covers long-lived branch checkpoints,
+behavior review, failed-gate recovery and CI evidence transfer.
 
 ## Languages
 

@@ -677,11 +677,11 @@ func (repo Repository) DesignDocumentFindings() []policy.Finding {
 	return repo.designDocumentFindings(nil)
 }
 
-func (repo Repository) SelectedDesignDocumentFindings(paths []string) []policy.Finding {
-	return repo.designDocumentFindings(toSet(paths))
+func (repo Repository) SelectedDesignDocumentFindings(paths []string, planned ...string) []policy.Finding {
+	return repo.designDocumentFindings(toSet(paths), planned...)
 }
 
-func (repo Repository) designDocumentFindings(selected map[string]bool) []policy.Finding {
+func (repo Repository) designDocumentFindings(selected map[string]bool, planned ...string) []policy.Finding {
 	findings := []policy.Finding{}
 	for _, document := range repo.Config.Documentation.Design {
 		if selected != nil && !selected[document.Path] {
@@ -694,7 +694,7 @@ func (repo Repository) designDocumentFindings(selected map[string]bool) []policy
 			findings = append(findings, designDocumentFinding(document.Path, "mapped module does not exist"))
 		}
 		for _, sourcePath := range document.SourcePaths {
-			if message := repo.designSourcePathMessage(sourcePath); message != "" {
+			if message := repo.designSourcePathMessage(sourcePath, slices.Contains(planned, sourcePath)); message != "" {
 				findings = append(findings, designDocumentFinding(sourcePath, message))
 			}
 		}
@@ -726,9 +726,11 @@ func (repo Repository) designDocumentPathMessage(path string) string {
 	return ""
 }
 
-func (repo Repository) designSourcePathMessage(path string) string {
-	if err := repo.containedRegularFile(path); err != nil {
-		return "mapped source path is missing, non-regular, or escapes the repository"
+func (repo Repository) designSourcePathMessage(path string, planned bool) string {
+	if !planned {
+		if err := repo.containedRegularFile(path); err != nil {
+			return "mapped source path is missing, non-regular, or escapes the repository"
+		}
 	}
 	if repo.IsExcluded(path) {
 		return "mapped source path is excluded from governed scope"

@@ -31,6 +31,9 @@ func taskStartHuman(packet engine.TaskStartPacket) string {
 	if len(packet.RequestedSelection.Modules) > 0 {
 		fmt.Fprintln(&output, "MODULES:", boundedTaskStartValues(packet.RequestedSelection.Modules))
 	}
+	if len(packet.RequestedSelection.Planned) > 0 {
+		fmt.Fprintln(&output, "PLANNED PATHS (not yet present):", boundedTaskStartValues(packet.RequestedSelection.Planned))
+	}
 	printTaskStartReview(&output, packet)
 	printReliabilityReminder(&output, packet.ReliabilityReminder)
 	printTaskStartContext(&output, packet.RepositoryContext)
@@ -38,13 +41,12 @@ func taskStartHuman(packet engine.TaskStartPacket) string {
 		fmt.Fprintf(&output, "LINE BUDGET %s: %d of %d non-blank lines; %d remaining\n", scope.Scope, scope.Lines, scope.Budget, scope.Budget-scope.Lines)
 	}
 	if len(packet.WorkflowDocuments) > 1 {
-		fmt.Fprintln(&output, "WORKFLOW DOCUMENTS:", boundedTaskStartValues(packet.WorkflowDocuments))
+		fmt.Fprintln(&output, "WORKFLOW:", displayRemediationCommand(append([]string{"./code-polishyw", "docs", "read"}, packet.WorkflowDocuments...)))
 	}
-	fmt.Fprintln(&output, "MERGE CHECKPOINT GATE OWNER (inactive for ordinary task delivery):", packet.FinalGateOwner)
 	for _, action := range packet.NextActions {
 		fmt.Fprintf(&output, "NEXT %s: %s", action.Name, action.Description)
 		if len(action.Argv) > 0 {
-			fmt.Fprintf(&output, " [%s]", strings.Join(action.Argv, " "))
+			fmt.Fprintf(&output, " [%s]", displayRemediationCommand(action.Argv))
 		}
 		fmt.Fprintln(&output)
 	}
@@ -53,14 +55,14 @@ func taskStartHuman(packet engine.TaskStartPacket) string {
 
 func printTaskStartReview(output *strings.Builder, packet engine.TaskStartPacket) {
 	if !packet.Intent.WillBeUsed {
-		fmt.Fprintf(output, "REVIEW: optional; no intent captured; configured guards=%d (details: capabilities --format json)\n", len(packet.ConfiguredGuards))
+		fmt.Fprintln(output, "REVIEW: optional; no intent captured; task base records HEAD without asserting a clean working tree")
 		return
 	}
 	fmt.Fprintf(output, "INTENT: captured=%t willBeUsed=%t\n", packet.Intent.Captured, packet.Intent.WillBeUsed)
 	fmt.Fprintln(output, "INTENT REASON:", packet.Intent.Reason)
 	fmt.Fprintln(output, "SELECTED FEATURES:", boundedTaskStartValues(packet.Intent.SelectedFeatures))
 	printTaskStartCapture(output, packet.Intent.Capture)
-	fmt.Fprintf(output, "CONFIGURED GUARDS: %d; use `code-polishy capabilities --format json` for the complete catalog.\n", len(packet.ConfiguredGuards))
+	fmt.Fprintf(output, "CONFIGURED GUARDS: %d; use `./code-polishyw capabilities --format json` for the complete catalog.\n", len(packet.ConfiguredGuards))
 }
 
 func printTaskStartCapture(output *strings.Builder, capture *engine.BehaviorReviewIntentCapture) {

@@ -57,18 +57,25 @@ func (engine *Engine) TaskStart(ctx context.Context, request TaskStartRequest) (
 	if err := validateTaskStartSelection(request.Context); err != nil {
 		return nil, err
 	}
-	snapshot, err := engine.taskStartSnapshot()
+	head, err := engine.Repository.Head()
 	if err != nil {
 		return nil, err
 	}
-	packet, features, err := engine.taskStartPacket(request.Context, request.Features, snapshot.Head)
+	packet, features, err := engine.taskStartPacket(request.Context, request.Features, head)
 	if err != nil {
 		return nil, err
 	}
 	if packet.Intent.WillBeUsed {
+		snapshot, err := engine.taskStartSnapshot()
+		if err != nil {
+			return nil, err
+		}
+		if snapshot.Head != head {
+			return nil, fmt.Errorf("%w: HEAD changed while task-start was prepared", behaviorreview.ErrCandidateChanged)
+		}
 		return engine.finishTaskStartWithCapture(ctx, packet, request, features, snapshot)
 	}
-	return engine.finishTaskStartWithoutCapture(packet, request, snapshot)
+	return engine.finishTaskStartWithoutCapture(packet, request)
 }
 
 func (engine *Engine) taskStartSnapshot() (repository.CandidateStateSnapshot, error) {
@@ -77,7 +84,7 @@ func (engine *Engine) taskStartSnapshot() (repository.CandidateStateSnapshot, er
 		return repository.CandidateStateSnapshot{}, err
 	}
 	if snapshot.Dirty {
-		return repository.CandidateStateSnapshot{}, fmt.Errorf("%w: task-start requires a clean task base; capture an artifact-affecting correction with behavior-review capture-intent", repository.ErrDirtyCandidate)
+		return repository.CandidateStateSnapshot{}, fmt.Errorf("%w: selected behavior review requires an initial request boundary at a clean task base before editing; no intent was captured", repository.ErrDirtyCandidate)
 	}
 	return snapshot, nil
 }
@@ -113,39 +120,29 @@ func taskStartHasIntent(request TaskStartRequest) bool {
 	return request.IntentPath != "" || request.Intent != nil
 }
 
-func (engine *Engine) finishTaskStartWithoutCapture(packet TaskStartPacket, request TaskStartRequest, snapshot repository.CandidateStateSnapshot) ([]byte, error) {
+func (engine *Engine) finishTaskStartWithoutCapture(packet TaskStartPacket, request TaskStartRequest) ([]byte, error) {
 	if taskStartHasIntent(request) {
 		return nil, fmt.Errorf("task-start will not use intent because behavior review is optional for the selected scope; omit --intent-file")
 	}
 	packet.NextActions = taskStartActions(packet)
-	data, err := TaskStartPacketJSON(packet)
-	if err != nil {
-		return nil, err
-	}
-	current, err := engine.Repository.CandidateState()
-	if err != nil {
-		return nil, err
-	}
-	if current != snapshot {
-		return nil, fmt.Errorf("%w: candidate changed while task-start was prepared", behaviorreview.ErrCandidateChanged)
-	}
-	return data, nil
+	return TaskStartPacketJSON(packet)
 }
 
 func validateTaskStartSelection(request ContextRequest) error {
 	if request.Workflow != "" && request.Workflow != "task-start" {
 		return fmt.Errorf("task-start uses its own exact workflow context")
 	}
-	files := request.Mode == "files" && len(request.Files) > 0 && len(request.Modules) == 0
-	module := request.Mode == "modules" && len(request.Modules) > 0 && len(request.Files) == 0
+	files := request.Mode == "files" && len(request.Files)+len(request.NewPaths) > 0 && len(request.Modules) == 0
+	module := request.Mode == "modules" && len(request.Modules) > 0 && len(request.Files)+len(request.NewPaths) == 0
 	if !files && !module {
-		return fmt.Errorf("task-start requires one or more exact --files paths or --module names")
+		return fmt.Errorf("task-start requires --files and/or --new-path paths, or --module names")
 	}
 	return nil
 }
 
 func (engine *Engine) taskStartPacket(request ContextRequest, requestedFeatures []string, taskBase string) (TaskStartPacket, []string, error) {
 	request.Workflow = "task-start"
+	request.Features = requestedFeatures
 	contextReport, err := engine.DesignContext(request)
 	if err != nil {
 		return TaskStartPacket{}, nil, err
@@ -184,10 +181,8 @@ func (engine *Engine) taskStartPacket(request ContextRequest, requestedFeatures 
 }
 
 func (engine *Engine) taskStartSelection(request ContextRequest) (repository.Selection, error) {
-	if request.Mode == "files" {
-		return engine.Repository.Select("files", request.Files)
-	}
-	return engine.Repository.Select("modules", request.Modules)
+	selection, _, err := engine.contextSelection(request)
+	return selection, err
 }
 
 func (engine *Engine) taskStartIntent(selection repository.Selection, explicit []string) TaskStartIntent {

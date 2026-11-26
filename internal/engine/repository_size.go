@@ -10,9 +10,15 @@ import (
 
 const repositorySizeTableLimit = 10
 
-func (engine *Engine) Size(base string) (Report, error) {
+func (engine *Engine) Size(base string, proposals ...BudgetProposal) (Report, error) {
+	if err := validateBudgetProposals(proposals); err != nil {
+		return Report{}, err
+	}
 	analysis, err := engine.Repository.AnalyzeSize(base)
 	if err != nil {
+		return Report{}, err
+	}
+	if err := engine.prepareBudgetGrowth(&analysis, proposals); err != nil {
 		return Report{}, err
 	}
 	notes := []string{
@@ -107,9 +113,21 @@ func appendLineBudgetTable(tables []Table, scopes []repository.LineBudgetScope) 
 	}
 	rows := make([][]string, 0, len(scopes))
 	for _, scope := range scopes {
-		rows = append(rows, []string{scope.Scope, strconv.Itoa(scope.Lines), strconv.Itoa(scope.Budget), strconv.Itoa(scope.Budget - scope.Lines)})
+		base, growth := "unknown", "unknown"
+		if scope.BaseLines != nil {
+			base, growth = strconv.Itoa(*scope.BaseLines), fmt.Sprintf("%+d", scope.Lines-*scope.BaseLines)
+		}
+		proposed, headroom := "-", "-"
+		if scope.ProposedCeiling > 0 {
+			proposed, headroom = strconv.Itoa(scope.ProposedCeiling), strconv.Itoa(scope.ProposedCeiling-scope.Lines)
+		}
+		remaining := "-"
+		if scope.Budget > 0 {
+			remaining = strconv.Itoa(scope.Budget - scope.Lines)
+		}
+		rows = append(rows, []string{scope.Scope, strconv.Itoa(scope.Lines), base, growth, lineBudgetLabel(scope.Budget), remaining, proposed, headroom, scope.GrowthRationale})
 	}
-	return append(tables, Table{Title: "LINE BUDGET", Columns: []string{"SCOPE", "LINES", "BUDGET", "REMAINING"}, Rows: rows})
+	return append(tables, Table{Title: "LINE BUDGET", Columns: []string{"SCOPE", "LINES", "BASE", "GROWTH", "BUDGET", "REMAINING", "PROPOSED", "HEADROOM", "RATIONALE"}, Rows: rows})
 }
 
 func appendSizeFileTable(tables []Table, title string, files []repository.SizeFile) []Table {

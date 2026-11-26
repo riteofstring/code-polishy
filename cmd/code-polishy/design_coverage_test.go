@@ -17,7 +17,7 @@ func TestDesignContextCLIReportsMissingGuidanceWithoutBlocking(t *testing.T) {
 	root := newHandoffCLIRepository(t)
 	arguments := []string{"--repo-root", root, "--policy-root", behaviorReviewCLIPolicyRoot(t), "design-context", "--files", "value.go"}
 	status, stdout, stderr := captureRunOutput(t, arguments)
-	if status != 0 || !strings.Contains(stdout, "NO DESIGN MAPPING: value.go") || !strings.Contains(stdout, "Missing mappings alone do not block routine work") {
+	if status != 0 || !strings.Contains(stdout, "NO DESIGN MAPPING: value.go") || strings.Contains(stdout, "Review existing rationale") {
 		t.Fatalf("coverage: status=%d stdout=%q stderr=%q", status, stdout, stderr)
 	}
 	status, stdout, stderr = captureRunOutput(t, append(arguments, "--format", "json"))
@@ -38,7 +38,7 @@ func TestDesignContextCLIExplainsModuleMatches(t *testing.T) {
 	}
 }
 
-func TestTaskStartCarriesActionableDesignGapsAndMatchesStandaloneContext(t *testing.T) {
+func TestTaskStartReportsDesignGapsWithoutSchedulingMaintenance(t *testing.T) {
 	root, policyRoot, _ := newTaskStartCLIRepository(t)
 	path := filepath.Join(root, policy.ConfigFilename)
 	data, err := os.ReadFile(path)
@@ -72,11 +72,7 @@ func TestTaskStartCarriesActionableDesignGapsAndMatchesStandaloneContext(t *test
 	}
 	for _, action := range packet.NextActions {
 		if action.Name == "review-design-coverage" {
-			if !strings.Contains(action.Description, "adoption or consequential design changes") || len(action.Argv) != 0 {
-				t.Fatalf("coverage action executes work or mandates boilerplate: %+v", action)
-			}
-			return
+			t.Fatalf("unmapped paths scheduled unrelated maintenance: %+v", action)
 		}
 	}
-	t.Fatal("task-start omitted the design coverage action")
 }

@@ -11,7 +11,9 @@ import (
 type ContextRequest struct {
 	Mode       string
 	Files      []string
+	NewPaths   []string
 	Modules    []string
+	Features   []string
 	Situations []string
 	Workflow   string
 }
@@ -22,6 +24,13 @@ type RepositoryContext struct {
 	Situations       []string                               `json:"situations"`
 	DesignDocuments  []repository.ContextDocument           `json:"designDocuments"`
 	Handoffs         []repository.OperationalHandoffContext `json:"handoffs"`
+	Review           ContextReviewRequirement               `json:"review"`
+}
+
+type ContextReviewRequirement struct {
+	Required         bool     `json:"required"`
+	Reason           string   `json:"reason"`
+	SelectedFeatures []string `json:"selectedFeatures"`
 }
 
 func (engine *Engine) DesignContext(request ContextRequest) (Report, error) {
@@ -33,7 +42,7 @@ func (engine *Engine) DesignContext(request ContextRequest) (Report, error) {
 	if err != nil {
 		return Report{}, err
 	}
-	if findings := engine.Repository.SelectedDesignDocumentFindings(resolution.DocumentPaths()); len(findings) > 0 {
+	if findings := engine.Repository.SelectedDesignDocumentFindings(resolution.DocumentPaths(), selection.Requested.Planned...); len(findings) > 0 {
 		return engine.designContextReport(findings), nil
 	}
 	handoffs, findings, err := engine.Repository.OperationalHandoffs(repository.HandoffSelection{
@@ -43,6 +52,14 @@ func (engine *Engine) DesignContext(request ContextRequest) (Report, error) {
 		return engine.designContextReport(findings), err
 	}
 	context, findings := engine.loadRepositoryContext(resolution, handoffs, situations)
+	features, err := policy.ResolveBehaviorReviewFeatures(engine.Repository.Config, request.Features)
+	if err != nil {
+		return Report{}, err
+	}
+	if context != nil {
+		intent := engine.taskStartIntent(selection, features)
+		context.Review = ContextReviewRequirement{Required: intent.WillBeUsed, Reason: intent.Reason, SelectedFeatures: intent.SelectedFeatures}
+	}
 	report := engine.designContextReport(findings)
 	report.RepositoryContext = context
 	if selection.Requested.Mode != "" {
@@ -56,13 +73,13 @@ func (engine *Engine) designContextReport(findings []policy.Finding) Report {
 }
 
 func (engine *Engine) contextSelection(request ContextRequest) (repository.Selection, repository.DesignResolution, error) {
-	if request.Mode == "none" && len(request.Modules) == 0 && len(request.Files) == 0 {
+	if request.Mode == "none" && len(request.Modules) == 0 && len(request.Files)+len(request.NewPaths) == 0 {
 		resolution, err := engine.Repository.ResolveDesignContext(nil, nil)
 		return repository.Selection{}, resolution, err
 	}
 	mode, operands := request.Mode, request.Files
 	if len(request.Modules) > 0 {
-		if len(request.Files) > 0 {
+		if len(request.Files)+len(request.NewPaths) > 0 {
 			return repository.Selection{}, repository.DesignResolution{}, fmt.Errorf("choose only one of file selection or --module")
 		}
 		mode, operands = "modules", request.Modules
@@ -71,6 +88,11 @@ func (engine *Engine) contextSelection(request ContextRequest) (repository.Selec
 	var err error
 	if mode == "modules" {
 		selection, err = engine.Repository.DesignModuleSelection(operands)
+	} else if len(request.NewPaths) > 0 {
+		if mode != "files" && mode != "" {
+			return repository.Selection{}, repository.DesignResolution{}, fmt.Errorf("--new-path can be combined only with --files")
+		}
+		selection, err = engine.Repository.ContextPathSelection(operands, request.NewPaths)
 	} else {
 		selection, err = engine.Select(mode, operands)
 	}

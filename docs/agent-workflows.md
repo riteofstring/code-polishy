@@ -1,6 +1,7 @@
 # Agent Workflows
 
-Read this entry point from the locked release before changing the repository.
+Read this entry point when applicable workflow context is missing or invalidated.
+Retain it while the locked release and relevant policy remain unchanged.
 Use `./code-polishyw` for every `code-polishy` command below; in PowerShell use
 `.\code-polishyw.ps1`. The wrapper selects the repository's exact release.
 Read the conditional procedures only when their stated trigger applies.
@@ -11,15 +12,21 @@ Read the conditional procedures only when their stated trigger applies.
    need no intent capture, task session, or tests. Answer capability, footprint,
    and quality-trend questions with `capabilities --query "QUERY"`,
    `size [--base MERGE_TARGET]`, and `trends [--since DATE] [--branch NAME]`.
-2. Start from a clean task base with `code-polishy task-start --files PATH...`
-   or repeated `--module NAME` operands. Do not mix selector kinds. Retain its
-   `TASK BASE` for task-scoped verification. If review is selected, rerun with
-   `--intent-file -` and supply the exact request before editing. Optional tasks
-   create no intent journal. Never recapture a request already captured.
-3. Read the returned design documents, operational handoffs, and any additional
-   selected workflow documents. Task-start satisfies design-context retrieval
-   for that scope. Reuse it until scope, mappings, or relevant documents change;
-   then refresh only the affected context with `design-context`.
+2. Retain the applicable workflow, review requirements and design context while
+   release, policy, scope, mappings and relevant documents remain unchanged.
+   Retrieve missing scoped rationale and review requirements with
+   `./code-polishyw design-context --files PATH...` or repeated `--module NAME`.
+   Use repeatable `--new-path PATH` for intentional creation, alone or with
+   `--files`; do not create placeholders or select the repository to obtain context.
+3. Use `task-start` when policy or an explicitly requested feature requires a
+   pre-edit request boundary, or when its optional task packet is useful. For
+   required review, supply the exact request with `--intent-file -` at a clean
+   task base before edits. Never recapture an already captured request. Optional
+   work needs no journal, task identifier, clean checkout or acknowledgement.
+   Record `git rev-parse HEAD` once when a task base is needed for changed-scope
+   verification. HEAD does not certify a clean candidate; existing dirty changes
+   remain visible. Read selected rationale and handoffs, refreshing only context
+   that changed or was lost. Missing mappings alone require no maintenance task.
 4. Implement the simplest end-to-end fix for the demonstrated need. Add machinery
    only when it reduces total complexity and failure risk. Honor
    `quality.allowComments`. Update mapped rationale when ownership, invariants,
@@ -50,6 +57,13 @@ instructions are optional investigation aids; ordinary verification selection
 still governs which checks run.
 
 ## Choose verification from the event
+
+If a selected gate immediately follows and subsumes the same checks and tests,
+skip the completed-task `check` / `test --changed` sequence. Earlier exact tests
+remain useful feedback during editing. `test-levels` is optional inspection,
+never a required preliminary command. Capture each result once and inspect its
+[saved report](reports.md#capture-once-inspect-the-saved-report) for other views;
+changing display flags on an evaluation command executes verification again.
 
 | Event                                                                                                | Action                                                                          |
 | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
@@ -83,7 +97,10 @@ external approval. See [verification and evidence](policies/verification.md).
 
 ## Read conditional procedures when selected
 
-Use `code-polishy docs read TOPIC` for the exact release-owned document.
+Use `./code-polishyw docs read TOPIC...` to retrieve several release-owned
+catalogue topics or exact document paths in one invocation. Use
+`./code-polishyw docs read verification --section 'Reusable test evidence'`
+for one section and its subsections. Retained context needs no reread as proof.
 `docs find QUERY...` locates other policy references. Add `--situation NAME` to
 `task-start` when the named situation actually applies; it selects guidance and
 matching repository handoffs without authorizing their operations.

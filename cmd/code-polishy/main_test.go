@@ -27,7 +27,7 @@ func TestPrintReportLabelsNonBlockingAdvisory(t *testing.T) {
 	stderr := &bytes.Buffer{}
 	report := engine.Report{Findings: []policy.Finding{{Check: "portability.machinePath", Path: "app.js", Subject: "3", Message: "machine path", Severity: policy.FindingWarning}}}
 	printReportTo(stdout, stderr, report)
-	if !strings.Contains(stdout.String(), "WARN portability.machinePath") || !strings.Contains(stdout.String(), "PASS with 1 warning") || strings.Contains(stdout.String(), "without findings") {
+	if !strings.Contains(stdout.String(), "NONBLOCKING: portability.machinePath: machine path") || !strings.Contains(stdout.String(), "PASS with 1 warning") || strings.Contains(stdout.String(), "without findings") {
 		t.Fatalf("stdout = %q", stdout.String())
 	}
 	if stderr.Len() != 0 {
@@ -51,7 +51,7 @@ func TestHumanReportBoundsAllFindingOutcomesTogether(t *testing.T) {
 	}
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	printReportTo(stdout, stderr, report)
+	printReportWithMode(stdout, stderr, report, true)
 	if strings.Count(stderr.String(), "FAIL quality.lint") != 15 || strings.Count(stdout.String(), "WAIVED quality.lint") != 5 ||
 		!strings.Contains(stdout.String(), "OMITTED 10 finding(s)") {
 		t.Fatalf("stdout=%q stderr=%q", stdout.String(), stderr.String())
@@ -74,30 +74,49 @@ func TestReportOutputOptionsAreSeparateFromEvaluationSelection(t *testing.T) {
 	}
 }
 
-func TestPrintReportShowsTestQualityReminderBeforeOrdinaryDetails(t *testing.T) {
+func TestPrintReportLeadsWithSavedVerdictWithoutRoutineTestBanner(t *testing.T) {
 	t.Parallel()
-	stdout := &bytes.Buffer{}
-	stderr := &bytes.Buffer{}
+	var output bytes.Buffer
 	report := engine.Report{
+		ReportPath:          ".code-polishy-reports/check/result/report.json",
 		MergePolicy:         &engine.MergePolicy{Level: "recommended", Base: "origin/main"},
-		TestQualityReminder: engine.NewTestQualityReminder([]string{"cmd/code-polishy/main_test.go", "internal/engine/engine_test.go"}),
+		TestQualityReminder: engine.NewTestQualityReminder([]string{"cmd/code-polishy/main_test.go"}),
 	}
-	printReportTo(stdout, stderr, report)
-	output := stdout.String()
-	lower := strings.ToLower(output)
-	for _, fact := range []string{"test quality reminder", "changed test files: 2", "tautological", "change-detector", "merge gate"} {
-		if !strings.Contains(lower, fact) {
-			t.Fatalf("test reminder omitted %q: %q", fact, output)
-		}
+	printReportTo(&output, &output, report)
+	want := "PASS errors=0 warnings=0 information=0\nCOMPLETE REPORT: " + report.ReportPath + "\n"
+	if !strings.HasPrefix(output.String(), want) || strings.Contains(strings.ToLower(output.String()), "test quality reminder") || engine.HasFindings(report) {
+		t.Fatalf("report output = %q", output.String())
 	}
-	if strings.Index(lower, "test quality reminder") > strings.Index(lower, "merge gate") {
-		t.Fatalf("test reminder did not precede ordinary report details: %q", output)
+	data, err := json.Marshal(report)
+	if err != nil || !bytes.Contains(data, []byte("cmd/code-polishy/main_test.go")) {
+		t.Fatalf("saved test-quality scope missing: %s, %v", data, err)
 	}
-	if !strings.Contains(output, "PASS errors=0 warnings=0 information=0") || engine.HasFindings(report) {
-		t.Fatalf("reminder changed successful report behavior: stdout=%q report=%+v", output, report)
+}
+
+func TestDefaultReportShowsFiveBlockersAndRetainsCompleteEvidence(t *testing.T) {
+	t.Parallel()
+	var report engine.Report
+	if err := json.Unmarshal([]byte(`{"reportPath":"saved/report.json","requestedSelection":{"mode":"files","operands":["src"],"expanded":["src/app.go"]}}`), &report); err != nil {
+		t.Fatal(err)
 	}
-	if stderr.Len() != 0 {
-		t.Fatalf("stderr = %q", stderr.String())
+	for index := range 7 {
+		report.Findings = append(report.Findings, policy.Finding{Check: "quality.lint", Path: "src/app.go", Message: fmt.Sprintf("blocker-%d", index)})
+	}
+	report.Findings = append(report.Findings, policy.Finding{Check: "supplyChain.coverage", Severity: policy.FindingWarning, Message: "coverage incomplete"})
+	before, err := json.Marshal(report)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var output bytes.Buffer
+	printReportTo(&output, &output, report)
+	text := output.String()
+	want := "FAILED errors=7 warnings=1 information=0\nCOMPLETE REPORT: saved/report.json\nSELECTION: files; 1 expanded path(s); src\nFAIL quality.lint"
+	if !strings.HasPrefix(text, want) || strings.Count(text, "FAIL quality.lint") != 5 || !strings.Contains(text, "OMITTED 2 finding(s)") || !strings.Contains(text, "NONBLOCKING: supplyChain.coverage: coverage incomplete") {
+		t.Fatalf("bounded report = %s", text)
+	}
+	after, err := json.Marshal(report)
+	if err != nil || !bytes.Equal(before, after) {
+		t.Fatalf("display mutated saved evidence: %s, %v", after, err)
 	}
 }
 
@@ -136,7 +155,7 @@ func TestPrintReportLabelsReleaseAgeAssessmentSeparately(t *testing.T) {
 		Finding:    policy.Finding{Check: "supplyChain.releaseAge", Path: "pnpm-lock.yaml", Subject: "electron@43.3.0"},
 		Assessment: policy.ReleaseAgeAssessment{ID: "electron-supported", Category: "supported-release", Expires: policy.Date{Time: time.Date(2026, 9, 30, 0, 0, 0, 0, time.UTC)}},
 	}}}
-	printReportTo(stdout, stderr, report)
+	printReportWithMode(stdout, stderr, report, true)
 	if !strings.Contains(stdout.String(), "AGE-EXCEPTION") || !strings.Contains(stdout.String(), "expires 2026-09-30 UTC") || stderr.Len() != 0 {
 		t.Fatalf("stdout=%q stderr=%q", stdout.String(), stderr.String())
 	}
@@ -156,7 +175,7 @@ func TestPrintReportKeepsAssessedVulnerabilityVisible(t *testing.T) {
 			Owner: "Codex", Expires: policy.Date{Time: time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)},
 		},
 	}}}
-	printReportTo(stdout, stderr, report)
+	printReportWithMode(stdout, stderr, report, true)
 	if !strings.Contains(stdout.String(), "VULN-ACCEPTANCE") || !strings.Contains(stdout.String(), "high-not-affected") ||
 		!strings.Contains(stdout.String(), "observed high") || !strings.Contains(stdout.String(), "ceiling high") || !strings.Contains(stdout.String(), "not-affected/unreachable") ||
 		!strings.Contains(stdout.String(), "owned by Codex") || strings.Contains(stdout.String(), "approved by") ||
@@ -516,7 +535,7 @@ func TestPrintReportSummarizesAcceptedCheckpointForHumans(t *testing.T) {
 	}
 }
 
-func TestPrintReportShowsGateArtifactAndBothTestReminderScopes(t *testing.T) {
+func TestPrintReportShowsGateArtifactWithoutRoutineTestBanner(t *testing.T) {
 	t.Parallel()
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
@@ -531,7 +550,6 @@ func TestPrintReportShowsGateArtifactAndBothTestReminderScopes(t *testing.T) {
 	}
 	printReportTo(stdout, stderr, report)
 	for _, want := range []string{
-		"MERGE-TARGET CHANGED TEST FILES: 1", "LATEST TASK CHANGED TEST FILES: 1 since checkpoint-sha",
 		"GATE RUN: FAILED", "GATE REPORT: .code-polishy-reports/merge-gate/run/report.json", "REUSED TEST PHASES: unit",
 	} {
 		if !strings.Contains(stdout.String(), want) {

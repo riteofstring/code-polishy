@@ -23,7 +23,7 @@ func handleDocsMeta(invocation invocation) int {
 	case "find":
 		return findDocumentation(library, arguments)
 	case "read":
-		return readDocumentation(library, arguments[0])
+		return readDocumentation(library, arguments)
 	default:
 		return commandUsageError("docs", "unknown docs action "+action)
 	}
@@ -71,8 +71,36 @@ func validateDocsFindArguments(arguments []string) error {
 }
 
 func validateDocsReadArguments(arguments []string) error {
-	if len(arguments) != 1 || strings.TrimSpace(arguments[0]) == "" || strings.HasPrefix(arguments[0], "-") {
-		return fmt.Errorf("docs read requires exactly one topic identifier")
+	_, _, err := docsReadOptions(arguments)
+	return err
+}
+
+func docsReadOptions(arguments []string) ([]string, string, error) {
+	topics, section := []string{}, ""
+	for len(arguments) > 0 {
+		value := arguments[0]
+		if value == "--section" || strings.HasPrefix(value, "--section=") {
+			heading, consumed, _, err := namedOptionValue(arguments, "--section")
+			if err != nil || section != "" || strings.TrimSpace(heading) == "" {
+				return nil, "", fmt.Errorf("docs read accepts one --section HEADING for one topic")
+			}
+			section, arguments = heading, arguments[consumed:]
+			continue
+		}
+		if strings.TrimSpace(value) == "" || strings.HasPrefix(value, "-") {
+			return nil, "", fmt.Errorf("docs read requires topic identifiers or exact catalogued paths; unknown option %q", value)
+		}
+		topics, arguments = append(topics, value), arguments[1:]
+	}
+	if err := validateDocsReadScope(topics, section); err != nil {
+		return nil, "", err
+	}
+	return topics, section, nil
+}
+
+func validateDocsReadScope(topics []string, section string) error {
+	if len(topics) == 0 || section != "" && len(topics) != 1 {
+		return fmt.Errorf("use ./code-polishyw docs read TOPIC... or ./code-polishyw docs read TOPIC --section HEADING")
 	}
 	return nil
 }
@@ -104,20 +132,47 @@ func findDocumentation(library *versioneddocs.Library, terms []string) int {
 	return 0
 }
 
-func readDocumentation(library *versioneddocs.Library, topic string) int {
-	document, err := library.Read(topic)
+func readDocumentation(library *versioneddocs.Library, arguments []string) int {
+	topics, section, err := docsReadOptions(arguments)
 	if err != nil {
-		return documentationError(err)
+		return commandUsageError("docs", err.Error())
 	}
-	if _, err := os.Stdout.Write(document.Content); err != nil {
-		return operationalError(fmt.Errorf("write documentation topic: %w", err))
-	}
-	if len(document.Content) == 0 || document.Content[len(document.Content)-1] != '\n' {
-		if _, err := fmt.Fprintln(os.Stdout); err != nil {
-			return operationalError(fmt.Errorf("finish documentation topic: %w", err))
+	documents := []versioneddocs.Document{}
+	seen := map[string]bool{}
+	for _, topic := range topics {
+		document, err := library.Read(topic)
+		if err != nil {
+			return documentationError(err)
+		}
+		if section != "" {
+			document, err = document.Section(section)
+			if err != nil {
+				return documentationError(err)
+			}
+		}
+		if !seen[document.Topic.ID] {
+			documents = append(documents, document)
+			seen[document.Topic.ID] = true
 		}
 	}
+	if _, err := fmt.Fprint(os.Stdout, renderDocumentation(documents, section)); err != nil {
+		return operationalError(fmt.Errorf("write documentation: %w", err))
+	}
 	return 0
+}
+
+func renderDocumentation(documents []versioneddocs.Document, section string) string {
+	var output strings.Builder
+	for _, document := range documents {
+		if len(documents) > 1 || section != "" {
+			fmt.Fprintf(&output, "DOCUMENT: %s (%s)\n", document.Topic.ID, document.Topic.Path)
+		}
+		output.Write(document.Content)
+		if len(document.Content) == 0 || document.Content[len(document.Content)-1] != '\n' {
+			output.WriteByte('\n')
+		}
+	}
+	return output.String()
 }
 
 func documentationError(err error) int {

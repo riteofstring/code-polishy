@@ -8,6 +8,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/riteofstring/code-polishy/internal/gaterun"
 	"github.com/riteofstring/code-polishy/internal/policy"
 	"github.com/riteofstring/code-polishy/internal/runner"
 	"github.com/riteofstring/code-polishy/internal/testartifact"
@@ -16,13 +17,15 @@ import (
 )
 
 type testReceiptController struct {
-	root       string
-	suites     []policy.TestSuite
-	identities map[string]testreceipt.Identity
-	reasons    map[string]string
-	allowReuse bool
-	output     io.Writer
-	verbose    bool
+	root         string
+	suites       []policy.TestSuite
+	identities   map[string]testreceipt.Identity
+	reasons      map[string]string
+	allowReuse   bool
+	output       io.Writer
+	verbose      bool
+	observations map[string]suiteDurationObservation
+	plan         []testReceiptDecision
 }
 
 type testReceiptRunner struct {
@@ -38,6 +41,8 @@ func newTestReceiptController(engine *Engine, suites []policy.TestSuite, allowRe
 	if controller.output == nil {
 		controller.output = io.Discard
 	}
+	history, _ := gaterun.StoredTestOutcomes(controller.root)
+	controller.observations = engine.comparableSuiteDurations(suites, history.Outcomes)
 	for _, suite := range suites {
 		identity, reason, err := engine.suiteReceiptIdentity(suite)
 		if err != nil {
@@ -58,6 +63,9 @@ type testReceiptDecision struct {
 	Prior    string
 	Reason   string
 	Reusable *testreceipt.Reusable
+	Cost     string
+	Scope    string
+	Observed string
 }
 
 func (controller *testReceiptController) Decisions() []testReceiptDecision {
@@ -66,21 +74,28 @@ func (controller *testReceiptController) Decisions() []testReceiptDecision {
 	}
 	decisions := make([]testReceiptDecision, 0, len(controller.suites))
 	for _, suite := range controller.suites {
-		decision := testReceiptDecision{Suite: suite.Name, Action: "execute", Prior: "-"}
+		decision := testReceiptDecision{Suite: suite.Name, Action: "execute", Prior: "-", Cost: suite.Cost, Scope: suite.Scope}
+		observation := controller.observations[suite.Name]
 		identity, eligible := controller.identities[suite.Name]
-		if !controller.allowReuse {
-			decision.Reason = "reuse was not requested"
-		} else if !eligible {
+		if !eligible {
 			decision.Reason = controller.reasons[suite.Name]
 		} else if reusable, err := testreceipt.Load(controller.root, identity); err == nil {
-			decision.Action = "reuse"
 			decision.Prior = conciseDuration(time.Duration(reusable.Receipt.DurationMillis) * time.Millisecond)
-			decision.Reason = "complete identity matches"
-			decision.Reusable = &reusable
+			if reusable.Receipt.CreatedAt.After(observation.At) {
+				observation = suiteDurationObservation{At: reusable.Receipt.CreatedAt, Duration: time.Duration(reusable.Receipt.DurationMillis) * time.Millisecond, Source: "exact receipt"}
+			}
+			if controller.allowReuse {
+				decision.Action, decision.Reason, decision.Reusable = "reuse", "complete identity matches", &reusable
+			} else {
+				decision.Reason = "deliberate fresh direct test; matching receipt remains available for gates"
+			}
 		} else {
 			decision.Reason = testReceiptDecisionReason(err)
-			controller.reasons[suite.Name] = decision.Reason
+			if !controller.allowReuse {
+				decision.Reason = "deliberate fresh direct test; " + decision.Reason
+			}
 		}
+		decision.Observed = observation.label(suite.Cost)
 		decisions = append(decisions, decision)
 	}
 	return decisions
@@ -100,11 +115,12 @@ func testReceiptDecisionReason(err error) string {
 }
 
 func (controller *testReceiptController) RenderPlan() {
-	if controller == nil || !controller.verbose {
+	if controller == nil {
 		return
 	}
-	for _, decision := range controller.Decisions() {
-		fmt.Fprintf(controller.output, "TEST RECEIPT PLAN suite=%q action=%s prior=%s reason=%q\n", decision.Suite, decision.Action, decision.Prior, decision.Reason)
+	controller.plan = controller.Decisions()
+	for _, decision := range controller.plan {
+		fmt.Fprintf(controller.output, "TEST PLAN %s cost=%s scope=%s observed=%q action=%s reason=%q\n", decision.Suite, decision.Cost, decision.Scope, decision.Observed, decision.Action, decision.Reason)
 	}
 }
 
@@ -125,9 +141,9 @@ func (controller *testReceiptController) ReuseSuite(suite policy.TestSuite, atte
 		return testpolicy.SuiteExecution{}, false, err
 	}
 	duration := time.Duration(reusable.Receipt.DurationMillis) * time.Millisecond
-	fmt.Fprintf(controller.output, "REUSE %s (%s)\n", suite.Name, duration)
+	fmt.Fprintf(controller.output, "REUSE %s (historical execution %s; current execution 0s)\n", suite.Name, duration)
 	return testpolicy.SuiteExecution{
-		Result: runner.Result{ExitStatus: 0, ExecutionDuration: duration}, ResultKnown: true, Attempt: attempt,
+		Result: runner.Result{ExitStatus: 0}, ResultKnown: true, Attempt: attempt, PriorDuration: duration,
 		Artifacts: append([]testartifact.Record{}, reusable.Receipt.Artifacts...), Reused: true,
 		ReceiptPath: reusable.Path, ReceiptSHA256: reusable.Receipt.SHA256,
 	}, true, nil
@@ -153,10 +169,13 @@ func (controller *testReceiptController) RecordSuite(execution testpolicy.SuiteE
 }
 
 func (controller *testReceiptController) Notes() []string {
-	if controller == nil || !controller.verbose {
+	if controller == nil {
 		return nil
 	}
 	notes := []string{}
+	for _, decision := range controller.plan {
+		notes = append(notes, fmt.Sprintf("test plan %s: cost=%s scope=%s observed=%s action=%s reason=%s", decision.Suite, decision.Cost, decision.Scope, decision.Observed, decision.Action, decision.Reason))
+	}
 	for name, reason := range controller.reasons {
 		notes = append(notes, fmt.Sprintf("test receipt for %s was not reused: %s", name, reason))
 	}

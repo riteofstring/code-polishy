@@ -83,40 +83,39 @@ moving a repository that needs later upgrade inspection.
 
 ## Start a task
 
-When the request is ready to implement, select one or more file/directory
-operands or repeat `--module` for every module in scope. Do not mix selector
-kinds. Ordinary optional-review work needs no intent input:
+Retain known rationale and review requirements while release, policy, scope,
+mappings and relevant documents remain unchanged. Ordinary work needs no task
+initialization when this context is already available. For missing scoped context:
 
 ```sh
-code-polishy task-start --files frontend
-code-polishy task-start --module application --module tooling --situation deployment
+./code-polishyw design-context --module application
+./code-polishyw design-context --new-path retrospective/README.md
+./code-polishyw design-context --files frontend --new-path frontend/new.ts
 ```
 
-`task-start` projects that scope through configured merge/checkpoint review
-policy. If policy or an explicit `--feature` selects review, supply the exact
-request through bounded standard input or an existing regular file:
+Context discovery returns rationale and the scope's pre-edit review requirement
+using the same policy selection as `task-start`. Select an explicit feature only
+when requested by its canonical name or exact alias. Required review still needs
+the exact request captured before editing:
 
 ```sh
-code-polishy task-start --intent-file - --module application \
+./code-polishyw task-start --intent-file - --module application \
   --feature checkout --situation deployment
 ```
 
-Selected review requires intent and atomically publishes the same capture used
-by `behavior-review capture-intent`. Optional review rejects an unnecessary
-intent input instead of retaining plaintext that no review will consume. Only
-explicit `--feature` operands activate configured features; request wording
-never selects them. Task-start requires a clean task base. Capture later
-artifact-affecting corrections with the component command.
+`task-start` is also available when its optional packet is useful. It accepts
+existing files plus repeatable `--new-path` operands, or declared modules. Planned
+paths are contained and resolved without creating them; `--files` remains strict.
+Optional packets accept dirty checkouts and record HEAD without asserting that
+uncommitted work was verified. Optional review rejects unused intent and creates
+no journal. Required capture retains a clean initial boundary; later
+artifact-affecting corrections use `behavior-review capture-intent`.
 
-The default output is a bounded human summary. It reports intent custody and
-review selection, selection and mapping counts, selected document and handoff
-identities, any matched reliability reminder, the configured guard count,
-selected workflow references, the merge-checkpoint gate owner, and scoped follow-ups.
-Large path inventories, document contents, and the complete guard catalog do not
-flood an interactive task start. Optional review, absent intent, and the guard
-count share one line. The ordinary implementation, verification, commit, and
-delivery sequence lives in the short [workflow entry point](agent-workflows.md)
-and is not repeated as generic next actions.
+The human packet reports the task base, selection, review requirement, selected
+rationale and handoffs, any selected reliability reminder and useful follow-ups.
+Unmapped paths are facts, not an instruction to start a maintenance task. Inactive
+guard and gate metadata stays in JSON. The ordinary implementation, verification,
+commit and delivery sequence lives in the [workflow entry point](agent-workflows.md).
 
 Explicit situations select additional procedures: `dependencies` selects the
 supply-chain guide, `adoption` and `upgrade` select the adoption runbook, and

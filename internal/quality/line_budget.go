@@ -21,6 +21,7 @@ func LineBudgetFindings(repo repository.Repository) []policy.Finding {
 			findings = append(findings, policy.Finding{
 				Check: "quality.lineBudget", Path: "repository", Subject: scope.Scope,
 				Message: fmt.Sprintf("%s source has %d non-blank lines; budget is %d (%d over)", scope.Scope, scope.Lines, scope.Budget, scope.Lines-scope.Budget),
+				Fields:  map[string]string{"currentLines": fmt.Sprint(scope.Lines), "ceiling": fmt.Sprint(scope.Budget), "headroom": fmt.Sprint(scope.Budget - scope.Lines)},
 			})
 		}
 	}

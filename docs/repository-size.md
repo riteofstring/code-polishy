@@ -4,9 +4,9 @@ Use `size` to see how much space a repository uses, which kinds of content
 account for it, and where the largest contributors are:
 
 ```sh
-code-polishy size
-code-polishy size --base origin/main
-code-polishy size --base origin/main --format json
+./code-polishyw size
+./code-polishyw size --base origin/main
+./code-polishyw size --base origin/main --format json
 ```
 
 The command is descriptive and exits successfully when analysis completes. It
@@ -88,3 +88,30 @@ committed build output or oversized fixtures. Useful questions include:
 A coding agent can answer those questions from the human or JSON report. Code
 Polishy does not invoke an LLM or send repository metadata to an external
 service.
+
+## Propose deliberate headroom
+
+Choose a specific ceiling for a coherent feature or milestone, with enough
+headroom for the intended work. Avoid resetting the budget to the exact count
+after every small addition. Work within an approved ceiling needs no further
+budget edit or approval. Exceeding it still requires reducing code or the caller's
+explicit permission to raise it; agents receive no automatic slack.
+
+Preview the decision without changing configuration:
+
+```sh
+./code-polishyw size --base TASK_BASE \
+  --propose-budget production=45000 \
+  --growth-rationale 'Add the importer and its recovery paths for the next milestone.'
+```
+
+Repeat `--propose-budget` for `test` or `total` if needed. The existing line-budget
+report puts current size, base size, actual growth, current ceiling, proposed
+ceiling, resulting headroom and rationale together. It records a proposal, not
+approval. With no base, growth remains unknown. Historical non-blank lines use
+current scope and ownership policy. Capture the report once for the approval;
+change `.code-polishy.json` only after explicit authorization.
+
+Budget-only configuration edits still participate in complete test-receipt
+identity. A suite can consume that file, and selection or coverage can change
+with policy. No configuration exclusion or narrower invalidation is inferred.

@@ -2,8 +2,11 @@
 
 Intent is review evidence, not general task memory. Capturing every request when
 behavior review is optional creates plaintext custody without improving an
-ordinary gate. `task-start` therefore projects the selected files or modules
-through current behavior-review policy before publishing intent. Configured
+ordinary gate. `design-context` and `task-start` therefore share review selection for existing
+and explicitly planned paths or modules. Context exposes the requirement without
+publishing intent. Only selected review needs the clean initial request boundary;
+optional task packets leave dirty files untouched and record HEAD as a base,
+without certifying a clean candidate. Configured
 merge or checkpoint review and explicitly selected features require capture;
 an optional selection does not. The task packet states whether intent was
 captured and whether the selected review will consume it.

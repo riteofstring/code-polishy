@@ -7,14 +7,18 @@ From a managed repository, the installed CLI reads the documentation carried by
 that repository's locked release:
 
 ```sh
-code-polishy docs list
-code-polishy docs find behavior review
-code-polishy docs read agent-workflows
-code-polishy docs read adding-a-language
+./code-polishyw docs list
+./code-polishyw docs find behavior review
+./code-polishyw docs read agent-workflows verification
+./code-polishyw docs read docs/policies/verification.md --section "Reusable test evidence"
 ```
 
 The checked-in `catalog.json` owns stable topic identifiers, titles, summaries,
-and aliases. Search is local, bounded, and deterministic.
+and aliases. Reads accept exact catalogued paths as well as topic names, preserve
+requested order and print each topic once. A section includes its subsections;
+use the full heading ancestry (`Parent > Child`) to disambiguate repeated names.
+Unknown topics or headings fail before any successful output. Search is local,
+bounded and deterministic. One batched read uses one normal launcher verification.
 
 ## Start here
 
@@ -27,7 +31,7 @@ and aliases. Search is local, bounded, and deterministic.
 
 ## Operating Code Polishy
 
-- [Agent Workflows](agent-workflows.md) is the short mandatory entry point for
+- [Agent Workflows](agent-workflows.md) is the reusable entry point for
   ordinary work, event-selected verification, and conditional procedures.
 - [Agent Reviews](agent-reviews.md) defines boundaries for selected reviews.
 - [Bug Review](bug-review.md) guides requested correctness and security

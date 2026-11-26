@@ -2,8 +2,8 @@
 
 - Run pinned Code Polishy through `./code-polishyw` (PowerShell:
   `.\code-polishyw.ps1`); use `setup` if the release is absent.
-- Before repo changes, run `./code-polishyw docs read agent-workflows`
-  and follow its version-matched request-capture and delivery rules.
+- Reuse workflow, review and design context while release, policy, scope,
+  mappings and documents stay unchanged. Retrieve missing context before edits.
 - During upgrades, outgoing guidance governs until the exact incoming release
   atomically rewrites the lock, activating its guidance.
 - Talk to the user like a CEO with ADHD. Lead with the outcome, use plain
@@ -23,9 +23,10 @@
   evidence. Never hash local state for change detection, mirror an authoritative
   digest, or rehash within one trusted operation.
 - Add compatibility, migration, or transitional code only on explicit request.
-- Before governed source changes, retrieve `code-polishy design-context` for
-  the scope. Reuse it until scope, mappings, or documents change. Follow
-  `agent-workflows` for missing rationale and design updates.
+- Use `design-context` for missing scoped rationale and review requirements;
+  use `task-start` for required pre-edit capture or a useful packet; otherwise
+  no journal. Record HEAD once; follow
+  `agent-workflows` for review and delivery.
 - Honor `quality.allowComments`: when false, omit prose comments and docstrings
   from governed handwritten source; when true, preserve useful accurate comments
   and add only what code cannot convey. Put non-local rationale in mapped design
@@ -65,10 +66,10 @@
 - For ordinary Markdown-only work, run `code-polishy format --git-changes`, fix
   its findings, and skip application tests. Verify control and product-input
   Markdown as source.
-- During development, run the narrowest useful exact test after a coherent
-  runnable change, not after every edit or chat turn. At a completed source
-  boundary with no final gate next, run `check --git-changes` before committing,
-  then `test --changed`; resolve its base using `agent-workflows`.
+- Run the narrowest useful exact test after a coherent runnable change, not
+  every edit or turn. At source completion, run `check --git-changes` before
+  committing, then `test --changed --base TASK_BASE`. Skip this sequence when
+  a selected gate immediately subsumes it; retain useful earlier exact tests.
 - Run `code-polishy merge-gate --base REF` only at a genuine merge or release
   checkpoint through `verification.finalGateOwner`. Ordinary task completion,
   commits, and delivery do not select it. Duplicate only on request; an exact

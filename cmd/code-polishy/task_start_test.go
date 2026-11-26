@@ -66,7 +66,7 @@ func assertTaskStartComponentFacts(t *testing.T, policyEngine *engine.Engine, pa
 	if !reflect.DeepEqual(packet.Verification, policyEngine.Repository.Config.Verification) {
 		t.Fatalf("packet omitted or changed configured verification: %+v", packet.Verification)
 	}
-	context, err := policyEngine.DesignContext(engine.ContextRequest{Mode: "files", Files: []string{"value.go"}, Situations: []string{"release"}, Workflow: "task-start"})
+	context, err := policyEngine.DesignContext(engine.ContextRequest{Mode: "files", Files: []string{"value.go"}, Features: []string{"checkout"}, Situations: []string{"release"}, Workflow: "task-start"})
 	if err != nil || !reflect.DeepEqual(packet.RepositoryContext, context.RepositoryContext) || len(packet.RepositoryContext.Handoffs) != 1 || len(packet.RepositoryContext.DesignDocuments) != 1 {
 		t.Fatalf("context differs from its component: packet=%+v context=%+v error=%v", packet.RepositoryContext, context.RepositoryContext, err)
 	}
@@ -244,9 +244,8 @@ func TestTaskStartDefaultsToBoundedHumanOutput(t *testing.T) {
 	status, stdout, stderr := captureRunOutput(t, arguments)
 	for _, expected := range []string{
 		"TASK START: task-start/v2",
-		"REVIEW: optional; no intent captured; configured guards=",
+		"REVIEW: optional; no intent captured;",
 		"DESIGN DOCUMENT: docs/design/current.md",
-		"MERGE CHECKPOINT GATE OWNER (inactive for ordinary task delivery): local",
 		"NEXT read-context:",
 	} {
 		if !strings.Contains(stdout, expected) {
@@ -256,7 +255,7 @@ func TestTaskStartDefaultsToBoundedHumanOutput(t *testing.T) {
 	if status != 0 || stderr != "" || len(stdout) > 2<<10 || strings.Contains(stdout, `"configuredGuards"`) || strings.Contains(stdout, "absent/**") || strings.Contains(stdout, "NEXT final-gate:") {
 		t.Fatalf("human task start was not bounded: status=%d bytes=%d stdout=%q stderr=%q", status, len(stdout), stdout, stderr)
 	}
-	for _, repeated := range []string{"INTENT REASON:", "SELECTED FEATURES:", "CONFIGURED GUARDS:", "NEXT implement:", "NEXT verify:", "NEXT commit:", "NEXT deliver:"} {
+	for _, repeated := range []string{"INTENT REASON:", "SELECTED FEATURES:", "CONFIGURED GUARDS:", "NEXT implement:", "NEXT verify:", "NEXT commit:", "NEXT deliver:", "MERGE CHECKPOINT GATE OWNER", "NEXT review-design-coverage"} {
 		if strings.Contains(stdout, repeated) {
 			t.Fatalf("optional task repeated unused or default guidance %q: %s", repeated, stdout)
 		}

@@ -88,6 +88,10 @@ func (err *GitError) Is(target error) bool {
 	return ok && err.Kind == typed.Kind
 }
 
+func (repo Repository) Head() (string, error) {
+	return repo.resolveCommit(context.Background(), "HEAD")
+}
+
 func (repo Repository) CleanHead() (string, error) {
 	head, err := repo.resolveCommit(context.Background(), "HEAD")
 	if err != nil {

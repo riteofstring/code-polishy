@@ -29,6 +29,42 @@ with open("report.json", encoding="utf-8") as stream:
 passed = report["summary"]["status"] == "passed"
 ```
 
+## Capture once, inspect the saved report
+
+Keep the command's original exit status before displaying or filtering output.
+This POSIX example works even when the invoking shell uses `set -e`:
+
+```sh
+result_status=0
+./code-polishyw check --git-changes > /tmp/polishy-check.log 2>&1 || result_status=$?
+printf '%s\n' "$result_status" > /tmp/polishy-check.status
+cat /tmp/polishy-check.log
+exit "$result_status"
+```
+
+The log begins its final result with the verdict, complete managed report path,
+selection and principal blockers. Read that named file directly; substitute the
+path printed by this invocation:
+
+```sh
+jq '.command, .summary, .requestedSelection, .changedTestScope' "$report_path"
+jq '.findings[] | select(.severity == "warning")' "$report_path"
+jq '.findings[] | select(.severity == "error")' "$report_path"
+jq '.testCommands, .notes' "$report_path"
+```
+
+In PowerShell, capture `$LASTEXITCODE` immediately after the native command,
+then use `Get-Content -Raw $reportPath | ConvertFrom-Json` for inspection. Preserve
+the captured status if later commands filter or display output. A pipeline's
+last command can exit successfully even when verification failed.
+
+These reads inspect a historical result. Its recorded command, selection, base,
+execution metadata and gate identity describe that invocation, not the current
+checkout. `summary.status` recovers the published verdict; the captured exit
+status also covers failures that prevented publication. A missing report is
+never a pass. Evaluation commands with a different `--format`, filter or display
+limit run verification again; they are not report viewers.
+
 ## Complete results and display
 
 `summary` includes total errors, warnings, information, suppressed findings,
@@ -43,23 +79,23 @@ These warnings alone require no cleanup, investigation, waiver, or acknowledgeme
 to complete a task. Investigate when relevant to the requested work or supported
 by evidence of a defect; repetition alone does not require another review.
 
-The default terminal view summarizes these candidates with a warning count and
-the complete report location. When they are the only findings, it reports, for
-example, `PASS — 37 advisory warnings; no action required.` Individual advisory
-diagnostics, explanations, follow-up commands and producer details are available
-in the complete report, or through explicit inspection with `--verbose`,
-`--display-limit all`, display filters or `--group-by`. Inspection also shows
-counts by rule, module and selection relation. A numeric `--display-limit`
-continues to bound listed findings; summarized advisories consume no slots.
-The default lists blockers first and keeps other warnings, such as unverified
-security coverage or dependency-maintenance notices, visible.
+The default terminal view starts with the complete verdict, managed report path,
+selection and at most five blocking findings, followed by an omitted count.
+Warnings and information are summarized, with a compact security status and
+accepted-assessment counts. Optional candidates remain explicitly optional; when
+they are the only findings the result can be `PASS — 37 advisory warnings; no
+action required.` Repetition does not select investigation or acknowledgement.
 
-These optional candidates carry `fields.analysisOutcome: advisory-candidate`.
-The terminal aggregates only warnings with that classification. This uses
-existing finding metadata; there is no repository setting or acknowledgement
-record. JSON and SARIF retain the diagnostics and guidance regardless of
-terminal aggregation. Display filters still select their requested machine view;
-the managed report remains complete.
+Complete diagnostics and remedies remain in the saved JSON. Explicit evaluation
+output options (`--verbose`, `--display-limit all`, filters or `--group-by`)
+retain individual occurrences and summary groups, with the requested bound.
+Use these options on the original invocation when needed; inspect saved JSON
+for later views. The routine test-quality banner lives in verification policy,
+not every check or test result. Test-scope facts remain in the machine report.
+
+Optional analysis candidates carry `fields.analysisOutcome: advisory-candidate`.
+JSON and SARIF retain diagnostics and guidance regardless of terminal condensation.
+Display filters select their requested view; the managed report stays complete.
 
 Focused Python checks state in `notes` that global dead-code analysis was not
 run. Project inventory in `analysisContext` alone does not prove analysis ran.
@@ -93,3 +129,20 @@ quoting on Windows.
 Dependency review uses this same report contract. Its tables distinguish
 removals from additions and updates against the explicitly recorded base;
 the verdict still covers the candidate's required pre-install checks.
+
+## Test execution time
+
+`testCommands[].result.executionDurationNanoseconds` measures work in this invocation.
+A reused suite records zero current execution and retains its original cost in
+`priorDurationMilliseconds`. Gate artifacts already retain historical duration
+separately from attempts. Resource-wait duration is separate from execution.
+Never add historical receipt duration to the current invocation's runtime.
+
+The existing test plan shows declared cost, scope, last comparable execution,
+observation age and reuse decision. A retained gate execution is comparable when
+its resolved command, scope, paths, module selection, environment names, timeout
+and host platform match. Source or environment values can differ; this is an
+observation, not a prediction or reusable pass. Exact matching receipts also
+supply their original execution time. Missing suitable history is `unknown`.
+A `quick` suite observed at a minute or more is highlighted as slow feedback,
+without skipping tests or asking for cost approval.

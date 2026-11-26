@@ -59,6 +59,7 @@ type SuiteExecution struct {
 	Attempt         int
 	Artifacts       []testartifact.Record
 	Reused          bool
+	PriorDuration   time.Duration
 	ReceiptPath     string
 	ReceiptSHA256   string
 }

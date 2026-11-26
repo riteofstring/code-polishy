@@ -2,6 +2,7 @@ package repository
 
 import (
 	"bytes"
+	"fmt"
 	"maps"
 	"path/filepath"
 	"slices"
@@ -25,17 +26,20 @@ type SourceLineGroup struct {
 }
 
 type LineBudgetScope struct {
-	Scope  string `json:"scope"`
-	Lines  int    `json:"lines"`
-	Budget int    `json:"budget"`
+	Scope           string `json:"scope"`
+	Lines           int    `json:"lines"`
+	Budget          int    `json:"budget"`
+	BaseLines       *int   `json:"baseLines,omitempty"`
+	ProposedCeiling int    `json:"proposedCeiling,omitempty"`
+	GrowthRationale string `json:"growthRationale,omitempty"`
 }
 
 func (scope LineBudgetScope) Exceeded() bool {
-	return scope.Lines > scope.Budget
+	return scope.Budget > 0 && scope.Lines > scope.Budget
 }
 
 func (repo Repository) CountsSourceLines(path string) bool {
-	return repo.countsSourcePath(path) && repo.IsExecutableSource(path)
+	return repo.countsSourcePath(path) && !repo.IsSymbolicLink(path) && repo.IsExecutableSource(path)
 }
 
 func (repo Repository) countsSourcePath(path string) bool {
@@ -47,7 +51,7 @@ func (repo Repository) countsSourcePath(path string) bool {
 	if name == "go.sum" || name == "go.work.sum" || strings.HasSuffix(name, ".lock") || name == "license" {
 		return false
 	}
-	return !repo.IsGenerated(path) && !repo.IsData(path) && !repo.IsSymbolicLink(path)
+	return !repo.IsGenerated(path) && !repo.IsData(path)
 }
 
 func (repo Repository) CountSourceLines() (SourceLines, error) {
@@ -77,6 +81,54 @@ func (repo Repository) CountSourceLines() (SourceLines, error) {
 	lines.Languages = boundedSourceLineGroups(groups)
 	lines.Budget = lineBudgetScopes(repo.Config.Quality.LineBudget, lines)
 	return lines, nil
+}
+
+func (repo Repository) CountSourceLinesAt(revision string) (SourceLines, error) {
+	if !exactRevision(revision) {
+		return SourceLines{}, fmt.Errorf("source-line base must be an exact Git revision")
+	}
+	objects, err := repo.committedSourceObjects(revision)
+	if err != nil {
+		return SourceLines{}, err
+	}
+	contents, err := repo.gitBlobContents(slices.Collect(maps.Values(objects)))
+	if err != nil {
+		return SourceLines{}, err
+	}
+	lines, groups := SourceLines{}, map[string]*SourceLineGroup{}
+	for path, object := range objects {
+		data := contents[object]
+		if repo.countsSourceContent(path, data) {
+			repo.addSourceLines(&lines, groups, path, data)
+		}
+	}
+	lines.Languages = boundedSourceLineGroups(groups)
+	lines.Budget = lineBudgetScopes(repo.Config.Quality.LineBudget, lines)
+	return lines, nil
+}
+
+func (repo Repository) committedSourceObjects(revision string) (map[string]string, error) {
+	entries, err := repo.gitLines("ls-tree", "-r", "-z", revision)
+	if err != nil {
+		return nil, err
+	}
+	objects := map[string]string{}
+	for _, entry := range entries {
+		metadata, path, _ := strings.Cut(entry, "\t")
+		fields := strings.Fields(metadata)
+		if len(fields) != 3 || fields[1] != "blob" || fields[0] != "100644" && fields[0] != "100755" {
+			continue
+		}
+		if !repo.IsExcluded(path) && repo.countsSourcePath(path) {
+			objects[path] = fields[2]
+		}
+	}
+	return objects, nil
+}
+
+func (repo Repository) countsSourceContent(path string, data []byte) bool {
+	extension := strings.ToLower(filepath.Ext(path))
+	return !repo.isManagedBootstrapWrapper(path) && (builtInExtensionLanguage(path) != "" || len(repo.computeDeclaredLanguages(path)) > 0 || extension == ".ps1" || extension == ".psm1" || shellShebang(data))
 }
 
 func (repo Repository) addSourceLines(lines *SourceLines, groups map[string]*SourceLineGroup, path string, data []byte) {
@@ -187,7 +239,12 @@ func sparseRegularIndexEntry(entry string) (string, string, bool) {
 }
 
 func (repo Repository) sourceLineLanguage(path string, data []byte) string {
-	languages := repo.Languages(path)
+	languages := repo.computeDeclaredLanguages(path)
+	if language := builtInExtensionLanguage(path); language != "" {
+		languages = []string{language}
+	} else if shellShebang(data) {
+		languages = []string{"shell"}
+	}
 	switch {
 	case len(languages) == 1:
 		return languages[0]

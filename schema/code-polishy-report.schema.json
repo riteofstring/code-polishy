@@ -339,6 +339,16 @@
       "properties": {
         "protocol": { "const": "repository-context/v1" },
         "designResolution": { "$ref": "#/$defs/designResolution" },
+        "review": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["required", "reason", "selectedFeatures"],
+          "properties": {
+            "required": { "type": "boolean" },
+            "reason": { "type": "string" },
+            "selectedFeatures": { "$ref": "#/$defs/stringArray" }
+          }
+        },
         "situations": { "$ref": "#/$defs/stringArray", "maxItems": 33 },
         "designDocuments": {
           "type": "array",
@@ -402,7 +412,14 @@
         "properties": {
           "scope": { "enum": ["production", "test", "total"] },
           "lines": { "type": "integer", "minimum": 0 },
-          "budget": { "type": "integer", "minimum": 1 }
+          "budget": { "type": "integer", "minimum": 0 },
+          "baseLines": { "type": "integer", "minimum": 0 },
+          "proposedCeiling": { "type": "integer", "minimum": 1 },
+          "growthRationale": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          }
         }
       }
     },
@@ -914,6 +931,7 @@
         "mode": { "type": "string" },
         "operands": { "$ref": "#/$defs/stringArray" },
         "modules": { "$ref": "#/$defs/stringArray" },
+        "planned": { "$ref": "#/$defs/stringArray" },
         "expanded": { "$ref": "#/$defs/stringArray" }
       }
     },

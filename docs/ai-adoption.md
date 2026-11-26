@@ -337,10 +337,10 @@ configuration, while original intent capture needs a clean committed base.
    wrappers, and report ignore rules. Commit only these policy bootstrap files,
    stating in the commit message that adoption coverage and verification remain
    incomplete. This commit does not assert a green doctor or gate.
-4. From the clean bootstrap commit, run `./code-polishyw task-start --files`
-   with the existing source paths for the adoption. If selected review requires
-   intent, rerun with `--intent-file -` and supply the exact original caller
-   request. Do not fabricate a correction or claim capture at the unmanaged
+4. Discover scoped rationale and review requirements with
+   `./code-polishyw design-context --files PATH... --situation adoption`.
+   If review requires intent, use `task-start --intent-file -` at the clean
+   bootstrap base and supply the exact original caller request. Do not fabricate a correction or claim capture at the unmanaged
    base. Optional review needs no intent journal. If a required merge review
    will use an upstream target, establish the bootstrap as that target's base
    before implementation; pushing remains a separately authorized action.
@@ -352,7 +352,8 @@ configuration, while original intent capture needs a clean committed base.
    receipt cannot satisfy a gate against an earlier unmanaged base. Retain the
    original commit for inspection of the complete adoption diff.
 
-For an existing managed repository, use its normal clean task base directly.
+For an existing managed repository, follow the ordinary conditional-context
+workflow. Optional context needs no bootstrap commit, stash or clean checkout.
 The bootstrap is only for a first installation and does not waive any final
 ownership, command, dependency, or test requirement.
 

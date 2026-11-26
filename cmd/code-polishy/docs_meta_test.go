@@ -67,7 +67,8 @@ func TestDocsCLIRejectsInvalidUsageBeforeReadingDocumentation(t *testing.T) {
 		{"--policy-root", missing, "docs", "find"},
 		{"--policy-root", missing, "docs", "find", "--unknown"},
 		{"--policy-root", missing, "docs", "read"},
-		{"--policy-root", missing, "docs", "read", "one", "two"},
+		{"--policy-root", missing, "docs", "read", "one", "two", "--section", "Heading"},
+		{"--policy-root", missing, "docs", "read", "one", "--section"},
 		{"--policy-root", missing, "docs", "read", "--unknown"},
 	}
 	for _, arguments := range tests {
@@ -75,6 +76,24 @@ func TestDocsCLIRejectsInvalidUsageBeforeReadingDocumentation(t *testing.T) {
 		if status != 2 || stdout != "" || !strings.Contains(stderr, "usage error:") || !strings.Contains(stderr, "code-polishy docs list") {
 			t.Fatalf("%v: status=%d stdout=%q stderr=%q", arguments, status, stdout, stderr)
 		}
+	}
+}
+
+func TestDocsCLIReadsOrderedUniqueTopicsAndSectionsAtomically(t *testing.T) {
+	root := docsPolicyFixture(t)
+	arguments := []string{"--policy-root", root, "docs", "read"}
+	status, stdout, stderr := captureRunOutput(t, append(arguments, "behavior-review", "docs/agents.md", "agents"))
+	if status != 0 || stderr != "" || strings.Count(stdout, "# Agent Workflows") != 1 || strings.Index(stdout, "# Behavior Review") > strings.Index(stdout, "# Agent Workflows") {
+		t.Fatalf("batch: status=%d stdout=%q stderr=%q", status, stdout, stderr)
+	}
+	status, stdout, stderr = captureRunOutput(t, append(arguments, "agents", "missing-topic"))
+	if status != 2 || stdout != "" || !strings.Contains(stderr, "unknown documentation topic") {
+		t.Fatalf("partial batch: status=%d stdout=%q stderr=%q", status, stdout, stderr)
+	}
+	writeDocsCLIFile(t, root, "docs/agents.md", []byte("# Agents\n\n## Start\nUseful context.\n### Review\nCapture first.\n## Finish\nCommit.\n"))
+	status, stdout, stderr = captureRunOutput(t, append(arguments, "agents", "--section", "Start"))
+	if status != 0 || stderr != "" || !strings.Contains(stdout, "DOCUMENT: agent-workflows (docs/agents.md)") || !strings.Contains(stdout, "### Review\nCapture first.") || strings.Contains(stdout, "Commit.") {
+		t.Fatalf("section: status=%d stdout=%q stderr=%q", status, stdout, stderr)
 	}
 }
 
@@ -106,7 +125,7 @@ func TestEveryDocsHelpFormSkipsRepositoryAndDocumentationInitialization(t *testi
 	var expected string
 	for _, values := range arguments {
 		status, stdout, stderr := captureRunOutput(t, values)
-		if status != 0 || stderr != "" || !strings.Contains(stdout, "code-polishy docs read TOPIC") {
+		if status != 0 || stderr != "" || !strings.Contains(stdout, "./code-polishyw docs read TOPIC") {
 			t.Fatalf("%v: status=%d stdout=%q stderr=%q", values, status, stdout, stderr)
 		}
 		if expected == "" {
