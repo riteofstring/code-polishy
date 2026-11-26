@@ -772,7 +772,7 @@ func onlyAllowed(arguments []string, allowed string) bool {
 func printReportWithMode(stdout, stderr io.Writer, report engine.Report, verbose bool) {
 	detailed := detailedReportFindings(report.Display, verbose)
 	visible, advisories := terminalReportFindings(report.Findings, detailed)
-	printReportCompletion(stdout, stderr, report, advisories)
+	showAdvisories := printReportCompletion(stdout, stderr, report, advisories)
 	if report.ReportPath != "" {
 		fmt.Fprintln(stdout, "COMPLETE REPORT:", report.ReportPath)
 	}
@@ -783,7 +783,9 @@ func printReportWithMode(stdout, stderr io.Writer, report engine.Report, verbose
 	if omitted := len(visible) - len(findings); omitted > 0 {
 		fmt.Fprintf(stdout, "OMITTED %d finding(s) from the bounded terminal view; complete report retains all findings\n", omitted)
 	}
-	printAdvisorySummary(stdout, advisories)
+	if showAdvisories {
+		printAdvisorySummary(stdout, advisories)
+	}
 	if detailed {
 		printReportSummaryGroups(stdout, report.Summary)
 		printSecurityEvidence(stdout, report.Security)

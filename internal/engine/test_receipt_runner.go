@@ -60,9 +60,7 @@ func newTestReceiptController(engine *Engine, suites []policy.TestSuite, allowRe
 type testReceiptDecision struct {
 	Suite    string
 	Action   string
-	Prior    string
 	Reason   string
-	Reusable *testreceipt.Reusable
 	Cost     string
 	Scope    string
 	Observed string
@@ -74,18 +72,17 @@ func (controller *testReceiptController) Decisions() []testReceiptDecision {
 	}
 	decisions := make([]testReceiptDecision, 0, len(controller.suites))
 	for _, suite := range controller.suites {
-		decision := testReceiptDecision{Suite: suite.Name, Action: "execute", Prior: "-", Cost: suite.Cost, Scope: suite.Scope}
+		decision := testReceiptDecision{Suite: suite.Name, Action: "execute", Cost: suite.Cost, Scope: suite.Scope}
 		observation := controller.observations[suite.Name]
 		identity, eligible := controller.identities[suite.Name]
 		if !eligible {
 			decision.Reason = controller.reasons[suite.Name]
 		} else if reusable, err := testreceipt.Load(controller.root, identity); err == nil {
-			decision.Prior = conciseDuration(time.Duration(reusable.Receipt.DurationMillis) * time.Millisecond)
 			if reusable.Receipt.CreatedAt.After(observation.At) {
 				observation = suiteDurationObservation{At: reusable.Receipt.CreatedAt, Duration: time.Duration(reusable.Receipt.DurationMillis) * time.Millisecond, Source: "exact receipt"}
 			}
 			if controller.allowReuse {
-				decision.Action, decision.Reason, decision.Reusable = "reuse", "complete identity matches", &reusable
+				decision.Action, decision.Reason = "reuse", "complete identity matches"
 			} else {
 				decision.Reason = "deliberate fresh direct test; matching receipt remains available for gates"
 			}

@@ -140,7 +140,7 @@ production owner and keeping a real boundary test in focused execution:
         "kind": "integration",
         "scope": "repository",
         "cost": "standard",
-        "paths": ["tests/records/files.test.mjs"],
+        "paths": ["src/records/**", "tests/records/files.test.mjs"],
         "argv": ["node", "--test", "tests/records/files.test.mjs"],
         "runOn": ["recommended", "full"]
       }
@@ -182,6 +182,8 @@ test("rejects a missing ID", () => {
 
 The integration test calls the loader with a file created under `mkdtemp`, checks
 parsed output and missing-file behavior, and removes its temporary directory.
+Its suite paths include production files so implementation changes select that
+integration coverage in the recommended profile.
 Shared helpers belong to the executing suite's paths and ownership declaration.
 Keep every governed test owned and executed by its declared ordinary suite.
 Renaming the former full suite `quick`, or moving every test out of the focused

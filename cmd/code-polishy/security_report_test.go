@@ -18,7 +18,14 @@ func TestSecurityReportBoundsScansAndDisclosesFreshnessAndMissingCoverage(t *tes
 		security.Scans = append(security.Scans, policy.SecurityScan{Name: "osv-scan-root", Status: "unavailable", ScannerVersion: "2.4.0", LastSucceededAt: now.Add(-25 * time.Hour), ReportPath: "scan.json"})
 	}
 	var output, diagnostics bytes.Buffer
-	printReportTo(&output, &diagnostics, engine.Report{Protocol: engine.ReportProtocol, Security: security, Summary: engine.ReportSummary{Status: "failed", Errors: 1}})
+	report := engine.Report{Protocol: engine.ReportProtocol, Security: security, Summary: engine.ReportSummary{Status: "failed", Errors: 1}}
+	printReportTo(&output, &diagnostics, report)
+	if !strings.Contains(output.String(), "SECURITY: failed") || strings.Contains(output.String(), "SECURITY SCAN:") {
+		t.Fatalf("default security summary hid status or repeated scan details: %s", output.String())
+	}
+	output.Reset()
+	diagnostics.Reset()
+	printReportWithMode(&output, &diagnostics, report, true)
 	for _, expected := range []string{"SECURITY: failed", "refresh due 2026-10-22T12:00:00Z", "scanner 2.4.0", "last succeeded 2026-10-21T11:00:00Z", "2 more scan records", "SECURITY REPORT: refresh/report.json"} {
 		if !strings.Contains(output.String(), expected) {
 			t.Errorf("missing %q in %s", expected, output.String())

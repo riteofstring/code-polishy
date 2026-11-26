@@ -368,7 +368,7 @@ func printReportNotes(output io.Writer, notes []string, verbose bool) {
 	}
 }
 
-func printReportCompletion(stdout, stderr io.Writer, report engine.Report, advisories int) {
+func printReportCompletion(stdout, stderr io.Writer, report engine.Report, advisories int) bool {
 	errors, warnings, information := report.Summary.Errors, report.Summary.Warnings, report.Summary.Information
 	if report.Protocol == "" {
 		errors, warnings, information = reportFindingTotals(report.Findings)
@@ -379,7 +379,7 @@ func printReportCompletion(stdout, stderr io.Writer, report engine.Report, advis
 		fmt.Fprintf(stderr, "FAILED errors=%d warnings=%d information=%d\n", errors, warnings, information)
 	} else if advisories > 0 && advisories == warnings && information == 0 {
 		fmt.Fprintf(stdout, "PASS — %s; no action required.\n", findingCount(advisories, "advisory warning"))
-		return
+		return false
 	} else if warnings > 0 {
 		fmt.Fprintf(stdout, "PASS with %s; errors=0 warnings=%d information=%d\n", findingCount(warnings, "warning"), warnings, information)
 	} else if information > 0 {
@@ -387,6 +387,7 @@ func printReportCompletion(stdout, stderr io.Writer, report engine.Report, advis
 	} else {
 		fmt.Fprintln(stdout, "PASS errors=0 warnings=0 information=0")
 	}
+	return true
 }
 
 func printAdvisorySummary(stdout io.Writer, advisories int) {
