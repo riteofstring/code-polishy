@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.35.0 - 2026-11-26
 
 - Make ordinary workflow context reusable and initialization conditional; expose
   review requirements in scoped context, support explicit planned paths, and
@@ -18,11 +18,15 @@
   milestone headroom in ordinary prose while retaining explicit approval, hard
   ceilings and complete receipt invalidation.
 - Retire `task-start` and the `fix` alias, `verify --tests-only`, `doctor --strict`,
-  and budget-proposal options. Use read-only scoped context, direct intent
-  capture, `format`, `test --all`, and plain `doctor`.
+  and budget-proposal options. Use `design-context`, direct
+  `behavior-review capture-intent`, `format`, `test --all`, and plain `doctor`.
 - Remove test-reminder metadata and its checkpoint-reading machinery. Select
   checkpoint gates only for checkpoint review or an accepted verification record;
   they replace the same completion checks and changed-scope tests.
+- Include explicitly selected empty modules and their reverse dependents when
+  discovering required behavior reviews before editing.
+- Stream non-source historical assets during source-line comparisons and
+  sparse-checkout counting to keep memory use bounded.
 
 ## 0.34.1 - 2026-11-20
 
