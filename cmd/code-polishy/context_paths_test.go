@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/riteofstring/code-polishy/internal/engine"
+	"github.com/riteofstring/code-polishy/internal/policy"
 )
 
 func TestDesignContextPreservesDirtyFilesAndPlannedPaths(t *testing.T) {
@@ -102,4 +103,67 @@ func TestDesignContextDiscoversPolicyReviewBeforeDirectCapture(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestDesignContextDiscoversEmptyModuleReviewBeforeDirectCapture(t *testing.T) {
+	root, policyRoot := newDesignContextCLIRepository(t)
+	data, err := os.ReadFile(filepath.Join(root, policy.ConfigFilename))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config map[string]any
+	if err := json.Unmarshal(data, &config); err != nil {
+		t.Fatal(err)
+	}
+	config["modules"] = append(config["modules"].([]any),
+		policy.Module{Name: "payments", Paths: []string{"payments/**"}},
+		policy.Module{Name: "checkout", Paths: []string{"checkout/**"}, DependsOn: []string{"payments"}},
+		policy.Module{Name: "storefront", Paths: []string{"storefront/**"}, DependsOn: []string{"checkout"}},
+		policy.Module{Name: "catalog", Paths: []string{"catalog/**"}},
+	)
+	config["verification"].(map[string]any)["behaviorReview"] = &policy.BehaviorReviewPolicy{
+		DefaultRequiredAt: "on-request",
+		Features: []policy.BehaviorReviewFeature{
+			{Name: "payment-review", Description: "Payment behavior.", Modules: []string{"payments"}, Suites: []string{"regression"}, RequiredAt: "checkpoint"},
+			{Name: "checkout-review", Description: "Checkout behavior.", Modules: []string{"checkout"}, Suites: []string{"regression"}, RequiredAt: "merge"},
+			{Name: "storefront-review", Description: "Storefront behavior.", Modules: []string{"storefront"}, Suites: []string{"regression"}, RequiredAt: "merge"},
+			{Name: "unrelated-review", Description: "Application behavior.", Modules: []string{"application"}, Suites: []string{"regression"}, RequiredAt: "merge"},
+			{Name: "optional-review", Description: "Optional payment behavior.", Modules: []string{"payments"}, Suites: []string{"regression"}},
+		},
+	}
+	data, err = json.Marshal(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeBehaviorReviewCLIFile(t, root, policy.ConfigFilename, string(data))
+	gitBehaviorReviewCLI(t, root, "add", policy.ConfigFilename)
+	gitBehaviorReviewCLI(t, root, "commit", "-m", "Declare empty module review requirements")
+	common := []string{"--repo-root", root, "--policy-root", policyRoot}
+	for _, testCase := range []struct {
+		module   string
+		features []string
+	}{
+		{module: "payments", features: []string{"checkout-review", "payment-review", "storefront-review"}},
+		{module: "checkout", features: []string{"checkout-review", "storefront-review"}},
+		{module: "storefront", features: []string{"storefront-review"}},
+		{module: "catalog", features: []string{}},
+	} {
+		t.Run(testCase.module, func(t *testing.T) {
+			status, stdout, stderr := captureRunOutput(t, append(slices.Clone(common), "design-context", "--module", testCase.module, "--format", "json"))
+			var report engine.Report
+			if err := json.Unmarshal([]byte(stdout), &report); err != nil || status != 0 || stderr != "" || report.RepositoryContext == nil || report.RequestedSelection == nil {
+				t.Fatalf("module context: status=%d report=%+v error=%v stderr=%q", status, report, err, stderr)
+			}
+			review := report.RepositoryContext.Review
+			if review.Required != (len(testCase.features) > 0) || !slices.Equal(review.SelectedFeatures, testCase.features) || len(report.RequestedSelection.Expanded) != 0 {
+				t.Fatalf("empty module review = %+v, selection = %+v", review, report.RequestedSelection)
+			}
+			assertCapabilityCLIDidNotExecute(t, root)
+			if status := contextGitOutput(t, root, "status", "--porcelain"); status != "" {
+				t.Fatalf("context dirtied checkout: %s", status)
+			}
+		})
+	}
+	status, stdout, stderr := captureRunOutputWithStdin(t, append(common, "behavior-review", "capture-intent", "--intent-file", "-"), "Implement the initial payment behavior.\n")
+	assertBehaviorReviewCLISuccess(t, status, stdout, stderr)
 }

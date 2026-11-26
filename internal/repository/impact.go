@@ -10,9 +10,9 @@ func (repo Repository) CandidateImpact(candidate CandidateDelta) CandidateImpact
 	return repo.ImpactForPaths(candidate.Paths())
 }
 
-func (repo Repository) ImpactForPaths(paths []string) CandidateImpact {
+func (repo Repository) ImpactForPaths(paths []string, modules ...string) CandidateImpact {
 	paths = uniqueSorted(paths)
-	direct := []string{}
+	direct := append([]string{}, modules...)
 	for _, path := range paths {
 		direct = append(direct, repo.OwnerModuleNames(path)...)
 	}

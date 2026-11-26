@@ -47,8 +47,10 @@ needs a clean initial request boundary; an invalid boundary cannot be repaired
 by mislabeling it a correction.
 
 Declared modules may need rationale before their first source file exists, so
-context selection supports them. Execution-oriented module selection continues
-to require governed files. Document digests identify the retrieved contents;
+context selection supports them. Review impact includes explicitly selected
+modules and their transitive reverse dependents alongside file-derived owners,
+even when those modules contain no files. Execution-oriented module selection
+continues to require governed files. Document digests identify the retrieved contents;
 agents reuse context while the scope, mappings, and relevant contents remain
 unchanged. Progress commits and test runs alone do not make context stale.
 

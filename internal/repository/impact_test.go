@@ -73,17 +73,19 @@ func TestImpactForPathsOwnsExpandedAnalysisImpact(t *testing.T) {
 	repo := Repository{Config: policy.Config{Modules: []policy.Module{
 		{Name: "domain", Paths: []string{"domain/**"}},
 		{Name: "api", Paths: []string{"api/**"}, DependsOn: []string{"domain"}},
+		{Name: "payments", Paths: []string{"payments/**"}},
+		{Name: "checkout", Paths: []string{"checkout/**"}, DependsOn: []string{"payments"}},
 	}}}
 
-	impact := repo.ImpactForPaths([]string{"api/handler.go", "domain/order.go", "api/handler.go"})
+	impact := repo.ImpactForPaths([]string{"api/handler.go", "domain/order.go", "api/handler.go"}, "payments")
 
 	if !slices.Equal(impact.Paths, []string{"api/handler.go", "domain/order.go"}) {
 		t.Fatalf("paths = %v", impact.Paths)
 	}
-	if !slices.Equal(impact.DirectModules, []string{"api", "domain"}) {
+	if !slices.Equal(impact.DirectModules, []string{"api", "domain", "payments"}) {
 		t.Fatalf("direct modules = %v", impact.DirectModules)
 	}
-	if !slices.Equal(impact.ImpactedModules, []string{"api", "domain"}) {
+	if !slices.Equal(impact.ImpactedModules, []string{"api", "checkout", "domain", "payments"}) {
 		t.Fatalf("impacted modules = %v", impact.ImpactedModules)
 	}
 }

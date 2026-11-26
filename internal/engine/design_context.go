@@ -85,7 +85,7 @@ func (engine *Engine) contextReviewRequirement(selection repository.Selection, e
 }
 
 func (engine *Engine) contextRequiredFeatures(selection repository.Selection) []string {
-	impact := engine.Repository.CandidateImpact(selection.Candidate)
+	impact := engine.Repository.ImpactForPaths(selection.Candidate.Paths(), selection.Requested.Modules...)
 	result := []string{}
 	for _, feature := range behaviorReviewFeatures(engine.Repository.Config) {
 		if behaviorReviewFeatureRequired(engine.Repository.Config, feature, impact, BehaviorReviewMerge) {
