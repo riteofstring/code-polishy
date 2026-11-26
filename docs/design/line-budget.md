@@ -82,7 +82,8 @@ the budget is exceeded.
 
 ## Visibility
 
-`size` reports counts by language and each scope's remaining lines. With
+`size` reports counts by language and each configured scope's remaining lines.
+Budget rows contain only positive ceilings; unset scopes are omitted. With
 `--base REF`, it also reports base counts and measured growth through batched
 immutable Git blob reads under current scope rules. The budget is withheld from
 provider requests because providers do not use it and changing it should not

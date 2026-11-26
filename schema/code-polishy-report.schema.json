@@ -412,7 +412,7 @@
         "properties": {
           "scope": { "enum": ["production", "test", "total"] },
           "lines": { "type": "integer", "minimum": 0 },
-          "budget": { "type": "integer", "minimum": 0 },
+          "budget": { "type": "integer", "minimum": 1 },
           "baseLines": { "type": "integer", "minimum": 0 }
         }
       }

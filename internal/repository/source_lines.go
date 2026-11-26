@@ -33,7 +33,7 @@ type LineBudgetScope struct {
 }
 
 func (scope LineBudgetScope) Exceeded() bool {
-	return scope.Budget > 0 && scope.Lines > scope.Budget
+	return scope.Lines > scope.Budget
 }
 
 func (repo Repository) CountsSourceLines(path string) bool {

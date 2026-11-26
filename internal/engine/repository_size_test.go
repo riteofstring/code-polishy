@@ -83,6 +83,7 @@ func TestSizeBuildsHumanAndSchemaValidatedMachineEvidence(t *testing.T) {
 		Config: policy.Config{
 			Modules:    []policy.Module{{Name: "application", Paths: []string{"src/**"}}},
 			Exceptions: []policy.Exception{expiredEngineException()},
+			Quality:    policy.Quality{LineBudget: &policy.LineBudget{Production: 1}},
 		},
 	}}
 
@@ -116,6 +117,13 @@ func TestSizeBuildsHumanAndSchemaValidatedMachineEvidence(t *testing.T) {
 	decoded := Report{}
 	if err := json.Unmarshal(data, &decoded); err != nil || decoded.RepositorySize == nil || decoded.RepositorySize.Governed.Bytes != 3072 {
 		t.Fatalf("decoded report = %+v, error = %v", decoded.RepositorySize, err)
+	}
+	if len(decoded.RepositorySize.SourceLines.Budget) != 1 || decoded.RepositorySize.SourceLines.Budget[0].Budget != 1 {
+		t.Fatalf("budget scopes = %+v", decoded.RepositorySize.SourceLines.Budget)
+	}
+	decoded.RepositorySize.SourceLines.Budget[0].Budget = 0
+	if _, err := policyEngine.FinalizeReport("size", decoded); err == nil || !strings.Contains(err.Error(), "budget") {
+		t.Fatalf("zero-budget report validation = %v", err)
 	}
 }
 

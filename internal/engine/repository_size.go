@@ -114,11 +114,8 @@ func appendLineBudgetTable(tables []Table, scopes []repository.LineBudgetScope) 
 		if scope.BaseLines != nil {
 			base, growth = strconv.Itoa(*scope.BaseLines), fmt.Sprintf("%+d", scope.Lines-*scope.BaseLines)
 		}
-		remaining := "-"
-		if scope.Budget > 0 {
-			remaining = strconv.Itoa(scope.Budget - scope.Lines)
-		}
-		rows = append(rows, []string{scope.Scope, strconv.Itoa(scope.Lines), base, growth, lineBudgetLabel(scope.Budget), remaining})
+		remaining := strconv.Itoa(scope.Budget - scope.Lines)
+		rows = append(rows, []string{scope.Scope, strconv.Itoa(scope.Lines), base, growth, strconv.Itoa(scope.Budget), remaining})
 	}
 	return append(tables, Table{Title: "LINE BUDGET", Columns: []string{"SCOPE", "LINES", "BASE", "GROWTH", "BUDGET", "REMAINING"}, Rows: rows})
 }
