@@ -32,7 +32,11 @@ outside a sparse checkout as skip-worktree and ignores their working copies, so
 the count reads those files from the index, which is what a commit records.
 It reads only files the budget could count, so a partial clone does not fetch
 excluded content such as documentation or data. Files whose extension names no
-language are still read, because a shell shebang makes them source.
+language are still inspected, because a shell shebang makes them source. The
+Git batch reader classifies each blob from its paths and a bounded prefix,
+matching working-copy shebang detection, and streams uncounted content past
+without retaining it. Historical and sparse-index counts therefore do not
+buffer assets merely to determine whether they are source.
 Rejecting sparse checkouts instead would leave an agent working in one no way to
 pass a configured budget.
 

@@ -3,19 +3,75 @@ package repository
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/riteofstring/code-polishy/internal/policy"
 )
 
+func TestSourceLineCountsDoNotBufferHistoricalAssets(t *testing.T) {
+	repo := newGitRepository(t)
+	writeFile(t, repo.Root, "app.go", "package app\n")
+	asset, err := os.Create(filepath.Join(repo.Root, "image.png"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := asset.Write([]byte("\x89PNG\r\n\x1a\n")); err != nil {
+		t.Fatal(err)
+	}
+	if err := asset.Truncate(32 << 20); err != nil {
+		t.Fatal(err)
+	}
+	if err := asset.Close(); err != nil {
+		t.Fatal(err)
+	}
+	git(t, repo.Root, "add", ".")
+	git(t, repo.Root, "commit", "-m", "source and asset")
+	base, err := repo.Head()
+	if err != nil {
+		t.Fatal(err)
+	}
+	git(t, repo.Root, "update-index", "--skip-worktree", "image.png")
+	if err := os.Remove(filepath.Join(repo.Root, "image.png")); err != nil {
+		t.Fatal(err)
+	}
+	for name, count := range map[string]func() (SourceLines, error){
+		"historical": func() (SourceLines, error) { return repo.CountSourceLinesAt(base) },
+		"sparse":     repo.CountSourceLines,
+	} {
+		t.Run(name, func(t *testing.T) {
+			runtime.GC()
+			var before, after runtime.MemStats
+			runtime.ReadMemStats(&before)
+			lines, err := count()
+			runtime.ReadMemStats(&after)
+			if err != nil || lines.Production != 1 || lines.Test != 0 {
+				t.Fatalf("source counts = %+v, %v", lines, err)
+			}
+			allocated := after.TotalAlloc - before.TotalAlloc
+			t.Logf("allocated %d bytes with a 32 MiB asset", allocated)
+			if allocated > 8<<20 {
+				t.Fatalf("allocated %d bytes for one source line and a non-source asset", allocated)
+			}
+		})
+	}
+}
+
 func TestCountSourceLinesAtUsesCommittedContentAndModes(t *testing.T) {
 	t.Parallel()
 	repo := newGitRepository(t)
 	repo.Config.Scope.Generated = []string{"generated/**"}
-	writeFile(t, repo.Root, "app.go", "package app\n\nconst Value = 1\n")
+	repo.Config.Scope.Languages = []policy.LanguageRule{{Name: "custom", Paths: []string{"*.custom"}}}
+	for _, path := range []string{"app.go", "copy.go", "copy.data"} {
+		writeFile(t, repo.Root, path, "package app\n"+strings.Repeat("\n", 1024)+"const Value = 1\n")
+	}
 	writeFile(t, repo.Root, "app_test.go", "package app\n")
+	writeFile(t, repo.Root, "empty.go", "")
+	writeFile(t, repo.Root, "program.custom", "run\n")
 	writeFile(t, repo.Root, "tools/run", "#!/bin/sh\necho ready\n")
+	writeFile(t, repo.Root, "tools/job.sbatch.template", "#!/bin/bash\nsrun job\n")
 	writeFile(t, repo.Root, "tools/data", "ordinary data\n")
 	writeFile(t, repo.Root, "generated/app.go", "package generated\n")
 	git(t, repo.Root, "add", ".")
@@ -33,10 +89,10 @@ func TestCountSourceLinesAtUsesCommittedContentAndModes(t *testing.T) {
 	writeFile(t, repo.Root, "tools/run", "ordinary data\n")
 	writeFile(t, repo.Root, "tools/data", "#!/bin/sh\necho changed\n")
 	lines, err := repo.CountSourceLinesAt(base)
-	if err != nil || lines.Production != 4 || lines.Test != 1 {
+	if err != nil || lines.Production != 9 || lines.Test != 1 {
 		t.Fatalf("committed lines changed with working tree: %+v, %v", lines, err)
 	}
-	if !slices.Equal(lines.Languages, []SourceLineGroup{{Name: "go", Production: 2, Test: 1}, {Name: "shell", Production: 2}}) {
+	if !slices.Equal(lines.Languages, []SourceLineGroup{{Name: "go", Production: 4, Test: 1}, {Name: "shell", Production: 4}, {Name: "custom", Production: 1}}) {
 		t.Fatalf("committed language groups = %+v", lines.Languages)
 	}
 }

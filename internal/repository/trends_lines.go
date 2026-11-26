@@ -1,9 +1,11 @@
 package repository
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -151,7 +153,7 @@ func (collector *trendsCollector) loadSnapshot(revision string) error {
 	for _, objectID := range objects {
 		objectIDs = append(objectIDs, objectID)
 	}
-	contents, err := collector.repo.gitBlobContents(objectIDs)
+	contents, err := collector.repo.gitBlobContents(objectIDs, nil)
 	if err != nil {
 		return err
 	}
@@ -175,7 +177,7 @@ func (collector *trendsCollector) trackedTreeEntry(entry string) (string, string
 	return path, strings.ToLower(fields[2]), true
 }
 
-func (repo Repository) gitBlobContents(objectIDs []string) (map[string][]byte, error) {
+func (repo Repository) gitBlobContents(objectIDs []string, accept func(string, []byte) bool) (map[string][]byte, error) {
 	objectIDs = uniqueSorted(objectIDs)
 	result := make(map[string][]byte, len(objectIDs))
 	if len(objectIDs) == 0 {
@@ -183,32 +185,73 @@ func (repo Repository) gitBlobContents(objectIDs []string) (map[string][]byte, e
 	}
 	command := exec.Command("git", "-C", repo.Root, "cat-file", "--batch")
 	command.Stdin = strings.NewReader(strings.Join(objectIDs, "\n") + "\n")
-	output, err := command.Output()
+	stdout, err := command.StdoutPipe()
 	if err != nil {
 		return nil, fmt.Errorf("read Git history blobs: %w", err)
 	}
+	if err := command.Start(); err != nil {
+		return nil, fmt.Errorf("read Git history blobs: %w", err)
+	}
+	output := bufio.NewReader(stdout)
+	var readErr error
 	for _, objectID := range objectIDs {
-		content, rest, err := parseGitBatchBlob(output, objectID)
+		content, err := readGitBatchBlob(output, objectID, accept)
 		if err != nil {
-			return nil, err
+			readErr = err
+			_ = command.Process.Kill()
+			break
 		}
-		result[objectID] = content
-		output = rest
+		if content != nil {
+			result[objectID] = content
+		}
+	}
+	waitErr := command.Wait()
+	if readErr != nil {
+		return nil, readErr
+	}
+	if waitErr != nil {
+		return nil, fmt.Errorf("read Git history blobs: %w", waitErr)
 	}
 	return result, nil
 }
 
-func parseGitBatchBlob(output []byte, objectID string) ([]byte, []byte, error) {
-	header, rest, found := bytes.Cut(output, []byte{'\n'})
-	fields := strings.Fields(string(header))
-	if !found || len(fields) != 3 || !strings.EqualFold(fields[0], objectID) || fields[1] != "blob" {
-		return nil, nil, errors.New("read Git history blobs: unexpected object response")
+func readGitBatchBlob(output *bufio.Reader, objectID string, accept func(string, []byte) bool) ([]byte, error) {
+	size, err := readGitBatchBlobSize(output, objectID)
+	if err != nil {
+		return nil, err
 	}
-	size, err := strconv.Atoi(fields[2])
-	if err != nil || size < 0 || size >= len(rest) || rest[size] != '\n' {
-		return nil, nil, errors.New("read Git history blobs: invalid object size")
+	prefix, err := output.Peek(int(min(size, 512)))
+	if err != nil {
+		return nil, fmt.Errorf("read Git history blobs: %w", err)
 	}
-	return rest[:size], rest[size+1:], nil
+	blob := &io.LimitedReader{R: output, N: size}
+	var content []byte
+	if accept == nil || accept(objectID, prefix) {
+		content, err = io.ReadAll(blob)
+	} else {
+		_, err = io.Copy(io.Discard, blob)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read Git history blobs: %w", err)
+	}
+	ending, err := output.ReadByte()
+	if err != nil || blob.N != 0 || ending != '\n' {
+		return nil, errors.New("read Git history blobs: invalid object size")
+	}
+	return content, nil
+}
+
+func readGitBatchBlobSize(output *bufio.Reader, objectID string) (int64, error) {
+	header, err := output.ReadString('\n')
+	fields := strings.Fields(header)
+	if err != nil || len(fields) != 3 || !strings.EqualFold(fields[0], objectID) || fields[1] != "blob" {
+		return 0, errors.New("read Git history blobs: unexpected object response")
+	}
+	size, err := strconv.ParseInt(fields[2], 10, 64)
+	if err != nil || size < 0 {
+		return 0, errors.New("read Git history blobs: invalid object size")
+	}
+	return size, nil
 }
 
 func newTrendsFile(content []byte) *trendsFile {

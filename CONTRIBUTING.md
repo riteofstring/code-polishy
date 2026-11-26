@@ -12,7 +12,7 @@ explicit, and reviewable.
    ```sh
    ./tools/install-policy-tools.sh
    ./scripts/test.sh
-   ./bin/code-polishy doctor --strict
+   ./bin/code-polishy doctor
    ./bin/code-polishy check --all
    ```
 

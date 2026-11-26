@@ -89,7 +89,7 @@ func (repo Repository) CountSourceLinesAt(revision string) (SourceLines, error) 
 	if err != nil {
 		return SourceLines{}, err
 	}
-	contents, err := repo.gitBlobContents(slices.Collect(maps.Values(objects)))
+	contents, err := repo.sourceBlobContents(objects)
 	if err != nil {
 		return SourceLines{}, err
 	}
@@ -129,6 +129,21 @@ func (repo Repository) countsSourceContent(path string, data []byte) bool {
 	return !repo.isManagedBootstrapWrapper(path) && (builtInExtensionLanguage(path) != "" || len(repo.computeDeclaredLanguages(path)) > 0 || extension == ".ps1" || extension == ".psm1" || shellShebang(data))
 }
 
+func (repo Repository) sourceBlobContents(objects map[string]string) (map[string][]byte, error) {
+	paths := map[string][]string{}
+	for path, objectID := range objects {
+		paths[objectID] = append(paths[objectID], path)
+	}
+	return repo.gitBlobContents(slices.Collect(maps.Keys(paths)), func(objectID string, prefix []byte) bool {
+		for _, path := range paths[objectID] {
+			if repo.countsSourceContent(path, prefix) {
+				return true
+			}
+		}
+		return false
+	})
+}
+
 func (repo Repository) addSourceLines(lines *SourceLines, groups map[string]*SourceLineGroup, path string, data []byte) {
 	if bytes.IndexByte(data, 0) >= 0 {
 		return
@@ -162,12 +177,12 @@ func (repo Repository) sparseIndexSources() (map[string][]byte, error) {
 			objectIDs[path] = objectID
 		}
 	}
-	contents, err := repo.gitBlobContents(slices.Collect(maps.Values(objectIDs)))
+	contents, err := repo.sourceBlobContents(objectIDs)
 	if err != nil {
 		return nil, err
 	}
 	for path, objectID := range objectIDs {
-		if data := contents[objectID]; repo.IsExecutableSource(path) || shellShebang(data) {
+		if data := contents[objectID]; repo.countsSourceContent(path, data) {
 			sources[path] = data
 		}
 	}
